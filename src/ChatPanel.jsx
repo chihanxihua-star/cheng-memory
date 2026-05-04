@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "./lib/supabase";
 
 /* ===== CONFIG ===== */
-const WS_URL = import.meta.env.VITE_WS_URL || "ws://216.36.116.146:3001";
-const API_URL = import.meta.env.VITE_API_URL || "http://216.36.116.146:3001";
+const WS_URL = "wss://chat.jessaminee.top";
+const API_URL = "https://chat.jessaminee.top";
 const PROJECT_ID = "b5e5d83a-0c17-4421-a0e2-217519ed62fb";
 
 /* ===== MARKDOWN ===== */

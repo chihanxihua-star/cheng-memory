@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import ChatPanel from "./ChatPanel";
 
 // ── 配置 ─────────────────────────────────────────────────
 const SB_URL = "https://fgfyvyztjyqvxijfppgm.supabase.co";
@@ -9,6 +10,7 @@ const TABS = [
   { key: "diary", label: "日记" },
   { key: "milestones", label: "纪念日" },
   { key: "board", label: "留言板" },
+  { key: "chat", label: "聊天" },
 ];
 
 const LEVEL_META = {
@@ -679,6 +681,7 @@ export default function App() {
           {tab === "diary" && <DiaryPanel/>}
           {tab === "milestones" && <MilestonesPanel/>}
           {tab === "board" && <BoardPanel/>}
+          {tab === "chat" && <ChatPanel/>}
         </div>
       </div>
     </>
