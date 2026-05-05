@@ -1817,7 +1817,6 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
         </div>
         <div className="cp-ps-section-title">管理</div>
         <div className="cp-ps-list">
-          <SidebarItem onClick={() => setScreen("files")}>文件</SidebarItem>
           <SidebarItem onClick={() => setScreen("history")}>聊天记录</SidebarItem>
           <SidebarItem onClick={() => setScreen("documents")}>文档管理</SidebarItem>
           <SidebarItem onClick={() => setScreen("params")}>参数设置</SidebarItem>
@@ -1884,7 +1883,6 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
       </>
     );
   }
-  if (screen === "files") return <FilesScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "history") return <HistoryScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "documents") return <DocumentsScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} showToast={showToast} />;
   if (screen === "params") return <ParamsScreen onBack={() => setScreen("main")} showToast={showToast} />;
@@ -2303,21 +2301,6 @@ function FileListPanel({ tableName, filterEq, hint, showToast, onChange }) {
           </div>
         ))}
       </div>
-    </>
-  );
-}
-
-function FilesScreen({ onBack, showToast }) {
-  const filterEq = useMemo(() => ({ project_id: PROJECT_ID }), []);
-  return (
-    <>
-      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>文件</div>
-      <FileListPanel
-        tableName="files_cheng"
-        filterEq={filterEq}
-        hint="单文件 ≤ 5MB · 文本类直接保存，其他类型 base64 入库"
-        showToast={showToast}
-      />
     </>
   );
 }
