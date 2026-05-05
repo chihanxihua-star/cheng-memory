@@ -702,7 +702,7 @@ export default function App() {
                 background: "none", border: "none", cursor: "pointer", fontFamily: "inherit",
                 padding: "8px 0", fontSize: 13, letterSpacing: "0.08em",
                 color: tab === t.key ? "var(--text-primary)" : "var(--text-secondary)",
-                borderBottom: tab === t.key ? "2px solid #6b7fd4" : "2px solid transparent",
+                borderBottom: tab === t.key ? "2px solid var(--accent)" : "2px solid transparent",
                 transition: "all 0.15s", marginBottom: -1,
               }}>{t.label}</button>
             ))}

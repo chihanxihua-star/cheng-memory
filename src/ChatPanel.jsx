@@ -197,7 +197,7 @@ const CSS = `
   position: relative; display: flex; flex-direction: column;
   width: 100%; height: 100dvh; min-height: 100dvh;
   background: var(--bg-primary); color: var(--text-primary);
-  font-family: 'Noto Serif SC', serif;
+  font-family: 'Noto Serif SC', Georgia, serif;
   overflow: hidden;
 }
 .cp-root[data-theme="dark"] {
