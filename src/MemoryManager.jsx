@@ -75,9 +75,9 @@ function EmotionDot({ valence = 0.5, arousal = 0.5, size = 44 }) {
   const sat = 40 + arousal * 50;
   return (
     <svg width={size} height={size} style={{ flexShrink: 0 }}>
-      <rect x={0} y={0} width={size} height={size} rx={4} fill="rgba(255,255,255,0.04)" />
-      <line x1={size/2} y1={2} x2={size/2} y2={size-2} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5}/>
-      <line x1={2} y1={size/2} x2={size-2} y2={size/2} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5}/>
+      <rect x={0} y={0} width={size} height={size} rx={4} fill="var(--bg-card)" />
+      <line x1={size/2} y1={2} x2={size/2} y2={size-2} stroke="var(--border)" strokeWidth={0.5}/>
+      <line x1={2} y1={size/2} x2={size-2} y2={size/2} stroke="var(--border)" strokeWidth={0.5}/>
       <circle cx={x} cy={y} r={3.5} fill={`hsl(${hue},${sat}%,65%)`} opacity={0.9}/>
     </svg>
   );
@@ -86,10 +86,10 @@ function EmotionDot({ valence = 0.5, arousal = 0.5, size = 44 }) {
 function StrengthBar({ value = 0, color }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 99 }}>
+      <div style={{ flex: 1, height: 3, background: "var(--border)", borderRadius: 99 }}>
         <div style={{ width: `${(value*100).toFixed(0)}%`, height: "100%", background: color, borderRadius: 99, boxShadow: `0 0 6px ${color}88`, transition: "width 0.4s" }}/>
       </div>
-      <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", minWidth: 28, textAlign: "right" }}>{(value*100).toFixed(0)}%</span>
+      <span style={{ fontSize: 10, color: "var(--text-secondary)", minWidth: 28, textAlign: "right" }}>{(value*100).toFixed(0)}%</span>
     </div>
   );
 }
@@ -101,7 +101,7 @@ function SensoryAnchors({ context }) {
   if (!senses?.length) return null;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
-      {senses.map((s, i) => <span key={i} style={{ fontSize: 10.5, color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 4, padding: "1px 6px", fontStyle: "italic" }}>{s}</span>)}
+      {senses.map((s, i) => <span key={i} style={{ fontSize: 10.5, color: "var(--text-secondary)", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 4, padding: "1px 6px", fontStyle: "italic" }}>{s}</span>)}
     </div>
   );
 }
@@ -111,24 +111,24 @@ function ErrorBar({ error, onClose }) {
   return <div onClick={onClose} style={{ background: "#c0392b18", border: "1px solid #c0392b44", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#e07070", marginBottom: 14, cursor: "pointer" }}>{error} <span style={{ float: "right", opacity: 0.5 }}>✕</span></div>;
 }
 
-const inputStyle = { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#e8e2da", padding: "8px 10px", fontSize: 13, width: "100%", fontFamily: "inherit", resize: "vertical", outline: "none", boxSizing: "border-box" };
-const labelStyle = { fontSize: 11, color: "rgba(255,255,255,0.4)", letterSpacing: "0.06em", marginBottom: 4, display: "block" };
+const inputStyle = { background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", padding: "8px 10px", fontSize: 13, width: "100%", fontFamily: "inherit", resize: "vertical", outline: "none", boxSizing: "border-box" };
+const labelStyle = { fontSize: 11, color: "var(--text-secondary)", letterSpacing: "0.06em", marginBottom: 4, display: "block" };
 
 function chipStyle(active, color = "#6b7fd4") {
   return {
     padding: "5px 12px", borderRadius: 99, fontSize: 11.5, cursor: "pointer", fontFamily: "inherit",
-    background: active ? color + "22" : "rgba(255,255,255,0.04)",
-    border: `1px solid ${active ? color + "66" : "rgba(255,255,255,0.08)"}`,
-    color: active ? color : "rgba(255,255,255,0.4)", transition: "all 0.15s",
+    background: active ? color + "22" : "var(--bg-card)",
+    border: `1px solid ${active ? color + "66" : "var(--border)"}`,
+    color: active ? color : "var(--text-secondary)", transition: "all 0.15s",
   };
 }
 
 function ActionBtn({ children, onClick, accent = false, color = "#6b7fd4", disabled = false, flex = 1 }) {
   return <button onClick={onClick} disabled={disabled} style={{
     flex, padding: "5px 0", fontFamily: "inherit", fontSize: 11.5, cursor: disabled ? "not-allowed" : "pointer", borderRadius: 5, transition: "all 0.15s",
-    background: accent ? color + "22" : "rgba(255,255,255,0.04)",
-    border: `1px solid ${accent ? color + "66" : "rgba(255,255,255,0.08)"}`,
-    color: disabled ? "rgba(255,255,255,0.2)" : accent ? color : "rgba(255,255,255,0.45)",
+    background: accent ? color + "22" : "var(--bg-card)",
+    border: `1px solid ${accent ? color + "66" : "var(--border)"}`,
+    color: disabled ? "var(--text-secondary)" : accent ? color : "var(--text-secondary)",
   }}>{children}</button>;
 }
 
@@ -136,13 +136,13 @@ function Drawer({ title, onClose, children, footer }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", justifyContent: "flex-end" }}>
       <div onClick={onClose} style={{ flex: 1, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}/>
-      <div style={{ width: 380, maxWidth: "90vw", background: "#14161c", borderLeft: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", animation: "slideIn 0.22s ease" }}>
-        <div style={{ padding: "20px 20px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", letterSpacing: "0.1em" }}>{title}</span>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+      <div style={{ width: 380, maxWidth: "90vw", background: "var(--bg-card)", borderLeft: "1px solid var(--border)", display: "flex", flexDirection: "column", animation: "slideIn 0.22s ease" }}>
+        <div style={{ padding: "20px 20px 16px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 13, color: "var(--text-secondary)", letterSpacing: "0.1em" }}>{title}</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
         </div>
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>{children}</div>
-        {footer && <div style={{ padding: "12px 20px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8 }}>{footer}</div>}
+        {footer && <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", display: "flex", gap: 8 }}>{footer}</div>}
       </div>
     </div>
   );
@@ -187,14 +187,14 @@ function MemoryDrawer({ memory, isNew, onSave, onClose }) {
         <div><label style={labelStyle}>层级</label><select style={inputStyle} value={f.level} onChange={e => set("level", e.target.value)}><option value={1}>1 · 浮沫</option><option value={2}>2 · 长潮</option><option value={3}>3 · 深海</option></select></div>
         <div><label style={labelStyle}>作者</label><input style={inputStyle} value={f.author} onChange={e => set("author", e.target.value)}/></div>
       </div>
-      <div><label style={labelStyle}>情绪 — {Number(f.valence).toFixed(2)}</label><input type="range" min={0} max={1} step={0.01} style={{ width: "100%", accentColor: accent }} value={f.valence} onChange={e => set("valence", e.target.value)}/><div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "rgba(255,255,255,0.25)" }}><span>不嘻嘻</span><span>稳定</span><span>嘻嘻</span></div></div>
-      <div><label style={labelStyle}>情绪浓度 — {Number(f.arousal).toFixed(2)}</label><input type="range" min={0} max={1} step={0.01} style={{ width: "100%", accentColor: accent }} value={f.arousal} onChange={e => set("arousal", e.target.value)}/><div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "rgba(255,255,255,0.25)" }}><span>淡淡的</span><span>一般</span><span>上头了</span></div></div>
+      <div><label style={labelStyle}>情绪 — {Number(f.valence).toFixed(2)}</label><input type="range" min={0} max={1} step={0.01} style={{ width: "100%", accentColor: accent }} value={f.valence} onChange={e => set("valence", e.target.value)}/><div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-secondary)" }}><span>不嘻嘻</span><span>稳定</span><span>嘻嘻</span></div></div>
+      <div><label style={labelStyle}>情绪浓度 — {Number(f.arousal).toFixed(2)}</label><input type="range" min={0} max={1} step={0.01} style={{ width: "100%", accentColor: accent }} value={f.arousal} onChange={e => set("arousal", e.target.value)}/><div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-secondary)" }}><span>淡淡的</span><span>一般</span><span>上头了</span></div></div>
       {!isNew && <div><label style={labelStyle}>强度 — {Number(f.strength).toFixed(2)}</label><input type="range" min={0} max={1} step={0.01} style={{ width: "100%", accentColor: accent }} value={f.strength} onChange={e => set("strength", e.target.value)}/></div>}
       <div><label style={labelStyle}>标签（逗号分隔）</label><input style={inputStyle} value={f.tags} onChange={e => set("tags", e.target.value)} placeholder="起源, 调试"/></div>
       <div><label style={labelStyle}>感官锚点（逗号分隔）</label><input style={inputStyle} value={f.senses} onChange={e => set("senses", e.target.value)} placeholder="窗外下雨, 咖啡的味道"/></div>
       <div style={{ display: "flex", gap: 16 }}>
         {[["pinned","📌 锚"],["flashbulb","⚡ 沉鸣"],["resolved","✓ 已解决"]].map(([k,l]) => (
-          <label key={k} style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12, color: f[k] ? "#e8e2da" : "rgba(255,255,255,0.35)" }}>
+          <label key={k} style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12, color: f[k] ? "var(--text-primary)" : "var(--text-secondary)" }}>
             <input type="checkbox" checked={f[k]} onChange={e => set(k, e.target.checked)} style={{ accentColor: accent }}/>{l}
           </label>
         ))}
@@ -207,14 +207,14 @@ function MemoryCard({ mem, onEdit, onDelete }) {
   const meta = LEVEL_META[mem.level] || LEVEL_META[1];
   const [cd, setCd] = useState(false);
   return (
-    <div style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10, borderLeft: `2px solid ${meta.color}88`, transition: "background 0.15s" }}
-      onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
-      onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.025)"}>
+    <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10, borderLeft: `2px solid ${meta.color}88`, transition: "background 0.15s" }}
+      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-card)"}
+      onMouseLeave={e => e.currentTarget.style.background = "var(--bg-card)"}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
         <EmotionDot valence={mem.valence} arousal={mem.arousal}/>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13.5, color: "#e0d9d0", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{mem.content}</p>
-          {mem.summary && <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.4 }}>{mem.summary}</p>}
+          <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-primary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{mem.content}</p>
+          {mem.summary && <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.4 }}>{mem.summary}</p>}
           <SensoryAnchors context={mem.context}/>
         </div>
       </div>
@@ -224,9 +224,9 @@ function MemoryCard({ mem, onEdit, onDelete }) {
         <AuthorBadge author={mem.author}/>
         {mem.pinned && <Badge color="#e8c47322" text="#e8c473">📌</Badge>}
         {mem.flashbulb && <Badge color="#e87a5022" text="#e87a50">⚡</Badge>}
-        {mem.resolved === false && <Badge color="#ffffff11" text="rgba(255,255,255,0.3)">未愈</Badge>}
-        {(mem.tags||[]).slice(0,3).map(t => <Badge key={t} color="rgba(255,255,255,0.06)" text="rgba(255,255,255,0.4)">{t}</Badge>)}
-        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "rgba(255,255,255,0.25)" }}>{formatDate(mem.created_at)} · 引用 {mem.ref_count??0}</span>
+        {mem.resolved === false && <Badge color="#ffffff11" text="var(--text-secondary)">未愈</Badge>}
+        {(mem.tags||[]).slice(0,3).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
+        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--text-secondary)" }}>{formatDate(mem.created_at)} · 引用 {mem.ref_count??0}</span>
       </div>
       <div style={{ display: "flex", gap: 6, marginTop: -2 }}>
         <ActionBtn onClick={() => onEdit(mem)}>编辑</ActionBtn>
@@ -270,7 +270,7 @@ function MemoryPanel() {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          {stats && <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,0.3)" }}>共 {stats.total} 条 · 均强度 {stats.avgStr} · 📌{stats.pinned} ⚡{stats.flash}</p>}
+          {stats && <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {stats.total} 条 · 均强度 {stats.avgStr} · 📌{stats.pinned} ⚡{stats.flash}</p>}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <ActionBtn accent onClick={() => setDrawer({ mode: "create", memory: EMPTY_MEM })}>+ 写入</ActionBtn>
@@ -281,7 +281,7 @@ function MemoryPanel() {
       {stats && <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 16 }}>
         {[1,2,3].map(l => <div key={l} style={{ background: LEVEL_META[l].color+"0d", border: `1px solid ${LEVEL_META[l].color}33`, borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
           <div style={{ fontSize: 18, fontWeight: 300, color: LEVEL_META[l].color }}>{stats[`l${l}`]}</div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{LEVEL_META[l].label}</div>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>{LEVEL_META[l].label}</div>
         </div>)}
       </div>}
 
@@ -299,8 +299,8 @@ function MemoryPanel() {
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "rgba(255,255,255,0.2)", fontSize: 13 }}>正在拉取…</div>
-        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "rgba(255,255,255,0.15)", fontSize: 13 }}>没有记忆</div>
+      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有记忆</div>
         : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
             {items.map(m => <div key={m.id} style={{ animation: "fadeUp 0.25s ease both" }}><MemoryCard mem={m} onEdit={mem => setDrawer({ mode: "edit", memory: mem })} onDelete={async id => { try { await sbDelete("memories_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
           </div>}
@@ -336,17 +336,17 @@ function DiaryDrawer({ entry, isNew, onSave, onClose }) {
 function DiaryCard({ entry, onEdit, onDelete }) {
   const [cd, setCd] = useState(false);
   return (
-    <div style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {entry.title && <p style={{ margin: "0 0 4px", fontSize: 14, color: "#e8e2da", fontWeight: 400 }}>{entry.title}</p>}
-          <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.55)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{entry.content}</p>
+          {entry.title && <p style={{ margin: "0 0 4px", fontSize: 14, color: "var(--text-primary)", fontWeight: 400 }}>{entry.title}</p>}
+          <p style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{entry.content}</p>
         </div>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
         <AuthorBadge author={entry.author}/>
-        {(entry.tags||[]).map(t => <Badge key={t} color="rgba(255,255,255,0.06)" text="rgba(255,255,255,0.4)">{t}</Badge>)}
-        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "rgba(255,255,255,0.25)" }}>{formatDateTime(entry.created_at)}</span>
+        {(entry.tags||[]).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
+        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--text-secondary)" }}>{formatDateTime(entry.created_at)}</span>
       </div>
       <div style={{ display: "flex", gap: 6 }}>
         <ActionBtn onClick={() => onEdit(entry)}>编辑</ActionBtn>
@@ -379,7 +379,7 @@ function DiaryPanel() {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,0.3)" }}>共 {items.length} 篇</p>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 篇</p>
         <div style={{ display: "flex", gap: 8 }}>
           <ActionBtn accent onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 写日记</ActionBtn>
           <ActionBtn onClick={reload}>{loading ? "…" : "刷新"}</ActionBtn>
@@ -392,8 +392,8 @@ function DiaryPanel() {
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "rgba(255,255,255,0.2)", fontSize: 13 }}>正在拉取…</div>
-        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "rgba(255,255,255,0.15)", fontSize: 13 }}>还没有日记</div>
+      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有日记</div>
         : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {items.map(e => <div key={e.id} style={{ animation: "fadeUp 0.25s ease both" }}><DiaryCard entry={e} onEdit={ent => setDrawer({ mode: "edit", entry: ent })} onDelete={async id => { try { await sbDelete("diary_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
           </div>}
@@ -435,17 +435,17 @@ function MilestoneCard({ milestone, onEdit, onDelete }) {
       {/* 时间轴圆点 */}
       <div style={{ position: "absolute", left: -17, top: 14, width: 8, height: 8, borderRadius: 99, background: "#e8b86d", boxShadow: "0 0 8px rgba(232,184,109,0.4)" }}/>
 
-      <div style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <p style={{ margin: 0, fontSize: 14, color: "#e8e2da" }}>{milestone.title}</p>
-            {milestone.description && <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "rgba(255,255,255,0.45)", lineHeight: 1.5 }}>{milestone.description}</p>}
+            <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)" }}>{milestone.title}</p>
+            {milestone.description && <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>{milestone.description}</p>}
           </div>
           <span style={{ fontSize: 11, color: "#e8b86d", flexShrink: 0, marginLeft: 12 }}>{milestone.event_date}</span>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
           <AuthorBadge author={milestone.author}/>
-          {(milestone.tags||[]).map(t => <Badge key={t} color="rgba(255,255,255,0.06)" text="rgba(255,255,255,0.4)">{t}</Badge>)}
+          {(milestone.tags||[]).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           <ActionBtn onClick={() => onEdit(milestone)}>编辑</ActionBtn>
@@ -473,7 +473,7 @@ function MilestonesPanel() {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,0.3)" }}>共 {items.length} 个</p>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 个</p>
         <div style={{ display: "flex", gap: 8 }}>
           <ActionBtn accent color="#e8b86d" onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 添加</ActionBtn>
           <ActionBtn onClick={load}>{loading ? "…" : "刷新"}</ActionBtn>
@@ -482,8 +482,8 @@ function MilestonesPanel() {
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "rgba(255,255,255,0.2)", fontSize: 13 }}>正在拉取…</div>
-        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "rgba(255,255,255,0.15)", fontSize: 13 }}>还没有纪念日</div>
+      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有纪念日</div>
         : <div style={{ position: "relative", paddingLeft: 20 }}>
             {/* 时间轴竖线 */}
             <div style={{ position: "absolute", left: 6, top: 8, bottom: 8, width: 2, background: "rgba(232,184,109,0.2)", borderRadius: 99 }}/>
@@ -541,12 +541,12 @@ function BoardMessage({ msg, replies, onEdit, onDelete, onReply, onToggleRead, o
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <AuthorBadge author={msg.author}/>
           <Badge color={catColor+"22"} text={catColor}>{msg.category}</Badge>
-          <span style={{ marginLeft: "auto", fontSize: 10, color: "rgba(255,255,255,0.25)" }}>{formatDateTime(msg.created_at)}</span>
+          <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-secondary)" }}>{formatDateTime(msg.created_at)}</span>
         </div>
-        <p style={{ margin: 0, fontSize: 13, color: "#e0d9d0", lineHeight: 1.6 }}>{msg.content}</p>
+        <p style={{ margin: 0, fontSize: 13, color: "var(--text-primary)", lineHeight: 1.6 }}>{msg.content}</p>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {msg.is_resolved && <Badge color="#8aab9e22" text="#8aab9e">✓ 已处理</Badge>}
-          {msg.is_read && !msg.is_resolved && <Badge color="#ffffff11" text="rgba(255,255,255,0.3)">已读</Badge>}
+          {msg.is_read && !msg.is_resolved && <Badge color="#ffffff11" text="var(--text-secondary)">已读</Badge>}
           <span style={{ flex: 1 }}/>
           <ActionBtn onClick={() => onReply(msg.id)}>回复</ActionBtn>
           <ActionBtn onClick={() => onToggleRead(msg)}>{msg.is_read ? "标为未读" : "标为已读"}</ActionBtn>
@@ -566,9 +566,9 @@ function BoardMessage({ msg, replies, onEdit, onDelete, onReply, onToggleRead, o
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <AuthorBadge author={r.author}/>
                   <Badge color="#a89fd822" text="#a89fd8">回复</Badge>
-                  <span style={{ marginLeft: "auto", fontSize: 10, color: "rgba(255,255,255,0.25)" }}>{formatDateTime(r.created_at)}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-secondary)" }}>{formatDateTime(r.created_at)}</span>
                 </div>
-                <p style={{ margin: 0, fontSize: 12.5, color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>{r.content}</p>
+                <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>{r.content}</p>
               </div>
             );
           })}
@@ -606,7 +606,7 @@ function BoardPanel() {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,0.3)" }}>共 {topLevel.length} 条 · 未读 {unreadCount}</p>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {topLevel.length} 条 · 未读 {unreadCount}</p>
         <div style={{ display: "flex", gap: 8 }}>
           <ActionBtn accent color="#a89fd8" onClick={() => setDrawer({ mode: "create", entry: {}, replyTo: null })}>+ 留言</ActionBtn>
           <ActionBtn onClick={load}>{loading ? "…" : "刷新"}</ActionBtn>
@@ -620,8 +620,8 @@ function BoardPanel() {
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "rgba(255,255,255,0.2)", fontSize: 13 }}>正在拉取…</div>
-        : filtered.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "rgba(255,255,255,0.15)", fontSize: 13 }}>没有留言</div>
+      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+        : filtered.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有留言</div>
         : filtered.map(m => (
             <BoardMessage key={m.id} msg={m} replies={repliesOf(m.id)}
               onEdit={msg => setDrawer({ mode: "edit", entry: msg, replyTo: null })}
@@ -655,14 +655,14 @@ export default function App() {
   const stylesEl = (
     <style>{`
       * { box-sizing: border-box; }
-      body { margin: 0; background: #0e1014; font-family: 'Noto Serif SC', 'Georgia', serif; }
+      body { margin: 0; background: var(--bg-page); font-family: 'Noto Serif SC', 'Georgia', serif; }
       ::-webkit-scrollbar { width: 4px; }
       ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+      ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
       @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
       @keyframes fadeUp { from { transform: translateY(6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       input[type=range] { height: 3px; }
-      select option { background: #14161c; }
+      select option { background: var(--bg-card); }
       input[type=date] { color-scheme: dark; }
     `}</style>
   );
@@ -672,7 +672,7 @@ export default function App() {
     return (
       <>
         {stylesEl}
-        <ChatPanel/>
+        <ChatPanel onBack={() => setTab("memory")} />
       </>
     );
   }
@@ -681,16 +681,16 @@ export default function App() {
     <>
       {stylesEl}
 
-      <div style={{ minHeight: "100vh", background: "#0e1014", color: "#e8e2da" }}>
+      <div style={{ minHeight: "100vh", background: "var(--bg-page)", color: "var(--text-primary)" }}>
         {/* 顶部导航 */}
-        <div style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", position: "sticky", top: 0, background: "#0e1014", zIndex: 10 }}>
+        <div style={{ borderBottom: "1px solid var(--border)", position: "sticky", top: 0, background: "var(--bg-page)", zIndex: 10 }}>
           <div style={{ maxWidth: 860, margin: "0 auto", padding: "16px 16px 0", display: "flex", alignItems: "center", gap: 20 }}>
-            <h1 style={{ margin: 0, fontWeight: 300, letterSpacing: "0.2em", fontSize: 18, color: "#e8e2da", marginRight: 12 }}>澄</h1>
+            <h1 style={{ margin: 0, fontWeight: 300, letterSpacing: "0.2em", fontSize: 18, color: "var(--text-primary)", marginRight: 12 }}>澄</h1>
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)} style={{
                 background: "none", border: "none", cursor: "pointer", fontFamily: "inherit",
                 padding: "8px 0", fontSize: 13, letterSpacing: "0.08em",
-                color: tab === t.key ? "#e8e2da" : "rgba(255,255,255,0.35)",
+                color: tab === t.key ? "var(--text-primary)" : "var(--text-secondary)",
                 borderBottom: tab === t.key ? "2px solid #6b7fd4" : "2px solid transparent",
                 transition: "all 0.15s", marginBottom: -1,
               }}>{t.label}</button>

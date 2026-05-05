@@ -743,7 +743,7 @@ function useProfile(projectId) {
 /* ════════════════════════════════════════════════════════════
    主组件
    ════════════════════════════════════════════════════════════ */
-export default function ChatPanel() {
+export default function ChatPanel({ onBack }) {
   const { theme, resolved, setTheme } = useTheme();
   const [profile, saveProfile] = useProfile(PROJECT_ID);
 
@@ -1348,6 +1348,13 @@ export default function ChatPanel() {
       {/* TOP BAR */}
       <div className="cp-top">
         <div className="left">
+          {onBack && (
+            <button className="cp-hamburger" onClick={onBack} aria-label="返回" title="返回">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+            </button>
+          )}
           <button className="cp-hamburger" onClick={() => setSidebarOpen(true)} aria-label="菜单">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="3" y1="6" x2="21" y2="6"/>
