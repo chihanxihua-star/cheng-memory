@@ -218,7 +218,8 @@ const CSS = `
 /* TOP BAR */
 .cp-top {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 12px; border-bottom: 1px solid var(--border-primary);
+  padding: calc(8px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 8px calc(12px + env(safe-area-inset-left));
+  border-bottom: 1px solid var(--border-primary);
   background: var(--bg-primary); flex-shrink: 0;
 }
 .cp-top .left, .cp-top .center, .cp-top .right {
@@ -441,6 +442,7 @@ const CSS = `
 .cp-input-container {
   background: var(--bg-primary); border-top: 1px solid var(--border-primary);
   flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 .cp-image-preview {
   display: none; gap: 6px; flex-wrap: wrap;
