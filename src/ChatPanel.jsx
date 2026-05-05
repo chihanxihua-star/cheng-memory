@@ -1797,6 +1797,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
           <SidebarItem onClick={() => setScreen("worldbook")}>世界书</SidebarItem>
           <SidebarItem onClick={() => setScreen("memory")}>记忆管理</SidebarItem>
           <SidebarItem onClick={() => setScreen("files")}>文件</SidebarItem>
+          <SidebarItem onClick={() => setScreen("history")}>聊天记录</SidebarItem>
           <SidebarItem onClick={() => setScreen("assistant")}>CLAUDE.md</SidebarItem>
           <SidebarItem onClick={() => setScreen("params")}>参数设置</SidebarItem>
         </div>
@@ -1864,6 +1865,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
   if (screen === "worldbook") return <WorldBookScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "memory") return <MemoryScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "files") return <FilesScreen onBack={() => setScreen("main")} showToast={showToast} />;
+  if (screen === "history") return <HistoryScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "assistant") return <AssistantConfigScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} showToast={showToast} />;
   if (screen === "params") return <ParamsScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "stats") return <StatsScreen onBack={() => setScreen("stats-menu")} />;
@@ -2304,6 +2306,208 @@ function FilesScreen({ onBack, showToast }) {
             </div>
           </div>
         ))}
+      </div>
+    </>
+  );
+}
+
+/* ─────── 聊天记录：日期范围 + 关键词搜索 + 一键导出 md ─────── */
+function ymd(d) {
+  const z = n => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate());
+}
+function startOfDayISO(s) { return new Date(s + "T00:00:00").toISOString(); }
+function endOfDayISO(s) { return new Date(s + "T23:59:59.999").toISOString(); }
+
+const EXPORT_RANGES = [
+  { value: "1", label: "今天" },
+  { value: "3", label: "最近 3 天" },
+  { value: "7", label: "最近 7 天" },
+  { value: "30", label: "最近 30 天" },
+  { value: "90", label: "最近 90 天" },
+  { value: "all", label: "全部" },
+];
+
+function buildExportMarkdown(rows, rangeLabel) {
+  const groups = new Map();
+  for (const m of rows) {
+    const cid = m.conversation_id;
+    if (!groups.has(cid)) {
+      groups.set(cid, { title: (m.conversations && m.conversations.title) || "未命名对话", msgs: [] });
+    }
+    groups.get(cid).msgs.push(m);
+  }
+  let out = "# 聊天记录导出\n\n";
+  out += "导出时间：" + new Date().toLocaleString("zh-CN") + "\n\n";
+  out += "范围：" + rangeLabel + "\n\n";
+  out += "共 " + rows.length + " 条消息，" + groups.size + " 个对话\n\n---\n\n";
+  for (const [, g] of groups) {
+    out += "## " + g.title + "\n\n";
+    g.msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    for (const m of g.msgs) {
+      const t = new Date(m.created_at);
+      const ts = t.toLocaleString("zh-CN", {
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit",
+      });
+      const roleLabel = m.role === "user" ? "用户" : m.role === "assistant" ? "助手" : m.role;
+      out += "**[" + ts + "] " + roleLabel + "**\n\n";
+      out += (m.content || "") + "\n\n";
+    }
+    out += "---\n\n";
+  }
+  return out;
+}
+
+function HistoryScreen({ onBack, showToast }) {
+  const today = useMemo(() => ymd(new Date()), []);
+  const weekAgo = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 6); return ymd(d); }, []);
+  const [start, setStart] = useState(weekAgo);
+  const [end, setEnd] = useState(today);
+  const [keyword, setKeyword] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [exportRange, setExportRange] = useState("7");
+  const [exporting, setExporting] = useState(false);
+
+  const search = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      let q = supabase
+        .from("messages")
+        .select("id, role, content, created_at, conversation_id, conversations!inner(title, project_id)")
+        .eq("conversations.project_id", PROJECT_ID)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (start) q = q.gte("created_at", startOfDayISO(start));
+      if (end) q = q.lte("created_at", endOfDayISO(end));
+      if (keyword.trim()) q = q.ilike("content", "%" + keyword.trim() + "%");
+      const { data, error: err } = await q;
+      if (err) throw err;
+      setResults(data || []);
+    } catch (e) {
+      setError(e.message || String(e));
+      setResults([]);
+    } finally { setLoading(false); }
+  }, [start, end, keyword]);
+
+  useEffect(() => { search(); /* 默认加载最近 7 天 */ }, []); // eslint-disable-line
+
+  const doExport = async () => {
+    setExporting(true);
+    try {
+      let q = supabase
+        .from("messages")
+        .select("id, role, content, created_at, conversation_id, conversations!inner(title, project_id)")
+        .eq("conversations.project_id", PROJECT_ID)
+        .order("created_at", { ascending: true })
+        .limit(5000);
+      let label;
+      if (exportRange !== "all") {
+        const days = parseInt(exportRange, 10);
+        const since = new Date();
+        since.setDate(since.getDate() - (days - 1));
+        since.setHours(0, 0, 0, 0);
+        q = q.gte("created_at", since.toISOString());
+        label = "最近 " + days + " 天（" + ymd(since) + " 至 " + ymd(new Date()) + "）";
+      } else {
+        label = "全部";
+      }
+      const { data, error: err } = await q;
+      if (err) throw err;
+      if (!data || data.length === 0) {
+        showToast("范围内没有消息");
+        return;
+      }
+      const md = buildExportMarkdown(data, label);
+      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "chat-export-" + ymd(new Date())
+        + (exportRange === "all" ? "-all" : "-" + exportRange + "d") + ".md";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast("已导出 " + data.length + " 条消息");
+    } catch (e) {
+      showToast("导出失败：" + (e.message || e));
+    } finally { setExporting(false); }
+  };
+
+  return (
+    <>
+      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>聊天记录</div>
+
+      <div className="cp-ps-section-title">日期范围</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <input type="date" value={start} max={end || undefined} onChange={e => setStart(e.target.value)}
+          style={{ flex: 1, background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 6, padding: "7px 9px", color: "var(--text-primary)", fontSize: 12, outline: "none", fontFamily: "inherit" }}/>
+        <span style={{ alignSelf: "center", color: "var(--text-tertiary)", fontSize: 12 }}>至</span>
+        <input type="date" value={end} min={start || undefined} onChange={e => setEnd(e.target.value)}
+          style={{ flex: 1, background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 6, padding: "7px 9px", color: "var(--text-primary)", fontSize: 12, outline: "none", fontFamily: "inherit" }}/>
+      </div>
+
+      <div className="cp-ps-section-title">关键词</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <input type="text" value={keyword} onChange={e => setKeyword(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") search(); }}
+          placeholder="搜索消息内容…"
+          style={{ flex: 1, background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 6, padding: "7px 10px", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "inherit" }}/>
+        <button className="cp-ps-btn" style={{ width: 80, marginTop: 0 }} disabled={loading} onClick={search}>
+          {loading ? "…" : "搜索"}
+        </button>
+      </div>
+
+      <div className="cp-ps-section-title">结果 {!loading && results.length > 0 ? "(" + results.length + ")" : ""}</div>
+      {error && (
+        <div style={{ fontSize: 12, color: "#c0392b", padding: "8px 10px", background: "var(--bg-card)", border: "1px solid var(--border-card)", borderRadius: 6, marginBottom: 8 }}>
+          {error}
+        </div>
+      )}
+      <div className="cp-ps-mem-list" style={{ maxHeight: 320 }}>
+        {loading ? (
+          <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "24px 0" }}>加载中…</div>
+        ) : results.length === 0 ? (
+          <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "24px 0" }}>无结果</div>
+        ) : results.map(r => {
+          const t = new Date(r.created_at);
+          const ts = t.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+          const roleLabel = r.role === "user" ? "用户" : r.role === "assistant" ? "助手" : r.role;
+          const title = (r.conversations && r.conversations.title) || "—";
+          const snippet = (r.content || "").replace(/\s+/g, " ").slice(0, 140);
+          return (
+            <div key={r.id} className="cp-ps-mem-item">
+              <div className="cp-ps-mem-header" style={{ marginBottom: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1 }}>
+                  <span className="cp-ps-mem-layer">{roleLabel}</span>
+                  <span style={{ fontSize: 10, color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {title}
+                  </span>
+                </div>
+                <span style={{ fontSize: 10, color: "var(--text-tertiary)", flexShrink: 0 }}>{ts}</span>
+              </div>
+              <div className="cp-ps-mem-content">{snippet}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="cp-ps-section-title" style={{ marginTop: 18 }}>导出</div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <select value={exportRange} onChange={e => setExportRange(e.target.value)}
+          style={{ flex: 1, background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 6, padding: "7px 9px", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "inherit" }}>
+          {EXPORT_RANGES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </select>
+        <button className="cp-ps-btn" style={{ width: 110, marginTop: 0 }} disabled={exporting} onClick={doExport}>
+          {exporting ? "导出中…" : "导出 .md"}
+        </button>
+      </div>
+      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
+        按对话分组，包含每条消息的时间戳与角色
       </div>
     </>
   );
