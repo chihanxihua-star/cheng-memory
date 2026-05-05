@@ -693,6 +693,7 @@ export default function App() {
         height: "100dvh", minHeight: "100dvh",
         background: "var(--bg-page)", color: "var(--text-primary)",
         overflow: "hidden",
+        paddingBottom: "env(safe-area-inset-bottom)",
       }}>
         <main style={{
           flex: 1, minHeight: 0,
@@ -732,7 +733,6 @@ function BottomTabBar({ tab, setTab }) {
       background: "var(--bg-translucent)",
       backdropFilter: "saturate(180%) blur(6px)",
       WebkitBackdropFilter: "saturate(180%) blur(6px)",
-      paddingBottom: "env(safe-area-inset-bottom)",
       paddingLeft: "env(safe-area-inset-left)",
       paddingRight: "env(safe-area-inset-right)",
       display: "flex",
@@ -742,7 +742,7 @@ function BottomTabBar({ tab, setTab }) {
         return (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             flex: 1, position: "relative",
-            padding: "10px 4px",
+            padding: "9px 4px",
             background: "none", border: "none", cursor: "pointer",
             fontFamily: "inherit",
             fontSize: 12,
@@ -755,7 +755,7 @@ function BottomTabBar({ tab, setTab }) {
             {t.label}
             {active && (
               <span style={{
-                position: "absolute", left: "50%", bottom: 3,
+                position: "absolute", left: "50%", bottom: 2,
                 transform: "translateX(-50%)",
                 width: 3, height: 3, borderRadius: "50%",
                 background: "var(--accent)",
