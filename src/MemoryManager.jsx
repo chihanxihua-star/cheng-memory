@@ -652,6 +652,21 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", pref);
   }, []);
 
+  // iOS 双指缩放手势在所有 tab 全程拦掉（viewport 设了 user-scalable=no
+  // 后，部分 iOS Safari 仍会响应 gesture* 事件）
+  useEffect(() => {
+    const block = (e) => e.preventDefault();
+    const opts = { passive: false };
+    document.addEventListener("gesturestart", block, opts);
+    document.addEventListener("gesturechange", block, opts);
+    document.addEventListener("gestureend", block, opts);
+    return () => {
+      document.removeEventListener("gesturestart", block, opts);
+      document.removeEventListener("gesturechange", block, opts);
+      document.removeEventListener("gestureend", block, opts);
+    };
+  }, []);
+
   const stylesEl = (
     <style>{`
       * { box-sizing: border-box; }
