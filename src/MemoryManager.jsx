@@ -666,7 +666,12 @@ export default function App() {
   const stylesEl = (
     <style>{`
       * { box-sizing: border-box; }
-      body { margin: 0; background: var(--bg-page); font-family: 'Noto Serif SC', Georgia, serif; }
+      html, body, #root {
+        height: 100%; margin: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+      body { background: var(--bg-page); font-family: 'Noto Serif SC', Georgia, serif; }
       button, input, select, textarea { font-family: inherit; }
       ::-webkit-scrollbar { width: 4px; }
       ::-webkit-scrollbar-track { background: transparent; }
@@ -722,8 +727,10 @@ function BottomTabBar({ tab, setTab }) {
     <nav style={{
       flexShrink: 0,
       borderTop: "1px solid var(--border)",
-      background: "var(--bg-page)",
-      paddingBottom: "env(safe-area-inset-bottom)",
+      background: "var(--bg-translucent)",
+      backdropFilter: "saturate(160%) blur(14px)",
+      WebkitBackdropFilter: "saturate(160%) blur(14px)",
+      paddingBottom: "calc(8px + env(safe-area-inset-bottom))",
       paddingLeft: "env(safe-area-inset-left)",
       paddingRight: "env(safe-area-inset-right)",
       display: "flex",
@@ -733,11 +740,11 @@ function BottomTabBar({ tab, setTab }) {
         return (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             flex: 1, position: "relative",
-            padding: "12px 4px 10px",
+            padding: "14px 4px 10px",
             background: "none", border: "none", cursor: "pointer",
             fontFamily: "inherit",
-            fontSize: 12.5,
-            letterSpacing: "0.08em",
+            fontSize: 13,
+            letterSpacing: "0.1em",
             fontWeight: active ? 500 : 400,
             color: active ? "var(--text-primary)" : "var(--text-secondary)",
             transition: "color 0.18s",
