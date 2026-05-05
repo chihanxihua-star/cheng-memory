@@ -1455,7 +1455,7 @@ export default function ChatPanel() {
                 onNewChat={newChat}
                 onRestartCC={restartCC}
                 showToast={showToast}
-                charCount={charCount}
+                convId={convId}
               />
             </div>
           </div>
@@ -1782,7 +1782,7 @@ function StreamingBubble({ snap, profile, showTyping }) {
 }
 
 /* ─────── Sidebar 多屏 ─────── */
-function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, showToast, charCount }) {
+function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, showToast, convId }) {
   if (screen === "main") {
     return (
       <>
@@ -1871,7 +1871,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
   if (screen === "assistant") return <AssistantConfigScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} showToast={showToast} />;
   if (screen === "params") return <ParamsScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "stats") return <StatsScreen onBack={() => setScreen("stats-menu")} />;
-  if (screen === "stats-chars") return <CharStatsScreen onBack={() => setScreen("stats-menu")} charCount={charCount} />;
+  if (screen === "stats-chars") return <CharStatsScreen onBack={() => setScreen("stats-menu")} convId={convId} />;
   return null;
 }
 
@@ -2646,54 +2646,100 @@ function HistoryScreen({ onBack, showToast }) {
 }
 
 /* ─────── 字数统计：当前对话字数 vs 压缩阈值 ─────── */
-function CharStatsScreen({ onBack, charCount }) {
-  const settings = getSettings(PROJECT_ID);
-  const threshold = settings.compressThreshold || 50000;
-  const used = charCount || 0;
-  const percent = Math.min(100, (used / threshold) * 100);
-  const remaining = Math.max(0, threshold - used);
-  const summaryLength = settings.summaryLength || 500;
-  const overThreshold = used >= threshold;
-  const nearThreshold = !overThreshold && used >= threshold * 0.8;
-  const barColor = overThreshold ? "#c0392b" : nearThreshold ? "#e8b86d" : "var(--border-input-focus)";
+function CharStatsScreen({ onBack, convId }) {
+  const [stats, setStats] = useState({ totalChars: 0, msgCount: 0, byRole: {} });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    if (!convId) {
+      setStats({ totalChars: 0, msgCount: 0, byRole: {} });
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error: err } = await supabase
+        .from("messages")
+        .select("role, content")
+        .eq("conversation_id", convId)
+        .limit(5000);
+      if (err) throw err;
+      const arr = data || [];
+      const byRole = {};
+      let totalChars = 0;
+      for (const m of arr) {
+        const len = (m.content || "").length;
+        totalChars += len;
+        const r = m.role || "其他";
+        byRole[r] = (byRole[r] || 0) + len;
+      }
+      setStats({ totalChars, msgCount: arr.length, byRole });
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally { setLoading(false); }
+  }, [convId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const roleLabel = (r) =>
+    r === "user" ? "用户" : r === "assistant" ? "助手" : r === "system" ? "系统" : r;
 
   return (
     <>
       <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>字数统计</div>
-      <div className="cp-ps-stats" style={{ gridTemplateColumns: "1fr 1fr" }}>
-        <div className="cp-ps-stat-card">
-          <div className="cp-ps-stat-label">当前对话</div>
-          <div className="cp-ps-stat-value">{used.toLocaleString()}<span className="cp-ps-stat-unit">字</span></div>
-        </div>
-        <div className="cp-ps-stat-card">
-          <div className="cp-ps-stat-label">压缩阈值</div>
-          <div className="cp-ps-stat-value">{threshold.toLocaleString()}<span className="cp-ps-stat-unit">字</span></div>
-        </div>
-      </div>
 
-      <div style={{ marginTop: 4, marginBottom: 10, fontSize: 11, color: "var(--text-tertiary)", display: "flex", justifyContent: "space-between" }}>
-        <span>使用率 {percent.toFixed(1)}%</span>
-        <span>剩余 {remaining.toLocaleString()} 字</span>
-      </div>
-      <div style={{
-        width: "100%", height: 10, background: "var(--bg-card)",
-        border: "1px solid var(--border-card)", borderRadius: 99, overflow: "hidden",
-      }}>
-        <div style={{
-          width: percent + "%", height: "100%", background: barColor,
-          transition: "width 0.4s ease",
-        }} />
-      </div>
+      {!convId ? (
+        <div style={{ color: "var(--text-tertiary)", fontSize: 13, padding: "30px 0", textAlign: "center" }}>
+          还没有对话
+        </div>
+      ) : loading ? (
+        <div style={{ color: "var(--text-tertiary)", fontSize: 13, padding: "30px 0", textAlign: "center" }}>
+          加载中…
+        </div>
+      ) : error ? (
+        <div style={{ fontSize: 12, color: "#c0392b", padding: "10px 12px", background: "var(--bg-card)", border: "1px solid var(--border-card)", borderRadius: 6, marginBottom: 12 }}>
+          加载失败：{error}
+        </div>
+      ) : (
+        <>
+          <div className="cp-ps-stat-card" style={{ padding: "16px 14px", marginBottom: 14 }}>
+            <div className="cp-ps-stat-label">当前对话总字数</div>
+            <div className="cp-ps-stat-value" style={{ fontSize: 26 }}>
+              {stats.totalChars.toLocaleString()}<span className="cp-ps-stat-unit">字</span>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>
+              共 {stats.msgCount} 条消息
+            </div>
+          </div>
 
-      <div style={{ marginTop: 18, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.7 }}>
-        {overThreshold ? (
-          <p style={{ color: "#c0392b" }}>已超过压缩阈值。建议在「窗口设置」里重启 CC 并新开一段对话，可让 CC 自动生成约 {summaryLength} 字摘要。</p>
-        ) : nearThreshold ? (
-          <p style={{ color: "#b07a3a" }}>已接近压缩阈值（80%），可考虑近期重启 CC 以避免上下文超限。</p>
-        ) : (
-          <p>对话字数仍在阈值范围内。超过阈值后系统会提示重启并生成摘要。</p>
-        )}
-        <p style={{ marginTop: 6, color: "var(--text-tertiary)" }}>阈值与摘要长度可在「参数设置」里调整。</p>
+          {Object.keys(stats.byRole).length > 0 && (
+            <>
+              <div className="cp-ps-section-title">分角色</div>
+              <div className="cp-ps-list">
+                {Object.entries(stats.byRole)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([r, n]) => (
+                    <div key={r} className="cp-ps-item" style={{ cursor: "default" }}>
+                      <div className="cp-ps-item-title">{roleLabel(r)}</div>
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                        {n.toLocaleString()} 字
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      <button className="cp-ps-btn" disabled={loading || !convId} onClick={load} style={{ marginTop: 14 }}>
+        {loading ? "刷新中…" : "刷新"}
+      </button>
+
+      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>
+        从 Supabase 直接查询当前对话所有消息的 content 字段，按字符数累加。
       </div>
     </>
   );
