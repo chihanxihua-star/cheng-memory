@@ -1053,6 +1053,20 @@ export default function ChatPanel({ onBack }) {
   }, [handleWsMsg]);
   useEffect(() => { connectWSRef.current = connectWS; }, [connectWS]);
 
+  /* ─────── iOS 双指缩放手势：拦掉 ─────── */
+  useEffect(() => {
+    const block = (e) => e.preventDefault();
+    const opts = { passive: false };
+    document.addEventListener("gesturestart", block, opts);
+    document.addEventListener("gesturechange", block, opts);
+    document.addEventListener("gestureend", block, opts);
+    return () => {
+      document.removeEventListener("gesturestart", block, opts);
+      document.removeEventListener("gesturechange", block, opts);
+      document.removeEventListener("gestureend", block, opts);
+    };
+  }, []);
+
   /* ─────── 生命周期 ─────── */
   useEffect(() => {
     connectWS();
