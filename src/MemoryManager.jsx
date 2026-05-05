@@ -735,7 +735,6 @@ export default function App() {
         height: "100dvh", minHeight: "100dvh",
         background: "var(--bg-page)", color: "var(--text-primary)",
         overflow: "hidden",
-        paddingBottom: "env(safe-area-inset-bottom)",
       }}>
         <main style={{
           flex: 1, minHeight: 0,
@@ -777,6 +776,7 @@ function BottomTabBar({ tab, setTab }) {
       WebkitBackdropFilter: "saturate(180%) blur(6px)",
       paddingLeft: "env(safe-area-inset-left)",
       paddingRight: "env(safe-area-inset-right)",
+      paddingBottom: "min(env(safe-area-inset-bottom), 6px)",
       display: "flex",
     }}>
       {TABS.map(t => {
