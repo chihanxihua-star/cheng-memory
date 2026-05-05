@@ -742,11 +742,12 @@ function BottomTabBar({ tab, setTab }) {
         return (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             flex: 1, position: "relative",
-            padding: "5px 4px 5px",
+            padding: "0 4px",
             background: "none", border: "none", cursor: "pointer",
             fontFamily: "inherit",
             fontSize: 12,
-            letterSpacing: "0.08em",
+            letterSpacing: "0.06em",
+            lineHeight: 1.2,
             fontWeight: active ? 500 : 400,
             color: active ? "var(--text-primary)" : "var(--text-secondary)",
             transition: "color 0.18s",
@@ -754,7 +755,7 @@ function BottomTabBar({ tab, setTab }) {
             {t.label}
             {active && (
               <span style={{
-                position: "absolute", left: "50%", bottom: 1,
+                position: "absolute", left: "50%", bottom: 0,
                 transform: "translateX(-50%)",
                 width: 3, height: 3, borderRadius: "50%",
                 background: "var(--accent)",
