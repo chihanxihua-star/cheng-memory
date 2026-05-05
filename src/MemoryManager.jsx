@@ -694,8 +694,8 @@ export default function App() {
       {stylesEl}
 
       <div style={{ minHeight: "100vh", background: "var(--bg-page)", color: "var(--text-primary)" }}>
-        {/* 顶部导航 */}
-        <div style={{ borderBottom: "1px solid var(--border)", position: "sticky", top: 0, background: "var(--bg-page)", zIndex: 10 }}>
+        {/* 顶部导航：背景延伸进 iOS safe-area，避免状态栏下面那段空白 */}
+        <div style={{ borderBottom: "1px solid var(--border)", position: "sticky", top: 0, background: "var(--bg-page)", zIndex: 10, paddingTop: "env(safe-area-inset-top)" }}>
           <div style={{ maxWidth: 860, margin: "0 auto", padding: "16px 16px 0", display: "flex", alignItems: "center", gap: 20 }}>
             <h1 style={{ margin: 0, fontWeight: 300, letterSpacing: "0.2em", fontSize: 18, color: "var(--text-primary)", marginRight: 12 }}>澄</h1>
             {TABS.map(t => (
