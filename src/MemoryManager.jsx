@@ -730,8 +730,8 @@ function BottomTabBar({ tab, setTab }) {
       flexShrink: 0,
       borderTop: "1px solid var(--border)",
       background: "var(--bg-translucent)",
-      backdropFilter: "saturate(160%) blur(14px)",
-      WebkitBackdropFilter: "saturate(160%) blur(14px)",
+      backdropFilter: "saturate(170%) blur(10px)",
+      WebkitBackdropFilter: "saturate(170%) blur(10px)",
       paddingBottom: "env(safe-area-inset-bottom)",
       paddingLeft: "env(safe-area-inset-left)",
       paddingRight: "env(safe-area-inset-right)",
@@ -742,10 +742,10 @@ function BottomTabBar({ tab, setTab }) {
         return (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             flex: 1, position: "relative",
-            padding: "12px 4px 12px",
+            padding: "8px 4px 8px",
             background: "none", border: "none", cursor: "pointer",
             fontFamily: "inherit",
-            fontSize: 13,
+            fontSize: 12.5,
             letterSpacing: "0.1em",
             fontWeight: active ? 500 : 400,
             color: active ? "var(--text-primary)" : "var(--text-secondary)",
@@ -754,7 +754,7 @@ function BottomTabBar({ tab, setTab }) {
             {t.label}
             {active && (
               <span style={{
-                position: "absolute", left: "50%", bottom: 4,
+                position: "absolute", left: "50%", bottom: 2,
                 transform: "translateX(-50%)",
                 width: 4, height: 4, borderRadius: "50%",
                 background: "var(--accent)",
