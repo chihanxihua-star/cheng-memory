@@ -25,6 +25,6 @@
   --accent: #6b7fd4;
 }
 
-:root[data-theme="light"] { --bg-translucent: rgba(251, 250, 246, 0.78); }
-:root[data-theme="dark"]  { --bg-translucent: rgba(42, 42, 44, 0.78); }
+:root[data-theme="light"] { --bg-translucent: rgba(251, 250, 246, 0.62); }
+:root[data-theme="dark"]  { --bg-translucent: rgba(42, 42, 44, 0.62); }
 

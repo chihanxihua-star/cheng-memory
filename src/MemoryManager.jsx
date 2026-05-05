@@ -698,6 +698,8 @@ export default function App() {
           flex: 1, minHeight: 0,
           display: "flex", flexDirection: "column",
           overflow: tab === "chat" ? "hidden" : "auto",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
         }}>
           {tab === "chat" ? (
             <ChatPanel/>
@@ -730,7 +732,7 @@ function BottomTabBar({ tab, setTab }) {
       background: "var(--bg-translucent)",
       backdropFilter: "saturate(160%) blur(14px)",
       WebkitBackdropFilter: "saturate(160%) blur(14px)",
-      paddingBottom: "calc(8px + env(safe-area-inset-bottom))",
+      paddingBottom: "env(safe-area-inset-bottom)",
       paddingLeft: "env(safe-area-inset-left)",
       paddingRight: "env(safe-area-inset-right)",
       display: "flex",
@@ -740,7 +742,7 @@ function BottomTabBar({ tab, setTab }) {
         return (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             flex: 1, position: "relative",
-            padding: "14px 4px 10px",
+            padding: "12px 4px 12px",
             background: "none", border: "none", cursor: "pointer",
             fontFamily: "inherit",
             fontSize: 13,

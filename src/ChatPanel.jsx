@@ -5,7 +5,7 @@ import { supabase } from "./lib/supabase";
 /* ════════════════════════════════════════════════════════════
    配置
    ════════════════════════════════════════════════════════════ */
-const WS_URL = "wss://chat.jessaminee.top";
+const WS_URL = "wss://chat.jessaminee.top/ws";
 const API_BASE = "https://chat.jessaminee.top";
 const API = API_BASE + "/api";
 const PROJECT_ID = "b5e5d83a-0c17-4421-a0e2-217519ed62fb";
