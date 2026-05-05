@@ -5,6 +5,48 @@ import ChatPanel from "./ChatPanel";
 const SB_URL = "https://fgfyvyztjyqvxijfppgm.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZnZnl2eXp0anlxdnhpamZwcGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4ODMxNzMsImV4cCI6MjA5MDQ1OTE3M30.APTLMLcdY5lsxxXjHeZ3WQvFbYUINjsCUZImECI-pVk";
 
+// 5 个板块的极简线性图标（22×22 stroke-only，跟整体 ins 调性匹配）
+const ICONS = {
+  memory: (
+    // 涟漪：同心圆
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="2"/>
+      <path d="M6 12a6 6 0 0112 0" opacity="0.55"/>
+      <path d="M2 12a10 10 0 0120 0" opacity="0.3"/>
+    </svg>
+  ),
+  diary: (
+    // 溯洄：折页本
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 4h11a2 2 0 012 2v14a2 2 0 01-2 2H5z"/>
+      <path d="M5 4v18"/>
+      <line x1="9" y1="9" x2="14" y2="9"/>
+      <line x1="9" y1="13" x2="14" y2="13"/>
+    </svg>
+  ),
+  milestones: (
+    // 逢春：单叶
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 21c0-10 8-15 16-16-1 9-7 16-16 16z"/>
+      <path d="M5 21c5-5 8-9 11-12" opacity="0.5"/>
+    </svg>
+  ),
+  board: (
+    // 回音：对话气泡
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12a8 8 0 01-11.7 7.1L4 20l1-4.7A8 8 0 0121 12z"/>
+    </svg>
+  ),
+  chat: (
+    // 花信风：风线
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 8h13a3 3 0 100-5"/>
+      <path d="M3 14h17a3 3 0 110 6"/>
+      <path d="M3 11h8"/>
+    </svg>
+  ),
+};
+
 const TABS = [
   { key: "memory", label: "涟漪" },
   { key: "diary", label: "溯洄" },
@@ -741,26 +783,28 @@ function BottomTabBar({ tab, setTab }) {
         const active = tab === t.key;
         return (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
-            flex: 1, position: "relative",
-            padding: "9px 4px",
+            flex: 1,
+            padding: "8px 4px 6px",
             background: "none", border: "none", cursor: "pointer",
             fontFamily: "inherit",
-            fontSize: 12,
-            letterSpacing: "0.06em",
-            lineHeight: 1.2,
-            fontWeight: active ? 500 : 400,
-            color: active ? "var(--text-primary)" : "var(--text-secondary)",
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            gap: 2,
+            color: active ? "var(--accent)" : "var(--text-secondary)",
             transition: "color 0.18s",
           }}>
-            {t.label}
-            {active && (
-              <span style={{
-                position: "absolute", left: "50%", bottom: 2,
-                transform: "translateX(-50%)",
-                width: 3, height: 3, borderRadius: "50%",
-                background: "var(--accent)",
-              }}/>
-            )}
+            <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 22 }}>
+              {ICONS[t.key]}
+            </span>
+            <span style={{
+              fontSize: 10.5,
+              letterSpacing: "0.04em",
+              lineHeight: 1.1,
+              fontWeight: active ? 500 : 400,
+              color: active ? "var(--accent)" : "var(--text-secondary)",
+            }}>
+              {t.label}
+            </span>
           </button>
         );
       })}
