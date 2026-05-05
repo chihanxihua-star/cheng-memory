@@ -16,7 +16,6 @@ const TIME_SEP_GAP_MS = 10 * 60 * 1000;
 
 const EMOJI_OPTIONS = ["🦊","🐙","🐱","🐰","🐻","🐼","🦝","🐨","🐯","🦁","🐸","🐧","🦉","🐝","🌸","🌙","⭐","🔥","💎","🎭","🎵","👻","🤖","🧸"];
 const DEFAULT_PROFILE = { userNick: "宝", userEmoji: "🦊", userImg: null, botNick: "Claude", botEmoji: "🐙", botImg: null };
-const MEMORY_LAYERS = ["锚","枕边","呢喃","暗礁","灵感","朝夕录","潮"];
 const MODEL_OPTIONS = [
   { value: "", name: "默认", desc: "跟随 CC 配置" },
   { value: "opus", name: "Opus 4.7", desc: "Extended · 思考不可见" },
@@ -1794,11 +1793,8 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
         </div>
         <div className="cp-ps-section-title">管理</div>
         <div className="cp-ps-list">
-          <SidebarItem onClick={() => setScreen("worldbook")}>世界书</SidebarItem>
-          <SidebarItem onClick={() => setScreen("memory")}>记忆管理</SidebarItem>
           <SidebarItem onClick={() => setScreen("files")}>文件</SidebarItem>
           <SidebarItem onClick={() => setScreen("history")}>聊天记录</SidebarItem>
-          <SidebarItem onClick={() => setScreen("assistant")}>CLAUDE.md</SidebarItem>
           <SidebarItem onClick={() => setScreen("documents")}>文档管理</SidebarItem>
           <SidebarItem onClick={() => setScreen("params")}>参数设置</SidebarItem>
         </div>
@@ -1863,12 +1859,9 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
       </>
     );
   }
-  if (screen === "worldbook") return <WorldBookScreen onBack={() => setScreen("main")} showToast={showToast} />;
-  if (screen === "memory") return <MemoryScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "files") return <FilesScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "history") return <HistoryScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "documents") return <DocumentsScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} showToast={showToast} />;
-  if (screen === "assistant") return <AssistantConfigScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} showToast={showToast} />;
   if (screen === "params") return <ParamsScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "stats") return <StatsScreen onBack={() => setScreen("stats-menu")} />;
   if (screen === "stats-chars") return <CharStatsScreen onBack={() => setScreen("stats-menu")} convId={convId} />;
@@ -1881,133 +1874,6 @@ function SidebarItem({ onClick, children }) {
       <div className="cp-ps-item-title">{children}</div>
       <div className="cp-ps-item-arrow">›</div>
     </div>
-  );
-}
-
-function WorldBookScreen({ onBack, showToast }) {
-  const [text, setText] = useState("");
-  useEffect(() => {
-    fetch(API + "/worldbook").then(r => r.json()).then(d => setText(d.system_prompt || ""))
-      .catch(e => showToast("加载失败: " + e.message));
-  }, []); // eslint-disable-line
-  const save = async () => {
-    try {
-      await fetch(API + "/worldbook", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system_prompt: text }),
-      });
-      showToast("世界书已保存");
-    } catch (e) { showToast("保存失败: " + e.message); }
-  };
-  return (
-    <>
-      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>世界书</div>
-      <div className="cp-ps-form">
-        <label>项目人设（system_prompt）</label>
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="输入项目人设..."/>
-      </div>
-      <button className="cp-ps-btn" onClick={save}>保存</button>
-    </>
-  );
-}
-
-function MemoryScreen({ onBack, showToast }) {
-  const [layer, setLayer] = useState("锚");
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async (l) => {
-    setLoading(true);
-    try {
-      const r = await fetch(API + "/memory/search", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ layer: l, limit: 50 }),
-      });
-      const data = await r.json();
-      setItems(Array.isArray(data) ? data : []);
-    } catch (e) {
-      showToast("加载失败: " + e.message);
-      setItems([]);
-    } finally { setLoading(false); }
-  }, [showToast]);
-
-  useEffect(() => { load(layer); }, [layer, load]);
-
-  const editItem = async (id) => {
-    const content = window.prompt("编辑记忆内容:");
-    if (!content) return;
-    await fetch(API + "/memory/" + id, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
-    });
-    load(layer);
-  };
-  const delItem = async (id) => {
-    if (!window.confirm("确定删除？")) return;
-    await fetch(API + "/memory/" + id, { method: "DELETE" });
-    load(layer);
-  };
-
-  return (
-    <>
-      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>记忆管理</div>
-      <div className="cp-ps-tabs">
-        {MEMORY_LAYERS.map(l => (
-          <div key={l} className={"cp-ps-tab" + (layer === l ? " active" : "")} onClick={() => setLayer(l)}>{l}</div>
-        ))}
-      </div>
-      <div className="cp-ps-mem-list">
-        {loading ? <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "40px 0" }}>加载中…</div>
-          : items.length === 0 ? <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "40px 0" }}>暂无记忆</div>
-          : items.map(m => (
-            <div key={m.id} className="cp-ps-mem-item">
-              <div className="cp-ps-mem-header">
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span className="cp-ps-mem-layer">{m.layer || "未分类"}</span>
-                  {m.author && (
-                    <span className="cp-ps-mem-author">
-                      {m.source && <span className={"cp-ps-author-badge " + (m.source === "app" ? "app" : "web")}/>}
-                      {m.author}
-                    </span>
-                  )}
-                </div>
-                <span className="cp-ps-mem-actions">
-                  <button onClick={() => editItem(m.id)}>编辑</button>
-                  <button onClick={() => delItem(m.id)}>删除</button>
-                </span>
-              </div>
-              <div className="cp-ps-mem-content">{(m.content || "").substring(0, 200)}</div>
-            </div>
-          ))}
-      </div>
-    </>
-  );
-}
-
-function AssistantConfigScreen({ onBack, onRestartCC, showToast }) {
-  const [text, setText] = useState("");
-  useEffect(() => {
-    fetch(API + "/claude-md").then(r => r.json()).then(d => setText(d.content || ""))
-      .catch(e => showToast("加载失败: " + e.message));
-  }, []); // eslint-disable-line
-  const save = async () => {
-    try {
-      await fetch(API + "/claude-md", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text }),
-      });
-      showToast("已保存，重启 CC 后生效", { action: { label: "立即重启", onClick: () => onRestartCC() }, duration: 10000 });
-    } catch (e) { showToast("保存失败: " + e.message); }
-  };
-  return (
-    <>
-      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>CLAUDE.md</div>
-      <div className="cp-ps-form">
-        <label>CLAUDE.md 内容</label>
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="编辑 CLAUDE.md..." style={{ minHeight: 300 }}/>
-      </div>
-      <button className="cp-ps-btn" onClick={save}>保存</button>
-    </>
   );
 }
 
