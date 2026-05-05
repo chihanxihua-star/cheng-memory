@@ -784,12 +784,12 @@ function BottomTabBar({ tab, setTab }) {
         return (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             flex: 1,
-            padding: "8px 4px 6px",
+            padding: "5px 4px 4px",
             background: "none", border: "none", cursor: "pointer",
             fontFamily: "inherit",
             display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center",
-            gap: 2,
+            gap: 1,
             color: active ? "var(--accent)" : "var(--text-secondary)",
             transition: "color 0.18s",
           }}>
