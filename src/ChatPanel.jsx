@@ -195,7 +195,7 @@ const CSS = `
   --border-bubble: #E8E2DA; --border-card: #E8E2DA; --border-thinking: #DDD6CC; --border-search: #DDD6CC;
   --bg-bar-translucent: rgba(251, 250, 246, 0.38);
   position: relative; display: flex; flex-direction: column;
-  width: 100%; height: 100dvh; min-height: 100dvh;
+  width: 100%; flex: 1; min-height: 0; height: 100%;
   background: var(--bg-primary); color: var(--text-primary);
   font-family: 'Noto Serif SC', Georgia, serif;
   overflow: hidden;
@@ -442,7 +442,6 @@ const CSS = `
 .cp-input-container {
   background: var(--bg-primary); border-top: 1px solid var(--border-primary);
   flex-shrink: 0;
-  padding-bottom: env(safe-area-inset-bottom);
 }
 .cp-image-preview {
   display: none; gap: 6px; flex-wrap: wrap;

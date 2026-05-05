@@ -6,11 +6,11 @@ const SB_URL = "https://fgfyvyztjyqvxijfppgm.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZnZnl2eXp0anlxdnhpamZwcGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4ODMxNzMsImV4cCI6MjA5MDQ1OTE3M30.APTLMLcdY5lsxxXjHeZ3WQvFbYUINjsCUZImECI-pVk";
 
 const TABS = [
-  { key: "memory", label: "记忆" },
-  { key: "diary", label: "日记" },
-  { key: "milestones", label: "纪念日" },
-  { key: "board", label: "留言板" },
-  { key: "chat", label: "聊天" },
+  { key: "memory", label: "涟漪" },
+  { key: "diary", label: "溯洄" },
+  { key: "milestones", label: "逢春" },
+  { key: "board", label: "回音" },
+  { key: "chat", label: "花信风" },
 ];
 
 const LEVEL_META = {
@@ -679,45 +679,81 @@ export default function App() {
     `}</style>
   );
 
-  // 聊天 tab：跳过顶部导航 + 外层 padding，让 ChatPanel 自己管全屏布局
-  if (tab === "chat") {
-    return (
-      <>
-        {stylesEl}
-        <ChatPanel onBack={() => setTab("memory")} />
-      </>
-    );
-  }
-
   return (
     <>
       {stylesEl}
 
-      <div style={{ minHeight: "100vh", background: "var(--bg-page)", color: "var(--text-primary)" }}>
-        {/* 顶部导航：背景延伸进 iOS safe-area，避免状态栏下面那段空白 */}
-        <div style={{ borderBottom: "1px solid var(--border)", position: "sticky", top: 0, background: "var(--bg-page)", zIndex: 10, paddingTop: "env(safe-area-inset-top)" }}>
-          <div style={{ maxWidth: 860, margin: "0 auto", padding: "16px 16px 0", display: "flex", alignItems: "center", gap: 20 }}>
-            <h1 style={{ margin: 0, fontWeight: 300, letterSpacing: "0.2em", fontSize: 18, color: "var(--text-primary)", marginRight: 12 }}>澄</h1>
-            {TABS.map(t => (
-              <button key={t.key} onClick={() => setTab(t.key)} style={{
-                background: "none", border: "none", cursor: "pointer", fontFamily: "inherit",
-                padding: "8px 0", fontSize: 13, letterSpacing: "0.08em",
-                color: tab === t.key ? "var(--text-primary)" : "var(--text-secondary)",
-                borderBottom: tab === t.key ? "2px solid var(--accent)" : "2px solid transparent",
-                transition: "all 0.15s", marginBottom: -1,
-              }}>{t.label}</button>
-            ))}
-          </div>
-        </div>
+      <div style={{
+        display: "flex", flexDirection: "column",
+        height: "100dvh", minHeight: "100dvh",
+        background: "var(--bg-page)", color: "var(--text-primary)",
+        overflow: "hidden",
+      }}>
+        <main style={{
+          flex: 1, minHeight: 0,
+          display: "flex", flexDirection: "column",
+          overflow: tab === "chat" ? "hidden" : "auto",
+        }}>
+          {tab === "chat" ? (
+            <ChatPanel/>
+          ) : (
+            <div style={{
+              flex: 1,
+              paddingTop: "env(safe-area-inset-top)",
+            }}>
+              <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 16px 28px", width: "100%" }}>
+                {tab === "memory" && <MemoryPanel/>}
+                {tab === "diary" && <DiaryPanel/>}
+                {tab === "milestones" && <MilestonesPanel/>}
+                {tab === "board" && <BoardPanel/>}
+              </div>
+            </div>
+          )}
+        </main>
 
-        {/* 内容区 */}
-        <div style={{ maxWidth: 860, margin: "0 auto", padding: "24px 16px" }}>
-          {tab === "memory" && <MemoryPanel/>}
-          {tab === "diary" && <DiaryPanel/>}
-          {tab === "milestones" && <MilestonesPanel/>}
-          {tab === "board" && <BoardPanel/>}
-        </div>
+        <BottomTabBar tab={tab} setTab={setTab}/>
       </div>
     </>
+  );
+}
+
+function BottomTabBar({ tab, setTab }) {
+  return (
+    <nav style={{
+      flexShrink: 0,
+      borderTop: "1px solid var(--border)",
+      background: "var(--bg-page)",
+      paddingBottom: "env(safe-area-inset-bottom)",
+      paddingLeft: "env(safe-area-inset-left)",
+      paddingRight: "env(safe-area-inset-right)",
+      display: "flex",
+    }}>
+      {TABS.map(t => {
+        const active = tab === t.key;
+        return (
+          <button key={t.key} onClick={() => setTab(t.key)} style={{
+            flex: 1, position: "relative",
+            padding: "12px 4px 10px",
+            background: "none", border: "none", cursor: "pointer",
+            fontFamily: "inherit",
+            fontSize: 12.5,
+            letterSpacing: "0.08em",
+            fontWeight: active ? 500 : 400,
+            color: active ? "var(--text-primary)" : "var(--text-secondary)",
+            transition: "color 0.18s",
+          }}>
+            {t.label}
+            {active && (
+              <span style={{
+                position: "absolute", left: "50%", bottom: 4,
+                transform: "translateX(-50%)",
+                width: 4, height: 4, borderRadius: "50%",
+                background: "var(--accent)",
+              }}/>
+            )}
+          </button>
+        );
+      })}
+    </nav>
   );
 }
