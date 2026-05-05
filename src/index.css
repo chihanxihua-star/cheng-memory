@@ -4,9 +4,9 @@
 
 :root,
 :root[data-theme="light"] {
-  --bg-page: #F8F5F0;
+  --bg-page: #FBFAF6;
   --bg-card: #ffffff;
-  --bg-user-bubble: #E6D2D5;
+  --bg-user-bubble: #F2DCE0;
   --bg-ai-bubble: #ffffff;
   --text-primary: #2A2A2C;
   --text-secondary: #666;
