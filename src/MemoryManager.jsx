@@ -749,6 +749,7 @@ export default function App() {
             <div style={{
               flex: 1,
               paddingTop: "env(safe-area-inset-top)",
+              paddingBottom: 90,  // 给 fixed 底部导航留位
             }}>
               <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 16px 28px", width: "100%" }}>
                 {tab === "memory" && <MemoryPanel/>}
@@ -769,14 +770,15 @@ export default function App() {
 function BottomTabBar({ tab, setTab }) {
   return (
     <nav style={{
-      flexShrink: 0,
+      // 跟老版 memory-home 一致：position fixed + 硬编码 34px 底 padding
+      position: "fixed",
+      left: 0, right: 0, bottom: 0,
+      zIndex: 50,
       borderTop: "1px solid var(--border)",
       background: "var(--bg-translucent)",
       backdropFilter: "saturate(180%) blur(6px)",
       WebkitBackdropFilter: "saturate(180%) blur(6px)",
-      paddingLeft: "env(safe-area-inset-left)",
-      paddingRight: "env(safe-area-inset-right)",
-      paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      padding: "0 0 34px",
       display: "flex",
     }}>
       {TABS.map(t => {
