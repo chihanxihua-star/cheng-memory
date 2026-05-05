@@ -1410,6 +1410,7 @@ export default function ChatPanel() {
                 onNewChat={newChat}
                 onRestartCC={restartCC}
                 showToast={showToast}
+                charCount={charCount}
               />
             </div>
           </div>
@@ -1695,7 +1696,7 @@ function StreamingBubble({ snap, profile, showTyping }) {
 }
 
 /* ─────── Sidebar 多屏 ─────── */
-function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, showToast }) {
+function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, showToast, charCount }) {
   if (screen === "main") {
     return (
       <>
@@ -1714,7 +1715,18 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
         </div>
         <div className="cp-ps-section-title">统计</div>
         <div className="cp-ps-list">
+          <SidebarItem onClick={() => setScreen("stats-menu")}>统计</SidebarItem>
+        </div>
+      </>
+    );
+  }
+  if (screen === "stats-menu") {
+    return (
+      <>
+        <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={() => setScreen("main")}>← 返回</button>统计</div>
+        <div className="cp-ps-list">
           <SidebarItem onClick={() => setScreen("stats")}>用量统计</SidebarItem>
+          <SidebarItem onClick={() => setScreen("stats-chars")}>字数统计</SidebarItem>
         </div>
       </>
     );
@@ -1766,7 +1778,8 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
   if (screen === "memory") return <MemoryScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "assistant") return <AssistantConfigScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} showToast={showToast} />;
   if (screen === "params") return <ParamsScreen onBack={() => setScreen("main")} showToast={showToast} />;
-  if (screen === "stats") return <StatsScreen onBack={() => setScreen("main")} />;
+  if (screen === "stats") return <StatsScreen onBack={() => setScreen("stats-menu")} />;
+  if (screen === "stats-chars") return <CharStatsScreen onBack={() => setScreen("stats-menu")} charCount={charCount} />;
   return null;
 }
 
@@ -2021,6 +2034,60 @@ function StatsScreen({ onBack }) {
             );
           })}
         </div>
+      </div>
+    </>
+  );
+}
+
+/* ─────── 字数统计：当前对话字数 vs 压缩阈值 ─────── */
+function CharStatsScreen({ onBack, charCount }) {
+  const settings = getSettings(PROJECT_ID);
+  const threshold = settings.compressThreshold || 50000;
+  const used = charCount || 0;
+  const percent = Math.min(100, (used / threshold) * 100);
+  const remaining = Math.max(0, threshold - used);
+  const summaryLength = settings.summaryLength || 500;
+  const overThreshold = used >= threshold;
+  const nearThreshold = !overThreshold && used >= threshold * 0.8;
+  const barColor = overThreshold ? "#c0392b" : nearThreshold ? "#e8b86d" : "var(--border-input-focus)";
+
+  return (
+    <>
+      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>字数统计</div>
+      <div className="cp-ps-stats" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <div className="cp-ps-stat-card">
+          <div className="cp-ps-stat-label">当前对话</div>
+          <div className="cp-ps-stat-value">{used.toLocaleString()}<span className="cp-ps-stat-unit">字</span></div>
+        </div>
+        <div className="cp-ps-stat-card">
+          <div className="cp-ps-stat-label">压缩阈值</div>
+          <div className="cp-ps-stat-value">{threshold.toLocaleString()}<span className="cp-ps-stat-unit">字</span></div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 4, marginBottom: 10, fontSize: 11, color: "var(--text-tertiary)", display: "flex", justifyContent: "space-between" }}>
+        <span>使用率 {percent.toFixed(1)}%</span>
+        <span>剩余 {remaining.toLocaleString()} 字</span>
+      </div>
+      <div style={{
+        width: "100%", height: 10, background: "var(--bg-card)",
+        border: "1px solid var(--border-card)", borderRadius: 99, overflow: "hidden",
+      }}>
+        <div style={{
+          width: percent + "%", height: "100%", background: barColor,
+          transition: "width 0.4s ease",
+        }} />
+      </div>
+
+      <div style={{ marginTop: 18, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.7 }}>
+        {overThreshold ? (
+          <p style={{ color: "#c0392b" }}>已超过压缩阈值。建议在「窗口设置」里重启 CC 并新开一段对话，可让 CC 自动生成约 {summaryLength} 字摘要。</p>
+        ) : nearThreshold ? (
+          <p style={{ color: "#b07a3a" }}>已接近压缩阈值（80%），可考虑近期重启 CC 以避免上下文超限。</p>
+        ) : (
+          <p>对话字数仍在阈值范围内。超过阈值后系统会提示重启并生成摘要。</p>
+        )}
+        <p style={{ marginTop: 6, color: "var(--text-tertiary)" }}>阈值与摘要长度可在「参数设置」里调整。</p>
       </div>
     </>
   );
