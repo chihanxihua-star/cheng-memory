@@ -500,30 +500,26 @@ function MilestonesPanel() {
 //  留言板板块
 // ════════════════════════════════════════════════════════════
 function BoardDrawer({ entry, isNew, replyTo, onSave, onClose }) {
+  // 作者固定为「小茉莉」，不再提供选择
+  const AUTHOR = "小茉莉";
   const [f, setF] = useState({
     content: entry.content || "",
-    author: entry.author || "小茉莉",
     category: entry.category || "闲聊",
   });
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
   return (
     <Drawer title={isNew ? (replyTo ? "回复留言" : "写留言") : "编辑留言"} onClose={onClose} footer={<>
       <ActionBtn onClick={onClose}>取消</ActionBtn>
-      <ActionBtn accent color="#a89fd8" disabled={!f.content.trim()} onClick={() => onSave({ content: f.content, author: f.author, category: replyTo ? "回复" : f.category, reply_to: replyTo || null })} flex={2}>{isNew ? "发送" : "保存"}</ActionBtn>
+      <ActionBtn accent color="#a89fd8" disabled={!f.content.trim()} onClick={() => onSave({ content: f.content, author: AUTHOR, category: replyTo ? "回复" : f.category, reply_to: replyTo || null })} flex={2}>{isNew ? "发送" : "保存"}</ActionBtn>
     </>}>
       <div><label style={labelStyle}>内容</label><textarea rows={5} style={inputStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="留言…"/></div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <div><label style={labelStyle}>作者</label>
-          <select style={inputStyle} value={f.author} onChange={e => set("author", e.target.value)}>
-            {["小茉莉","澄","小太阳","宝贝"].map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </div>
-        {!replyTo && <div><label style={labelStyle}>分类</label>
+      {!replyTo && (
+        <div><label style={labelStyle}>分类</label>
           <select style={inputStyle} value={f.category} onChange={e => set("category", e.target.value)}>
             {["紧急","需求","闲聊","通知"].map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-        </div>}
-      </div>
+        </div>
+      )}
     </Drawer>
   );
 }
