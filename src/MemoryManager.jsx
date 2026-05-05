@@ -707,13 +707,9 @@ export default function App() {
 
   const stylesEl = (
     <style>{`
-      * { box-sizing: border-box; }
-      html, body, #root {
-        height: 100%; margin: 0;
-        overflow: hidden;
-        overscroll-behavior: none;
-      }
-      body { background: var(--bg-page); font-family: 'Noto Serif SC', Georgia, serif; }
+      /* html, body, #root 的 height/overflow 已在 index.html 的 <style> 里设过
+         （首屏立即生效，避免 100vh 走 Safari 工具栏坑） */
+      body { background: var(--bg-page); font-family: 'Noto Serif SC', Georgia, serif; overscroll-behavior: none; }
       button, input, select, textarea { font-family: inherit; }
       ::-webkit-scrollbar { width: 4px; }
       ::-webkit-scrollbar-track { background: transparent; }
@@ -732,7 +728,7 @@ export default function App() {
 
       <div style={{
         display: "flex", flexDirection: "column",
-        height: "100dvh", minHeight: "100dvh",
+        flex: 1, minHeight: 0,
         background: "var(--bg-page)", color: "var(--text-primary)",
         overflow: "hidden",
       }}>
