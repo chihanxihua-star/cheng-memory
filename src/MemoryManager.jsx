@@ -776,7 +776,7 @@ function BottomTabBar({ tab, setTab }) {
       WebkitBackdropFilter: "saturate(180%) blur(6px)",
       paddingLeft: "env(safe-area-inset-left)",
       paddingRight: "env(safe-area-inset-right)",
-      paddingBottom: "min(env(safe-area-inset-bottom), 6px)",
+      paddingBottom: "env(safe-area-inset-bottom, 0px)",
       display: "flex",
     }}>
       {TABS.map(t => {
