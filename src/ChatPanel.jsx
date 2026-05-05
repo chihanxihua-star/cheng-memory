@@ -1796,6 +1796,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
         <div className="cp-ps-list">
           <SidebarItem onClick={() => setScreen("worldbook")}>世界书</SidebarItem>
           <SidebarItem onClick={() => setScreen("memory")}>记忆管理</SidebarItem>
+          <SidebarItem onClick={() => setScreen("files")}>文件</SidebarItem>
           <SidebarItem onClick={() => setScreen("assistant")}>CLAUDE.md</SidebarItem>
           <SidebarItem onClick={() => setScreen("params")}>参数设置</SidebarItem>
         </div>
@@ -1862,6 +1863,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
   }
   if (screen === "worldbook") return <WorldBookScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "memory") return <MemoryScreen onBack={() => setScreen("main")} showToast={showToast} />;
+  if (screen === "files") return <FilesScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "assistant") return <AssistantConfigScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} showToast={showToast} />;
   if (screen === "params") return <ParamsScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "stats") return <StatsScreen onBack={() => setScreen("stats-menu")} />;
@@ -2120,6 +2122,188 @@ function StatsScreen({ onBack }) {
             );
           })}
         </div>
+      </div>
+    </>
+  );
+}
+
+/* ─────── 文件管理：上传 / 下载 / 删除 ─────── */
+function formatFileSize(n) {
+  if (!n && n !== 0) return "?";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1024 / 1024).toFixed(1) + " MB";
+}
+
+const TEXT_MIME_RE = /^text\/|^application\/(json|xml|javascript|x-yaml|x-yml|x-sh|graphql)/i;
+const TEXT_EXT_RE = /\.(md|markdown|txt|csv|tsv|json|jsonc|yaml|yml|toml|ini|env|log|xml|html|htm|css|scss|less|js|jsx|mjs|cjs|ts|tsx|py|rb|go|rs|java|kt|swift|c|h|cpp|hpp|cc|sh|bash|zsh|sql|graphql|gql)$/i;
+const FILE_MAX_BYTES = 5 * 1024 * 1024;
+
+function isProbablyText(file) {
+  if (file.type && TEXT_MIME_RE.test(file.type)) return true;
+  if (TEXT_EXT_RE.test(file.name)) return true;
+  return false;
+}
+
+async function readBinaryAsBase64(file) {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  // 分块拼接，避免栈溢出
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+function FilesScreen({ onBack, showToast }) {
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+  const fileRef = useRef(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from("files_cheng")
+        .select("id, name, mime_type, size_bytes, is_binary, created_at")
+        .eq("project_id", PROJECT_ID)
+        .order("created_at", { ascending: false });
+      if (err) throw err;
+      setFiles(data || []);
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const onPick = async (file) => {
+    if (!file) return;
+    if (file.size > FILE_MAX_BYTES) {
+      showToast("文件过大（>5MB）");
+      return;
+    }
+    setUploading(true);
+    try {
+      const isText = isProbablyText(file);
+      let content, isBinary;
+      if (isText) {
+        content = await file.text();
+        isBinary = false;
+      } else {
+        content = await readBinaryAsBase64(file);
+        isBinary = true;
+      }
+      const { error: err } = await supabase.from("files_cheng").insert({
+        project_id: PROJECT_ID,
+        name: file.name,
+        mime_type: file.type || "application/octet-stream",
+        size_bytes: file.size,
+        content,
+        is_binary: isBinary,
+      });
+      if (err) throw err;
+      showToast("已上传 " + file.name);
+      load();
+    } catch (e) {
+      showToast("上传失败: " + (e.message || e));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const download = async (f) => {
+    try {
+      const { data, error: err } = await supabase
+        .from("files_cheng")
+        .select("name, mime_type, content, is_binary")
+        .eq("id", f.id)
+        .single();
+      if (err) throw err;
+      let blob;
+      if (data.is_binary) {
+        const bin = atob(data.content || "");
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        blob = new Blob([bytes], { type: data.mime_type || "application/octet-stream" });
+      } else {
+        blob = new Blob([data.content || ""], { type: data.mime_type || "text/plain;charset=utf-8" });
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = data.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      showToast("下载失败: " + (e.message || e));
+    }
+  };
+
+  const remove = async (f) => {
+    if (!window.confirm("删除文件「" + f.name + "」？")) return;
+    try {
+      const { error: err } = await supabase.from("files_cheng").delete().eq("id", f.id);
+      if (err) throw err;
+      load();
+    } catch (e) { showToast("删除失败: " + (e.message || e)); }
+  };
+
+  return (
+    <>
+      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>文件</div>
+      <input ref={fileRef} type="file" style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files && e.target.files[0];
+          e.target.value = "";
+          if (f) onPick(f);
+        }}
+      />
+      <button className="cp-ps-btn" disabled={uploading}
+        onClick={() => fileRef.current && fileRef.current.click()}>
+        {uploading ? "上传中…" : "+ 上传文件"}
+      </button>
+      <div style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 14px" }}>
+        单文件 ≤ 5MB · 文本类直接保存，其他类型 base64 入库
+      </div>
+      {error && (
+        <div style={{ fontSize: 12, color: "#c0392b", padding: "10px 12px", background: "var(--bg-card)", border: "1px solid var(--border-card)", borderRadius: 6, marginBottom: 12 }}>
+          加载失败：{error}
+        </div>
+      )}
+      <div className="cp-ps-mem-list">
+        {loading ? (
+          <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "30px 0" }}>加载中…</div>
+        ) : files.length === 0 ? (
+          <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "30px 0" }}>暂无文件</div>
+        ) : files.map(f => (
+          <div key={f.id} className="cp-ps-mem-item">
+            <div className="cp-ps-mem-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1 }}>
+                <span style={{ fontSize: 12.5, color: "var(--text-primary)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {f.name}
+                </span>
+              </div>
+              <span className="cp-ps-mem-actions" style={{ flexShrink: 0 }}>
+                <button onClick={() => download(f)}>下载</button>
+                <button onClick={() => remove(f)}>删除</button>
+              </span>
+            </div>
+            <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>
+              {f.mime_type || "?"} · {formatFileSize(f.size_bytes)}
+              {f.created_at && " · " + new Date(f.created_at).toLocaleString("zh-CN")}
+            </div>
+          </div>
+        ))}
       </div>
     </>
   );
