@@ -865,17 +865,27 @@ export default function ChatPanel() {
               : (finalText ? [finalText] : []));
         if (useBubbles.length > 0) {
           const created = new Date().toISOString();
-          const newMsg = {
-            id: msg.message_id || ("local-" + Date.now()),
+          const baseId = msg.message_id || ("local-" + Date.now());
+          // 先提交首个气泡（与原版一致：第一个气泡立即出现）
+          const baseMsg = {
+            id: baseId,
             role: "assistant",
-            content: useBubbles.join("\n---bubble---\n"),
+            content: useBubbles[0],
             thinking: s.thinking || null,
             tool_calls: s.tools.length ? s.tools.map(t => ({ ...t })) : null,
             images: [],
             created_at: created,
             token_output: outTokens,
           };
-          setMessages(prev => [...prev, newMsg]);
+          setMessages(prev => [...prev, baseMsg]);
+          // 多气泡按 1500ms 节拍依次追加（每条气泡触发 cp-msgIn 进场动画）
+          for (let i = 1; i < useBubbles.length; i++) {
+            const partsSoFar = useBubbles.slice(0, i + 1);
+            const newContent = partsSoFar.join("\n---bubble---\n");
+            setTimeout(() => {
+              setMessages(prev => prev.map(m => m.id === baseId ? { ...m, content: newContent } : m));
+            }, i * 1500);
+          }
         }
         setStreamSnap(null);
         setIsGenerating(false);
@@ -1642,10 +1652,10 @@ function ToolCallBlock({ call }) {
 }
 
 function StreamingBubble({ snap, profile, showTyping }) {
-  const text = snap.delta || "";
-  const bubbles = Array.isArray(snap.bubbles) && snap.bubbles.length > 0
-    ? snap.bubbles
-    : (text ? [text] : []);
+  // 与 test-chat.html 行为一致：流式阶段不渲染 delta 到可见气泡，
+  // 只展示 thinking / tool 调用，或后端显式发来的 bubble 事件。
+  // 真正的气泡由 done 事件携 cp-msgIn 进场动画弹出。
+  const bubbles = Array.isArray(snap.bubbles) && snap.bubbles.length > 0 ? snap.bubbles : [];
   const hasInner = !!snap.thinking || (snap.tools && snap.tools.length > 0) || bubbles.length > 0;
 
   return (
