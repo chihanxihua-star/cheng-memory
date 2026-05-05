@@ -666,7 +666,8 @@ export default function App() {
   const stylesEl = (
     <style>{`
       * { box-sizing: border-box; }
-      body { margin: 0; background: var(--bg-page); font-family: 'Noto Serif SC', 'Georgia', serif; }
+      body { margin: 0; background: var(--bg-page); font-family: 'Noto Serif SC', Georgia, serif; }
+      button, input, select, textarea { font-family: inherit; }
       ::-webkit-scrollbar { width: 4px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
