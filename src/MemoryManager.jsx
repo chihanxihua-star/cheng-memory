@@ -732,7 +732,7 @@ function BottomTabBar({ tab, setTab }) {
       background: "var(--bg-translucent)",
       backdropFilter: "saturate(180%) blur(6px)",
       WebkitBackdropFilter: "saturate(180%) blur(6px)",
-      paddingBottom: "env(safe-area-inset-bottom)",
+      paddingBottom: "max(0px, calc(env(safe-area-inset-bottom) - 6px))",
       paddingLeft: "env(safe-area-inset-left)",
       paddingRight: "env(safe-area-inset-right)",
       display: "flex",
@@ -745,9 +745,9 @@ function BottomTabBar({ tab, setTab }) {
             padding: "0 4px",
             background: "none", border: "none", cursor: "pointer",
             fontFamily: "inherit",
-            fontSize: 12,
-            letterSpacing: "0.06em",
-            lineHeight: 1.2,
+            fontSize: 10,
+            letterSpacing: "0.04em",
+            lineHeight: 1,
             fontWeight: active ? 500 : 400,
             color: active ? "var(--text-primary)" : "var(--text-secondary)",
             transition: "color 0.18s",
@@ -757,7 +757,7 @@ function BottomTabBar({ tab, setTab }) {
               <span style={{
                 position: "absolute", left: "50%", bottom: 0,
                 transform: "translateX(-50%)",
-                width: 3, height: 3, borderRadius: "50%",
+                width: 2, height: 2, borderRadius: "50%",
                 background: "var(--accent)",
               }}/>
             )}
