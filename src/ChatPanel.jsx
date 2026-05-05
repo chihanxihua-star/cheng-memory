@@ -107,6 +107,27 @@ function saveSettingsValues(projectId, values) {
   localStorage.setItem(key, JSON.stringify(values));
 }
 
+const DEFAULT_API_SETTINGS = {
+  apiKey: "",
+  model: "claude-opus-4-7",
+  maxTokens: 4096,
+  temperature: 1.0,
+  thinkingBudget: 0,
+  cacheEnabled: true,
+  cacheTTL: "5m",
+};
+function getAPISettings(projectId) {
+  try {
+    const key = "chat-api-settings-" + (projectId || "global");
+    const s = JSON.parse(localStorage.getItem(key) || "{}");
+    return { ...DEFAULT_API_SETTINGS, ...s };
+  } catch { return { ...DEFAULT_API_SETTINGS }; }
+}
+function saveAPISettingsValues(projectId, values) {
+  const key = "chat-api-settings-" + (projectId || "global");
+  localStorage.setItem(key, JSON.stringify(values));
+}
+
 function compressImageDataUrl(dataUrl) {
   return new Promise(resolve => {
     const img = new Image();
@@ -1090,6 +1111,7 @@ export default function ChatPanel() {
       content: text,
       conversation_id: cid,
       settings: getSettings(PROJECT_ID),
+      api_settings: getAPISettings(PROJECT_ID),
     };
     if (imgs.length > 0) payload.images = imgs;
     if (currentModel) payload.model = currentModel;
@@ -1181,6 +1203,7 @@ export default function ChatPanel() {
         ws.send(JSON.stringify({
           type: "chat", content: newText, conversation_id: convId,
           model: currentModel, settings: getSettings(PROJECT_ID),
+          api_settings: getAPISettings(PROJECT_ID),
         }));
       }
       showToast("已重新发送，建议重启 CC", { action: { label: "立即重启", onClick: () => restartCC() }, duration: 10000 });
@@ -1204,6 +1227,7 @@ export default function ChatPanel() {
         ws.send(JSON.stringify({
           type: "chat", content: prevUser.content, conversation_id: convId,
           model: currentModel, settings: getSettings(PROJECT_ID),
+          api_settings: getAPISettings(PROJECT_ID),
         }));
       }
       showToast("正在重新生成…");
@@ -1797,6 +1821,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
           <SidebarItem onClick={() => setScreen("history")}>聊天记录</SidebarItem>
           <SidebarItem onClick={() => setScreen("documents")}>文档管理</SidebarItem>
           <SidebarItem onClick={() => setScreen("params")}>参数设置</SidebarItem>
+          <SidebarItem onClick={() => setScreen("api")}>API 设置</SidebarItem>
         </div>
         <div className="cp-ps-section-title">统计</div>
         <div className="cp-ps-list">
@@ -1863,6 +1888,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
   if (screen === "history") return <HistoryScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "documents") return <DocumentsScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} showToast={showToast} />;
   if (screen === "params") return <ParamsScreen onBack={() => setScreen("main")} showToast={showToast} />;
+  if (screen === "api") return <APISettingsScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "stats") return <StatsScreen onBack={() => setScreen("stats-menu")} />;
   if (screen === "stats-chars") return <CharStatsScreen onBack={() => setScreen("stats-menu")} convId={convId} />;
   return null;
@@ -1924,6 +1950,123 @@ function ParamsScreen({ onBack, showToast }) {
         </select>
       </div>
       <button className="cp-ps-btn" onClick={save}>保存设置</button>
+    </>
+  );
+}
+
+/* ─────── API 设置：API key / 模型 / 缓存 ─────── */
+const API_MODEL_OPTIONS = [
+  { value: "claude-opus-4-7", label: "Opus 4.7" },
+  { value: "claude-opus-4-6", label: "Opus 4.6" },
+  { value: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+  { value: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" },
+  { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
+];
+
+function APISettingsScreen({ onBack, showToast }) {
+  const [s, setS] = useState(() => getAPISettings(PROJECT_ID));
+  const [showKey, setShowKey] = useState(false);
+  const update = (k, v) => setS(prev => ({ ...prev, [k]: v }));
+  const save = () => {
+    saveAPISettingsValues(PROJECT_ID, {
+      apiKey: (s.apiKey || "").trim(),
+      model: s.model || DEFAULT_API_SETTINGS.model,
+      maxTokens: parseInt(s.maxTokens) || DEFAULT_API_SETTINGS.maxTokens,
+      temperature: Math.max(0, Math.min(2, parseFloat(s.temperature) || 0)),
+      thinkingBudget: Math.max(0, parseInt(s.thinkingBudget) || 0),
+      cacheEnabled: !!s.cacheEnabled,
+      cacheTTL: s.cacheTTL || DEFAULT_API_SETTINGS.cacheTTL,
+    });
+    showToast("API 设置已保存");
+  };
+
+  const inputStyle = {
+    width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-input)",
+    borderRadius: 6, padding: "8px 10px", color: "var(--text-primary)", fontSize: 13,
+    outline: "none", fontFamily: "inherit",
+  };
+
+  return (
+    <>
+      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>API 设置</div>
+
+      <div className="cp-ps-section-title">认证</div>
+      <div className="cp-ps-form">
+        <label>API Key</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            type={showKey ? "text" : "password"}
+            value={s.apiKey || ""}
+            onChange={e => update("apiKey", e.target.value)}
+            placeholder="sk-ant-..."
+            style={{ ...inputStyle, flex: 1 }}
+            autoComplete="off"
+          />
+          <button type="button" className="cp-upload-btn"
+            style={{ flexShrink: 0 }}
+            onClick={() => setShowKey(v => !v)}>
+            {showKey ? "隐藏" : "显示"}
+          </button>
+        </div>
+        <small>留空则使用后端默认 key（环境变量）。仅保存在本地浏览器，每轮通过 WS 传给后端。</small>
+      </div>
+
+      <div className="cp-ps-section-title">模型</div>
+      <div className="cp-ps-form">
+        <label>API 模式默认模型</label>
+        <select value={s.model || ""} onChange={e => update("model", e.target.value)}>
+          {API_MODEL_OPTIONS.map(m => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="cp-ps-form">
+        <label>Max Tokens</label>
+        <input type="number" min={256} max={64000} step={256}
+          value={s.maxTokens} onChange={e => update("maxTokens", e.target.value)} />
+        <small>单次回复最多生成的 token 数</small>
+      </div>
+
+      <div className="cp-ps-form">
+        <label>Temperature</label>
+        <input type="number" min={0} max={2} step={0.1}
+          value={s.temperature} onChange={e => update("temperature", e.target.value)} />
+        <small>0 ~ 2，越高越发散；启用 thinking 时建议设为 1</small>
+      </div>
+
+      <div className="cp-ps-form">
+        <label>Extended Thinking 预算（tokens，0 关闭）</label>
+        <input type="number" min={0} max={64000} step={1024}
+          value={s.thinkingBudget} onChange={e => update("thinkingBudget", e.target.value)} />
+        <small>非 0 时开启思考链；预算需小于 max_tokens</small>
+      </div>
+
+      <div className="cp-ps-section-title">缓存</div>
+      <div className="cp-ps-form">
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 0 }}>
+          <input type="checkbox" checked={!!s.cacheEnabled}
+            onChange={e => update("cacheEnabled", e.target.checked)}
+            style={{ margin: 0, width: 16, height: 16 }} />
+          <span style={{ fontSize: 13, color: "var(--text-primary)" }}>启用 Prompt Caching</span>
+        </label>
+        <small>对 system prompt + 文件 + 历史消息打缓存断点，命中时大幅减少 input token 计费</small>
+      </div>
+
+      <div className="cp-ps-form">
+        <label>缓存 TTL</label>
+        <select value={s.cacheTTL || "5m"} disabled={!s.cacheEnabled}
+          onChange={e => update("cacheTTL", e.target.value)}>
+          <option value="5m">5 分钟（默认，无额外费用）</option>
+          <option value="1h">1 小时（额外费用，长会话推荐）</option>
+        </select>
+      </div>
+
+      <button className="cp-ps-btn" onClick={save}>保存</button>
+      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>
+        仅在 API 模式（每轮直接调用 Anthropic API）下生效。CC 模式由 CC 进程自己管理 key 与模型；
+        切换模式见「文档管理 → CC / API 文档」。
+      </div>
     </>
   );
 }
