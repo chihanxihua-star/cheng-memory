@@ -1799,6 +1799,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
           <SidebarItem onClick={() => setScreen("files")}>文件</SidebarItem>
           <SidebarItem onClick={() => setScreen("history")}>聊天记录</SidebarItem>
           <SidebarItem onClick={() => setScreen("assistant")}>CLAUDE.md</SidebarItem>
+          <SidebarItem onClick={() => setScreen("documents")}>文档管理</SidebarItem>
           <SidebarItem onClick={() => setScreen("params")}>参数设置</SidebarItem>
         </div>
         <div className="cp-ps-section-title">统计</div>
@@ -1866,6 +1867,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
   if (screen === "memory") return <MemoryScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "files") return <FilesScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "history") return <HistoryScreen onBack={() => setScreen("main")} showToast={showToast} />;
+  if (screen === "documents") return <DocumentsScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} showToast={showToast} />;
   if (screen === "assistant") return <AssistantConfigScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} showToast={showToast} />;
   if (screen === "params") return <ParamsScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "stats") return <StatsScreen onBack={() => setScreen("stats-menu")} />;
@@ -2159,75 +2161,66 @@ async function readBinaryAsBase64(file) {
   return btoa(bin);
 }
 
-function FilesScreen({ onBack, showToast }) {
+// 通用文件列表面板：支持任意 *_cheng 表（filterEq 提供等值过滤的列，
+// 这些列同时也会作为 INSERT 时的固定字段）。
+function FileListPanel({ tableName, filterEq, hint, showToast, onChange }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const fileRef = useRef(null);
 
+  const filterKey = useMemo(() => JSON.stringify(filterEq || {}), [filterEq]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
-        .from("files_cheng")
-        .select("id, name, mime_type, size_bytes, is_binary, created_at")
-        .eq("project_id", PROJECT_ID)
-        .order("created_at", { ascending: false });
+      let q = supabase.from(tableName)
+        .select("id, name, mime_type, size_bytes, is_binary, created_at");
+      const f = JSON.parse(filterKey);
+      for (const [k, v] of Object.entries(f)) q = q.eq(k, v);
+      q = q.order("created_at", { ascending: false });
+      const { data, error: err } = await q;
       if (err) throw err;
       setFiles(data || []);
     } catch (e) {
       setError(e.message || String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    } finally { setLoading(false); }
+  }, [tableName, filterKey]);
 
   useEffect(() => { load(); }, [load]);
 
   const onPick = async (file) => {
     if (!file) return;
-    if (file.size > FILE_MAX_BYTES) {
-      showToast("文件过大（>5MB）");
-      return;
-    }
+    if (file.size > FILE_MAX_BYTES) { showToast("文件过大（>5MB）"); return; }
     setUploading(true);
     try {
       const isText = isProbablyText(file);
-      let content, isBinary;
-      if (isText) {
-        content = await file.text();
-        isBinary = false;
-      } else {
-        content = await readBinaryAsBase64(file);
-        isBinary = true;
-      }
-      const { error: err } = await supabase.from("files_cheng").insert({
-        project_id: PROJECT_ID,
+      const content = isText ? await file.text() : await readBinaryAsBase64(file);
+      const f = JSON.parse(filterKey);
+      const { error: err } = await supabase.from(tableName).insert({
+        ...f,
         name: file.name,
         mime_type: file.type || "application/octet-stream",
         size_bytes: file.size,
         content,
-        is_binary: isBinary,
+        is_binary: !isText,
       });
       if (err) throw err;
       showToast("已上传 " + file.name);
       load();
+      if (onChange) onChange();
     } catch (e) {
       showToast("上传失败: " + (e.message || e));
-    } finally {
-      setUploading(false);
-    }
+    } finally { setUploading(false); }
   };
 
   const download = async (f) => {
     try {
-      const { data, error: err } = await supabase
-        .from("files_cheng")
+      const { data, error: err } = await supabase.from(tableName)
         .select("name, mime_type, content, is_binary")
-        .eq("id", f.id)
-        .single();
+        .eq("id", f.id).single();
       if (err) throw err;
       let blob;
       if (data.is_binary) {
@@ -2240,43 +2233,37 @@ function FilesScreen({ onBack, showToast }) {
       }
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = data.name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      a.href = url; a.download = data.name;
+      document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (e) {
-      showToast("下载失败: " + (e.message || e));
-    }
+    } catch (e) { showToast("下载失败: " + (e.message || e)); }
   };
 
   const remove = async (f) => {
     if (!window.confirm("删除文件「" + f.name + "」？")) return;
     try {
-      const { error: err } = await supabase.from("files_cheng").delete().eq("id", f.id);
+      const { error: err } = await supabase.from(tableName).delete().eq("id", f.id);
       if (err) throw err;
       load();
+      if (onChange) onChange();
     } catch (e) { showToast("删除失败: " + (e.message || e)); }
   };
 
   return (
     <>
-      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>文件</div>
       <input ref={fileRef} type="file" style={{ display: "none" }}
         onChange={(e) => {
           const f = e.target.files && e.target.files[0];
           e.target.value = "";
           if (f) onPick(f);
-        }}
-      />
+        }} />
       <button className="cp-ps-btn" disabled={uploading}
         onClick={() => fileRef.current && fileRef.current.click()}>
         {uploading ? "上传中…" : "+ 上传文件"}
       </button>
-      <div style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 14px" }}>
-        单文件 ≤ 5MB · 文本类直接保存，其他类型 base64 入库
-      </div>
+      {hint && (
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 14px" }}>{hint}</div>
+      )}
       {error && (
         <div style={{ fontSize: 12, color: "#c0392b", padding: "10px 12px", background: "var(--bg-card)", border: "1px solid var(--border-card)", borderRadius: 6, marginBottom: 12 }}>
           加载失败：{error}
@@ -2284,9 +2271,9 @@ function FilesScreen({ onBack, showToast }) {
       )}
       <div className="cp-ps-mem-list">
         {loading ? (
-          <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "30px 0" }}>加载中…</div>
+          <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "24px 0" }}>加载中…</div>
         ) : files.length === 0 ? (
-          <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "30px 0" }}>暂无文件</div>
+          <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "24px 0" }}>暂无文件</div>
         ) : files.map(f => (
           <div key={f.id} className="cp-ps-mem-item">
             <div className="cp-ps-mem-header">
@@ -2307,6 +2294,151 @@ function FilesScreen({ onBack, showToast }) {
           </div>
         ))}
       </div>
+    </>
+  );
+}
+
+function FilesScreen({ onBack, showToast }) {
+  const filterEq = useMemo(() => ({ project_id: PROJECT_ID }), []);
+  return (
+    <>
+      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>文件</div>
+      <FileListPanel
+        tableName="files_cheng"
+        filterEq={filterEq}
+        hint="单文件 ≤ 5MB · 文本类直接保存，其他类型 base64 入库"
+        showToast={showToast}
+      />
+    </>
+  );
+}
+
+/* ─────── 文档管理：CC / API 两个 tab ─────── */
+// 单例文档（claude_md / system_prompt）：每个 (project, mode, doc_type) 至多一条
+function DocSingleton({ mode, docType, label, placeholder, needsRestart, onRestartCC, showToast, minHeight = 140 }) {
+  const [content, setContent] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    supabase.from("documents_cheng")
+      .select("content")
+      .eq("project_id", PROJECT_ID).eq("mode", mode).eq("doc_type", docType)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error && error.code !== "PGRST116") showToast("加载失败：" + error.message);
+        setContent((data && data.content) || "");
+      })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [mode, docType, showToast]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const { data: existing } = await supabase.from("documents_cheng")
+        .select("id")
+        .eq("project_id", PROJECT_ID).eq("mode", mode).eq("doc_type", docType)
+        .maybeSingle();
+      if (existing && existing.id) {
+        const { error: err } = await supabase.from("documents_cheng")
+          .update({ content, updated_at: new Date().toISOString() })
+          .eq("id", existing.id);
+        if (err) throw err;
+      } else {
+        const { error: err } = await supabase.from("documents_cheng").insert({
+          project_id: PROJECT_ID, mode, doc_type: docType, content,
+        });
+        if (err) throw err;
+      }
+      if (needsRestart) {
+        showToast("已保存，重启 CC 后生效", {
+          action: { label: "立即重启", onClick: () => onRestartCC && onRestartCC() },
+          duration: 10000,
+        });
+      } else {
+        showToast(label + " 已保存");
+      }
+    } catch (e) {
+      showToast("保存失败：" + (e.message || e));
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div className="cp-ps-section-title">{label}</div>
+      <textarea value={content} onChange={e => setContent(e.target.value)}
+        placeholder={loading ? "加载中…" : placeholder}
+        disabled={loading}
+        style={{
+          width: "100%", minHeight, background: "var(--bg-input)",
+          border: "1px solid var(--border-input)", borderRadius: 6,
+          padding: "8px 10px", color: "var(--text-primary)", fontSize: 13,
+          outline: "none", fontFamily: "inherit", resize: "vertical", lineHeight: 1.5,
+        }}/>
+      <button className="cp-ps-btn" disabled={saving || loading} onClick={save}>
+        {saving ? "保存中…" : "保存"}
+      </button>
+    </div>
+  );
+}
+
+function DocumentsTab({ mode, onRestartCC, showToast }) {
+  const isCC = mode === "cc";
+  const filterEq = useMemo(
+    () => ({ project_id: PROJECT_ID, mode, doc_type: "file" }),
+    [mode]
+  );
+  return (
+    <>
+      <div style={{
+        fontSize: 11, color: "var(--text-tertiary)", marginBottom: 14,
+        padding: "8px 10px", background: "var(--bg-card)",
+        border: "1px solid var(--border-card)", borderRadius: 6,
+      }}>
+        {isCC
+          ? "CC 文档：修改后需重启 CC 才生效，整段内容只在启动时读取一次"
+          : "API 文档：每轮对话都会自动注入"}
+      </div>
+
+      {isCC && (
+        <DocSingleton
+          mode="cc" docType="claude_md" label="CLAUDE.md"
+          placeholder="编辑 CLAUDE.md…" minHeight={200}
+          needsRestart onRestartCC={onRestartCC} showToast={showToast}
+        />
+      )}
+
+      <DocSingleton
+        mode={mode} docType="system_prompt" label="System Prompt"
+        placeholder="输入项目人设 / 系统提示…" minHeight={150}
+        needsRestart={isCC} onRestartCC={onRestartCC} showToast={showToast}
+      />
+
+      <div className="cp-ps-section-title">文件</div>
+      <FileListPanel
+        tableName="documents_cheng"
+        filterEq={filterEq}
+        hint={"单文件 ≤ 5MB · " + (isCC ? "重启 CC 后随 CLAUDE.md 一起读取一次" : "每轮注入到上下文")}
+        showToast={showToast}
+      />
+    </>
+  );
+}
+
+function DocumentsScreen({ onBack, onRestartCC, showToast }) {
+  const [tab, setTab] = useState("cc");
+  return (
+    <>
+      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>文档管理</div>
+      <div className="cp-ps-tabs">
+        <div className={"cp-ps-tab" + (tab === "cc" ? " active" : "")} onClick={() => setTab("cc")}>CC 文档</div>
+        <div className={"cp-ps-tab" + (tab === "api" ? " active" : "")} onClick={() => setTab("api")}>API 文档</div>
+      </div>
+      <DocumentsTab mode={tab} onRestartCC={onRestartCC} showToast={showToast} />
     </>
   );
 }
