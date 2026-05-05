@@ -2378,11 +2378,150 @@ function DocSingleton({ mode, docType, label, placeholder, needsRestart, onResta
   );
 }
 
-function DocumentsTab({ mode, onRestartCC, showToast }) {
-  const isCC = mode === "cc";
+// 单例文档的 upsert 工具：选 select-then-update/insert，避免 partial-unique-index 与 ON CONFLICT 的兼容问题
+async function upsertDocSingleton(mode, docType, content) {
+  const { data: existing, error: selErr } = await supabase
+    .from("documents_cheng")
+    .select("id")
+    .eq("project_id", PROJECT_ID).eq("mode", mode).eq("doc_type", docType)
+    .maybeSingle();
+  if (selErr) throw selErr;
+  if (existing && existing.id) {
+    const { error } = await supabase.from("documents_cheng")
+      .update({ content, updated_at: new Date().toISOString() })
+      .eq("id", existing.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("documents_cheng").insert({
+      project_id: PROJECT_ID, mode, doc_type: docType, content,
+    });
+    if (error) throw error;
+  }
+}
+
+const TEXTAREA_STYLE = {
+  width: "100%",
+  background: "var(--bg-input)",
+  border: "1px solid var(--border-input)",
+  borderRadius: 6,
+  padding: "8px 10px",
+  color: "var(--text-primary)",
+  fontSize: 13,
+  outline: "none",
+  fontFamily: "inherit",
+  resize: "vertical",
+  lineHeight: 1.5,
+};
+
+// CC 文档：CLAUDE.md + system_prompt + 文件 共用一个底部保存按钮
+function CCDocumentsTab({ onRestartCC, showToast }) {
+  const [claudeMd, setClaudeMd] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const filterEq = useMemo(
-    () => ({ project_id: PROJECT_ID, mode, doc_type: "file" }),
-    [mode]
+    () => ({ project_id: PROJECT_ID, mode: "cc", doc_type: "file" }),
+    []
+  );
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    Promise.all([
+      supabase.from("documents_cheng")
+        .select("content")
+        .eq("project_id", PROJECT_ID).eq("mode", "cc").eq("doc_type", "claude_md")
+        .maybeSingle(),
+      supabase.from("documents_cheng")
+        .select("content")
+        .eq("project_id", PROJECT_ID).eq("mode", "cc").eq("doc_type", "system_prompt")
+        .maybeSingle(),
+    ]).then(([a, b]) => {
+      if (!alive) return;
+      if (a.error && a.error.code !== "PGRST116") showToast("加载 CLAUDE.md 失败：" + a.error.message);
+      if (b.error && b.error.code !== "PGRST116") showToast("加载 system prompt 失败：" + b.error.message);
+      setClaudeMd((a.data && a.data.content) || "");
+      setSystemPrompt((b.data && b.data.content) || "");
+    }).catch(e => {
+      if (alive) showToast("加载失败：" + (e.message || e));
+    }).finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [showToast]);
+
+  const saveAll = async () => {
+    setSaving(true);
+    try {
+      // 系统提示在前、CLAUDE.md 在后；任一失败立即抛出
+      await upsertDocSingleton("cc", "system_prompt", systemPrompt);
+      await upsertDocSingleton("cc", "claude_md", claudeMd);
+      showToast("已保存，重启 CC 后生效", {
+        action: { label: "立即重启", onClick: () => onRestartCC && onRestartCC() },
+        duration: 12000,
+      });
+    } catch (e) {
+      showToast("保存失败：" + (e.message || e));
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <>
+      <div style={{
+        fontSize: 11, color: "var(--text-tertiary)", marginBottom: 14,
+        padding: "8px 10px", background: "var(--bg-card)",
+        border: "1px solid var(--border-card)", borderRadius: 6,
+      }}>
+        CC 文档：修改后需重启 CC 才生效，整段内容只在启动时读取一次
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <div className="cp-ps-section-title">系统提示（System Prompt）</div>
+        <textarea
+          value={systemPrompt}
+          onChange={e => setSystemPrompt(e.target.value)}
+          placeholder={loading ? "加载中…" : "输入项目人设 / 系统提示…"}
+          disabled={loading}
+          style={{ ...TEXTAREA_STYLE, minHeight: 150 }}
+        />
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <div className="cp-ps-section-title">CLAUDE.md</div>
+        <textarea
+          value={claudeMd}
+          onChange={e => setClaudeMd(e.target.value)}
+          placeholder={loading ? "加载中…" : "编辑 CLAUDE.md…"}
+          disabled={loading}
+          style={{ ...TEXTAREA_STYLE, minHeight: 200 }}
+        />
+      </div>
+
+      <div className="cp-ps-section-title">文件</div>
+      <FileListPanel
+        tableName="documents_cheng"
+        filterEq={filterEq}
+        hint="单文件 ≤ 5MB · 重启 CC 后随 CLAUDE.md 一起读取一次"
+        showToast={showToast}
+      />
+
+      <button className="cp-ps-btn"
+        disabled={saving || loading}
+        onClick={saveAll}
+        style={{ marginTop: 18 }}>
+        {saving ? "保存中…" : "保存"}
+      </button>
+      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 8, lineHeight: 1.6 }}>
+        一次保存系统提示与 CLAUDE.md；保存后会出现「立即重启」按钮，文件区域的增删立即生效。
+      </div>
+    </>
+  );
+}
+
+// API 文档：每轮注入，单 system_prompt 仍用 DocSingleton（独立保存按钮）
+function APIDocumentsTab({ showToast }) {
+  const filterEq = useMemo(
+    () => ({ project_id: PROJECT_ID, mode: "api", doc_type: "file" }),
+    []
   );
   return (
     <>
@@ -2391,34 +2530,29 @@ function DocumentsTab({ mode, onRestartCC, showToast }) {
         padding: "8px 10px", background: "var(--bg-card)",
         border: "1px solid var(--border-card)", borderRadius: 6,
       }}>
-        {isCC
-          ? "CC 文档：修改后需重启 CC 才生效，整段内容只在启动时读取一次"
-          : "API 文档：每轮对话都会自动注入"}
+        API 文档：每轮对话都会自动注入
       </div>
 
-      {isCC && (
-        <DocSingleton
-          mode="cc" docType="claude_md" label="CLAUDE.md"
-          placeholder="编辑 CLAUDE.md…" minHeight={200}
-          needsRestart onRestartCC={onRestartCC} showToast={showToast}
-        />
-      )}
-
       <DocSingleton
-        mode={mode} docType="system_prompt" label="System Prompt"
+        mode="api" docType="system_prompt" label="System Prompt"
         placeholder="输入项目人设 / 系统提示…" minHeight={150}
-        needsRestart={isCC} onRestartCC={onRestartCC} showToast={showToast}
+        needsRestart={false} showToast={showToast}
       />
 
       <div className="cp-ps-section-title">文件</div>
       <FileListPanel
         tableName="documents_cheng"
         filterEq={filterEq}
-        hint={"单文件 ≤ 5MB · " + (isCC ? "重启 CC 后随 CLAUDE.md 一起读取一次" : "每轮注入到上下文")}
+        hint="单文件 ≤ 5MB · 每轮注入到上下文"
         showToast={showToast}
       />
     </>
   );
+}
+
+function DocumentsTab({ mode, onRestartCC, showToast }) {
+  if (mode === "cc") return <CCDocumentsTab onRestartCC={onRestartCC} showToast={showToast} />;
+  return <APIDocumentsTab showToast={showToast} />;
 }
 
 function DocumentsScreen({ onBack, onRestartCC, showToast }) {
