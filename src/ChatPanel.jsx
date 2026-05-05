@@ -2460,35 +2460,61 @@ const EXPORT_RANGES = [
   { value: "all", label: "全部" },
 ];
 
+// 角色 → 显示名（聊天记录 + 导出统一使用）
+function chatDisplayName(role) {
+  if (role === "assistant") return "小太阳";
+  if (role === "user") return "小茉莉";
+  if (role === "system") return "系统";
+  return role || "—";
+}
+
+// 微信风格的时间戳：2026/02/03 18:38
+function formatChatTime(iso) {
+  const d = new Date(iso);
+  const z = n => String(n).padStart(2, "0");
+  return d.getFullYear() + "/" + z(d.getMonth() + 1) + "/" + z(d.getDate())
+    + " " + z(d.getHours()) + ":" + z(d.getMinutes());
+}
+
 function buildExportMarkdown(rows, rangeLabel) {
-  const groups = new Map();
-  for (const m of rows) {
-    const cid = m.conversation_id;
-    if (!groups.has(cid)) {
-      groups.set(cid, { title: (m.conversations && m.conversations.title) || "未命名对话", msgs: [] });
-    }
-    groups.get(cid).msgs.push(m);
-  }
   let out = "# 聊天记录导出\n\n";
   out += "导出时间：" + new Date().toLocaleString("zh-CN") + "\n\n";
   out += "范围：" + rangeLabel + "\n\n";
-  out += "共 " + rows.length + " 条消息，" + groups.size + " 个对话\n\n---\n\n";
-  for (const [, g] of groups) {
-    out += "## " + g.title + "\n\n";
-    g.msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-    for (const m of g.msgs) {
-      const t = new Date(m.created_at);
-      const ts = t.toLocaleString("zh-CN", {
-        year: "numeric", month: "2-digit", day: "2-digit",
-        hour: "2-digit", minute: "2-digit",
-      });
-      const roleLabel = m.role === "user" ? "用户" : m.role === "assistant" ? "助手" : m.role;
-      out += "**[" + ts + "] " + roleLabel + "**\n\n";
-      out += (m.content || "") + "\n\n";
-    }
-    out += "---\n\n";
+  out += "共 " + rows.length + " 条消息\n\n---\n\n";
+  // 时间正序
+  const sorted = rows.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  for (const m of sorted) {
+    const ts = formatChatTime(m.created_at);
+    out += chatDisplayName(m.role) + "  " + ts + "\n\n";
+    out += (m.content || "") + "\n\n";
   }
   return out;
+}
+
+// 拉取本 project（含历史 null project_id 的会话）的消息：先取 conv 列表，再按 IN 过滤
+async function fetchProjectMessages({ start, end, keyword, ascending = true, limit = 500 }) {
+  const { data: convs, error: convErr } = await supabase
+    .from("conversations")
+    .select("id, title, project_id")
+    .or("project_id.eq." + PROJECT_ID + ",project_id.is.null");
+  if (convErr) throw convErr;
+  const convIds = (convs || []).map(c => c.id);
+  if (convIds.length === 0) return { rows: [], titleMap: {} };
+  const titleMap = {};
+  for (const c of convs) titleMap[c.id] = c.title || "未命名对话";
+
+  let q = supabase
+    .from("messages")
+    .select("id, role, content, created_at, conversation_id")
+    .in("conversation_id", convIds)
+    .order("created_at", { ascending })
+    .limit(limit);
+  if (start) q = q.gte("created_at", startOfDayISO(start));
+  if (end) q = q.lte("created_at", endOfDayISO(end));
+  if (keyword && keyword.trim()) q = q.ilike("content", "%" + keyword.trim() + "%");
+  const { data, error: err } = await q;
+  if (err) throw err;
+  return { rows: data || [], titleMap };
 }
 
 function HistoryScreen({ onBack, showToast }) {
@@ -2507,18 +2533,12 @@ function HistoryScreen({ onBack, showToast }) {
     setLoading(true);
     setError(null);
     try {
-      let q = supabase
-        .from("messages")
-        .select("id, role, content, created_at, conversation_id, conversations!inner(title, project_id)")
-        .eq("conversations.project_id", PROJECT_ID)
-        .order("created_at", { ascending: false })
-        .limit(200);
-      if (start) q = q.gte("created_at", startOfDayISO(start));
-      if (end) q = q.lte("created_at", endOfDayISO(end));
-      if (keyword.trim()) q = q.ilike("content", "%" + keyword.trim() + "%");
-      const { data, error: err } = await q;
-      if (err) throw err;
-      setResults(data || []);
+      const { rows } = await fetchProjectMessages({
+        start, end, keyword,
+        ascending: true,   // 微信风格：旧 → 新
+        limit: 500,
+      });
+      setResults(rows);
     } catch (e) {
       setError(e.message || String(e));
       setResults([]);
@@ -2530,30 +2550,28 @@ function HistoryScreen({ onBack, showToast }) {
   const doExport = async () => {
     setExporting(true);
     try {
-      let q = supabase
-        .from("messages")
-        .select("id, role, content, created_at, conversation_id, conversations!inner(title, project_id)")
-        .eq("conversations.project_id", PROJECT_ID)
-        .order("created_at", { ascending: true })
-        .limit(5000);
+      let exportStart = null;
       let label;
       if (exportRange !== "all") {
         const days = parseInt(exportRange, 10);
         const since = new Date();
         since.setDate(since.getDate() - (days - 1));
         since.setHours(0, 0, 0, 0);
-        q = q.gte("created_at", since.toISOString());
-        label = "最近 " + days + " 天（" + ymd(since) + " 至 " + ymd(new Date()) + "）";
+        exportStart = ymd(since);
+        label = "最近 " + days + " 天（" + exportStart + " 至 " + ymd(new Date()) + "）";
       } else {
         label = "全部";
       }
-      const { data, error: err } = await q;
-      if (err) throw err;
-      if (!data || data.length === 0) {
+      const { rows } = await fetchProjectMessages({
+        start: exportStart, end: null, keyword: "",
+        ascending: true,
+        limit: 5000,
+      });
+      if (rows.length === 0) {
         showToast("范围内没有消息");
         return;
       }
-      const md = buildExportMarkdown(data, label);
+      const md = buildExportMarkdown(rows, label);
       const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -2564,7 +2582,7 @@ function HistoryScreen({ onBack, showToast }) {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      showToast("已导出 " + data.length + " 条消息");
+      showToast("已导出 " + rows.length + " 条消息");
     } catch (e) {
       showToast("导出失败：" + (e.message || e));
     } finally { setExporting(false); }
@@ -2600,32 +2618,35 @@ function HistoryScreen({ onBack, showToast }) {
           {error}
         </div>
       )}
-      <div className="cp-ps-mem-list" style={{ maxHeight: 320 }}>
+      <div style={{
+        maxHeight: 360, overflowY: "auto",
+        background: "var(--bg-card)", border: "1px solid var(--border-card)",
+        borderRadius: 6, padding: results.length === 0 ? 0 : "12px 14px",
+      }}>
         {loading ? (
           <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "24px 0" }}>加载中…</div>
         ) : results.length === 0 ? (
           <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "24px 0" }}>无结果</div>
-        ) : results.map(r => {
-          const t = new Date(r.created_at);
-          const ts = t.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-          const roleLabel = r.role === "user" ? "用户" : r.role === "assistant" ? "助手" : r.role;
-          const title = (r.conversations && r.conversations.title) || "—";
-          const snippet = (r.content || "").replace(/\s+/g, " ").slice(0, 140);
-          return (
-            <div key={r.id} className="cp-ps-mem-item">
-              <div className="cp-ps-mem-header" style={{ marginBottom: 4 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1 }}>
-                  <span className="cp-ps-mem-layer">{roleLabel}</span>
-                  <span style={{ fontSize: 10, color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {title}
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {results.map(r => (
+              <div key={r.id}>
+                <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 4 }}>
+                  <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>
+                    {chatDisplayName(r.role)}
                   </span>
+                  {"  "}{formatChatTime(r.created_at)}
                 </div>
-                <span style={{ fontSize: 10, color: "var(--text-tertiary)", flexShrink: 0 }}>{ts}</span>
+                <div style={{
+                  fontSize: 13, color: "var(--text-primary)", lineHeight: 1.55,
+                  whiteSpace: "pre-wrap", wordBreak: "break-word",
+                }}>
+                  {r.content || ""}
+                </div>
               </div>
-              <div className="cp-ps-mem-content">{snippet}</div>
-            </div>
-          );
-        })}
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="cp-ps-section-title" style={{ marginTop: 18 }}>导出</div>
@@ -2639,7 +2660,7 @@ function HistoryScreen({ onBack, showToast }) {
         </button>
       </div>
       <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
-        按对话分组，包含每条消息的时间戳与角色
+        按时间正序导出，每条消息独立一段
       </div>
     </>
   );
