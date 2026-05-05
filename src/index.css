@@ -1,0 +1,26 @@
+/* Global theme tokens — referenced via var(--xxx) in components.
+   data-theme is set on <html> by ChatPanel/MemoryManager based on
+   localStorage("chat-theme"). */
+
+:root,
+:root[data-theme="light"] {
+  --bg-page: #F8F5F0;
+  --bg-card: #ffffff;
+  --bg-user-bubble: #E6D2D5;
+  --bg-ai-bubble: #ffffff;
+  --text-primary: #2A2A2C;
+  --text-secondary: #666;
+  --border: rgba(0, 0, 0, 0.08);
+  --accent: #6b7fd4;
+}
+
+:root[data-theme="dark"] {
+  --bg-page: #2A2A2C;
+  --bg-card: rgba(255, 255, 255, 0.06);
+  --bg-user-bubble: #E6D2D5;
+  --bg-ai-bubble: rgba(255, 255, 255, 0.06);
+  --text-primary: #F8F5F0;
+  --text-secondary: rgba(255, 255, 255, 0.5);
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #6b7fd4;
+}

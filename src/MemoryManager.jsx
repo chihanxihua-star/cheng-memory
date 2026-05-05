@@ -643,20 +643,43 @@ function BoardPanel() {
 export default function App() {
   const [tab, setTab] = useState("memory");
 
+  // 启动时把 data-theme 写到 <html>，让 :root[data-theme="…"] 的 token 立即生效
+  useEffect(() => {
+    let pref = localStorage.getItem("chat-theme") || "light";
+    if (pref === "system") {
+      pref = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    document.documentElement.setAttribute("data-theme", pref);
+  }, []);
+
+  const stylesEl = (
+    <style>{`
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #0e1014; font-family: 'Noto Serif SC', 'Georgia', serif; }
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+      @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+      @keyframes fadeUp { from { transform: translateY(6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      input[type=range] { height: 3px; }
+      select option { background: #14161c; }
+      input[type=date] { color-scheme: dark; }
+    `}</style>
+  );
+
+  // 聊天 tab：跳过顶部导航 + 外层 padding，让 ChatPanel 自己管全屏布局
+  if (tab === "chat") {
+    return (
+      <>
+        {stylesEl}
+        <ChatPanel/>
+      </>
+    );
+  }
+
   return (
     <>
-      <style>{`
-        * { box-sizing: border-box; }
-        body { margin: 0; background: #0e1014; font-family: 'Noto Serif SC', 'Georgia', serif; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
-        @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        @keyframes fadeUp { from { transform: translateY(6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        input[type=range] { height: 3px; }
-        select option { background: #14161c; }
-        input[type=date] { color-scheme: dark; }
-      `}</style>
+      {stylesEl}
 
       <div style={{ minHeight: "100vh", background: "#0e1014", color: "#e8e2da" }}>
         {/* 顶部导航 */}
@@ -681,7 +704,6 @@ export default function App() {
           {tab === "diary" && <DiaryPanel/>}
           {tab === "milestones" && <MilestonesPanel/>}
           {tab === "board" && <BoardPanel/>}
-          {tab === "chat" && <ChatPanel/>}
         </div>
       </div>
     </>

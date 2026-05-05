@@ -195,11 +195,10 @@ const CSS = `
   --border-bubble: #E8E2DA; --border-card: #E8E2DA; --border-thinking: #DDD6CC; --border-search: #DDD6CC;
   --bg-bar-translucent: rgba(251, 250, 246, 0.38);
   position: relative; display: flex; flex-direction: column;
-  width: 100%; height: calc(100vh - 130px); min-height: 500px;
+  width: 100%; height: 100dvh; min-height: 100dvh;
   background: var(--bg-primary); color: var(--text-primary);
   font-family: 'Noto Serif SC', serif;
-  border-radius: 10px; overflow: hidden;
-  border: 1px solid var(--border-primary);
+  overflow: hidden;
 }
 .cp-root[data-theme="dark"] {
   --bg-primary: #2A2A2C; --bg-sidebar: #232325;
@@ -705,6 +704,10 @@ function useTheme() {
     }
     return pref;
   }, [pref]);
+  // 把 data-theme 写到 <html>，让 :root[data-theme="..."] 的全局变量生效
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", resolved);
+  }, [resolved]);
   useEffect(() => {
     if (pref !== "system") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
