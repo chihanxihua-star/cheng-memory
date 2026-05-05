@@ -9,7 +9,7 @@ const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const ICONS = {
   memory: (
     // 涟漪：同心圆
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="2"/>
       <path d="M6 12a6 6 0 0112 0" opacity="0.55"/>
       <path d="M2 12a10 10 0 0120 0" opacity="0.3"/>
@@ -17,7 +17,7 @@ const ICONS = {
   ),
   diary: (
     // 溯洄：折页本
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M5 4h11a2 2 0 012 2v14a2 2 0 01-2 2H5z"/>
       <path d="M5 4v18"/>
       <line x1="9" y1="9" x2="14" y2="9"/>
@@ -26,20 +26,20 @@ const ICONS = {
   ),
   milestones: (
     // 逢春：单叶
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M5 21c0-10 8-15 16-16-1 9-7 16-16 16z"/>
       <path d="M5 21c5-5 8-9 11-12" opacity="0.5"/>
     </svg>
   ),
   board: (
     // 回音：对话气泡
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 12a8 8 0 01-11.7 7.1L4 20l1-4.7A8 8 0 0121 12z"/>
     </svg>
   ),
   chat: (
     // 花信风：风线
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 8h13a3 3 0 100-5"/>
       <path d="M3 14h17a3 3 0 110 6"/>
       <path d="M3 11h8"/>
@@ -744,12 +744,20 @@ export default function App() {
           WebkitOverflowScrolling: "touch",
         }}>
           {tab === "chat" ? (
-            <ChatPanel/>
+            // 跟老版 memory-home 一致：聊天内容包一层 flex 容器，留 88px 给 fixed nav
+            <div style={{
+              flex: 1, minHeight: 0,
+              display: "flex", flexDirection: "column",
+              overflow: "hidden",
+              paddingBottom: 88,
+            }}>
+              <ChatPanel/>
+            </div>
           ) : (
             <div style={{
               flex: 1,
               paddingTop: "env(safe-area-inset-top)",
-              paddingBottom: 90,  // 给 fixed 底部导航留位
+              paddingBottom: 100,  // 跟老版一致：给 fixed 底部导航留位
             }}>
               <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 16px 28px", width: "100%" }}>
                 {tab === "memory" && <MemoryPanel/>}
@@ -768,48 +776,32 @@ export default function App() {
 }
 
 function BottomTabBar({ tab, setTab }) {
+  // 直接复用 memory-home/App.jsx 旧版底部导航的 CSS 写法（lines 710–739）
   return (
-    <nav style={{
-      // 跟老版 memory-home 一致：position fixed + 硬编码 34px 底 padding
-      position: "fixed",
-      left: 0, right: 0, bottom: 0,
-      zIndex: 50,
-      borderTop: "1px solid var(--border)",
-      background: "var(--bg-translucent)",
-      backdropFilter: "saturate(180%) blur(6px)",
-      WebkitBackdropFilter: "saturate(180%) blur(6px)",
-      padding: "0 0 34px",
-      display: "flex",
+    <div style={{
+      position:"fixed", bottom:0, left:0, right:0,
+      maxWidth:430, margin:"0 auto",
+      display:"flex", justifyContent:"space-around", alignItems:"center",
+      padding:"6px 4px 34px",
+      background:"var(--bg-page)",
+      borderTop:"1px solid var(--border)",
+      transition:"background 0.35s ease",
     }}>
       {TABS.map(t => {
-        const active = tab === t.key;
+        const a = tab === t.key;
         return (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
-            flex: 1,
-            padding: "5px 4px 4px",
-            background: "none", border: "none", cursor: "pointer",
-            fontFamily: "inherit",
-            display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center",
-            gap: 1,
-            color: active ? "var(--accent)" : "var(--text-secondary)",
-            transition: "color 0.18s",
+            display:"flex", flexDirection:"column", alignItems:"center", gap:1,
+            background:"none", border:"none", cursor:"pointer",
+            padding:"4px 13px", opacity:a?1:0.4, transition:"opacity 0.2s",
+            color: a ? "var(--accent)" : "var(--text-secondary)",
+            fontFamily:"inherit",
           }}>
-            <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 22 }}>
-              {ICONS[t.key]}
-            </span>
-            <span style={{
-              fontSize: 10.5,
-              letterSpacing: "0.04em",
-              lineHeight: 1.1,
-              fontWeight: active ? 500 : 400,
-              color: active ? "var(--accent)" : "var(--text-secondary)",
-            }}>
-              {t.label}
-            </span>
+            {ICONS[t.key]}
+            <span style={{ fontSize:9, color:a?"var(--accent)":"var(--text-secondary)", fontFamily:"inherit" }}>{t.label}</span>
           </button>
         );
       })}
-    </nav>
+    </div>
   );
 }
