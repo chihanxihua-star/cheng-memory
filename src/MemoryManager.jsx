@@ -71,6 +71,9 @@ const BOARD_CATS = ["全部", "紧急", "闲聊", "其他"];
 const BOARD_CAT_COLORS = { 紧急: "#e07070", 闲聊: "#8aab9e", 其他: "#7fb3c8" };
 const BOARD_REACTIONS = ["❤️", "👍", "😂", "🥺", "✨"];
 
+// 底部固定栏高度（含 iOS 安全区）—— 内容区 paddingBottom 用它，固定输入栏 bottom 也用它
+const NAV_HEIGHT = "calc(56px + env(safe-area-inset-bottom, 0px))";
+
 // ── API 层 ──────────────────────────────────────────────
 function hdr() {
   return {
@@ -808,7 +811,7 @@ function BoardPanel() {
   });
 
   return (
-    <div>
+    <div style={{ paddingBottom: 64 /* 给固定底部输入栏让位 */ }}>
       <div style={{
         position: "sticky", top: 0, zIndex: 5,
         background: "var(--bg-page)",
@@ -836,11 +839,12 @@ function BoardPanel() {
           ))}
 
       <div style={{
-        position: "sticky", bottom: 0, zIndex: 5,
+        position: "fixed", bottom: NAV_HEIGHT, left: 0, right: 0, zIndex: 49,
         background: "var(--bg-page)",
-        padding: "8px 0 12px",
-        margin: "0 0 -28px",
+        padding: "8px 16px 10px",
+        borderTop: "1px solid var(--border)",
       }}>
+        <div style={{ maxWidth: 860, margin: "0 auto" }}>
       <BoardCompose
         onOpenDrawer={() => setDrawer({ mode: "create", entry: {} })}
         onSend={async patch => {
@@ -862,6 +866,7 @@ function BoardPanel() {
           }
         }}
       />
+        </div>
       </div>
 
       {drawer && <BoardDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("board_cheng", patch); else await sbPatch("board_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
@@ -960,6 +965,7 @@ export default function App() {
             flex: 1,
             display: tab === "chat" ? "none" : "block",
             paddingTop: "env(safe-area-inset-top)",
+            paddingBottom: NAV_HEIGHT,
           }}>
             <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 16px 28px", width: "100%" }}>
               <div style={{ display: tab === "memory" ? "block" : "none" }}><MemoryPanel/></div>
@@ -979,8 +985,8 @@ export default function App() {
 function BottomTabBar({ tab, setTab }) {
   return (
     <div style={{
-      flexShrink: 0,
-      zIndex: 10,
+      position: "fixed", bottom: 0, left: 0, right: 0,
+      zIndex: 50,
       display:"flex", justifyContent:"space-around", alignItems:"center",
       padding:"0px 4px 0",
       paddingTop: 6,
