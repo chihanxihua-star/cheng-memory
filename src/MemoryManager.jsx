@@ -740,12 +740,10 @@ export default function App() {
           WebkitOverflowScrolling: "touch",
         }}>
           {tab === "chat" ? (
-            // 跟老版 memory-home 一致：聊天内容包一层 flex 容器，留 88px 给 fixed nav
             <div style={{
               flex: 1, minHeight: 0,
               display: "flex", flexDirection: "column",
               overflow: "hidden",
-              paddingBottom: 88,
             }}>
               <ChatPanel/>
             </div>
