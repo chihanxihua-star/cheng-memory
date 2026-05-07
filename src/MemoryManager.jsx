@@ -184,7 +184,7 @@ function Drawer({ title, onClose, children, footer }) {
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
         </div>
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>{children}</div>
-        {footer && <div style={{ padding: "12px 20px", paddingBottom: "calc(12px + env(safe-area-inset-bottom, 20px))", borderTop: "1px solid var(--border)", display: "flex", gap: 8 }}>{footer}</div>}
+        {footer && <div style={{ padding: "calc(12px + env(safe-area-inset-bottom, 20px)) 20px", borderTop: "1px solid var(--border)", display: "flex", gap: 8 }}>{footer}</div>}
       </div>
     </div>,
     document.body
