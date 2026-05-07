@@ -136,7 +136,7 @@ function EmotionDot({ valence = 0.5, arousal = 0.5, size = 44 }) {
       <rect x={0} y={0} width={size} height={size} rx={4} fill="var(--bg-card)" />
       <line x1={size/2} y1={2} x2={size/2} y2={size-2} stroke="var(--border)" strokeWidth={0.8}/>
       <line x1={2} y1={size/2} x2={size-2} y2={size/2} stroke="var(--border)" strokeWidth={0.8}/>
-      <circle cx={x} cy={y} r={2} fill="var(--text-tertiary)"/>
+      <circle cx={x} cy={y} r={2} fill="var(--mem-dot)"/>
     </svg>
   );
 }
@@ -692,12 +692,54 @@ function DiaryDrawer({ entry, isNew, onSave, onClose }) {
 function DiaryCard({ entry, onEdit, onDelete }) {
   const [cd, setCd] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [tx, setTx] = useState(0);
+  const startX = useRef(null);
+  const baseTx = useRef(0);
+  const REVEAL = 130;
+  const tagPill = { fontSize: 10, color: "var(--text-secondary)", background: "rgba(0,0,0,0.05)", border: "none", borderRadius: 99, padding: "2px 9px", letterSpacing: "0.04em" };
+  const actionBtn = { background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, padding: "0 8px", cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em", height: "100%" };
+  const onTouchStart = (e) => { startX.current = e.touches[0].clientX; baseTx.current = tx; };
+  const onTouchMove = (e) => {
+    if (startX.current === null) return;
+    const dx = e.touches[0].clientX - startX.current;
+    let nx = baseTx.current + dx;
+    nx = Math.min(0, Math.max(-REVEAL, nx));
+    setTx(nx);
+  };
+  const onTouchEnd = () => { setTx(tx < -REVEAL / 2 ? -REVEAL : 0); startX.current = null; };
   return (
-    <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {entry.title && <p onClick={() => setSheet(true)} style={{ margin: "0 0 4px", fontSize: 14, color: "var(--text-primary)", fontWeight: 400, cursor: "pointer" }}>{entry.title}</p>}
-          <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{entry.content}</p>
+    <div style={{ position: "relative", overflow: "hidden" }}>
+      <div style={{
+        position: "absolute", right: 0, top: 0, bottom: 0, width: REVEAL,
+        display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, paddingRight: 12,
+      }}>
+        <button onClick={() => { onEdit(entry); setTx(0); }} style={actionBtn}>编辑</button>
+        {cd
+          ? <button onClick={() => { onDelete(entry.id); setCd(false); setTx(0); }} style={{ ...actionBtn, color: "#c0392b" }}>确认</button>
+          : <button onClick={() => setCd(true)} style={{ ...actionBtn, color: "#c0392b" }}>删除</button>}
+      </div>
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+        style={{
+          background: "var(--bg-card-solid)",
+          border: "1px solid var(--border)",
+          padding: "18px 20px",
+          display: "flex", flexDirection: "column", gap: 14,
+          transform: `translateX(${tx}px)`,
+          transition: startX.current === null ? "transform 0.22s ease" : "none",
+        }}
+      >
+        <div onClick={() => setSheet(true)} style={{ cursor: "pointer" }}>
+          {entry.title && <p style={{ margin: "0 0 6px", fontSize: 14.5, color: "var(--text-primary)", fontWeight: 500, lineHeight: 1.5 }}>{entry.title}</p>}
+          <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{entry.content}</p>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-secondary)" }}>
+          <span style={{ color: "#9E6E7C", letterSpacing: "0.05em" }}>{entry.author}</span>
+          {(entry.tags||[]).slice(0,3).map(t => <span key={t} style={tagPill}>{t}</span>)}
+          <span style={{ marginLeft: "auto", color: "var(--text-secondary)" }}>{formatDateTime(entry.created_at)}</span>
         </div>
       </div>
       {sheet && (
@@ -713,15 +755,6 @@ function DiaryCard({ entry, onEdit, onDelete }) {
           <div>{entry.content}</div>
         </BottomSheet>
       )}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
-        <AuthorBadge author={entry.author}/>
-        {(entry.tags||[]).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
-        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--text-secondary)" }}>{formatDateTime(entry.created_at)}</span>
-      </div>
-      <div style={{ display: "flex", gap: 6 }}>
-        <ActionBtn onClick={() => onEdit(entry)}>编辑</ActionBtn>
-        {cd ? <ActionBtn accent color="#c0392b" onClick={() => { onDelete(entry.id); setCd(false); }}>确认删除</ActionBtn> : <ActionBtn onClick={() => setCd(true)}>删除</ActionBtn>}
-      </div>
     </div>
   );
 }
@@ -755,7 +788,16 @@ function DiaryPanel() {
           <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
         </div>
       </div>
-      <input placeholder="搜索标题或内容…" value={search} onChange={e => { setSearch(e.target.value); clearTimeout(timer.current); timer.current = setTimeout(() => load(e.target.value), 400); }} style={{ ...inputStyle, borderRadius: 99, padding: "5px 14px", fontSize: 12, width: "100%", marginBottom: 16 }}/>
+      <div style={{ marginBottom: 14, position: "relative" }}>
+        <input placeholder="搜索…" value={search} onChange={e => { setSearch(e.target.value); clearTimeout(timer.current); timer.current = setTimeout(() => load(e.target.value), 400); }} style={{ ...underlineStyle, fontSize: 13, padding: "6px 24px 6px 0" }}/>
+        {search && (
+          <button onClick={() => { setSearch(""); load(""); }} aria-label="清空" style={{
+            position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)",
+            background: "none", border: "none", color: "var(--text-tertiary)",
+            fontSize: 18, lineHeight: 1, cursor: "pointer", padding: "4px 6px", fontFamily: "inherit",
+          }}>×</button>
+        )}
+      </div>
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 

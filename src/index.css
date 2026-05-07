@@ -14,6 +14,7 @@
   --text-tertiary: #999;
   --border: rgba(0, 0, 0, 0.08);
   --accent: #6b7fd4;
+  --mem-dot: #999;
 }
 
 :root[data-theme="dark"] {
@@ -27,6 +28,7 @@
   --text-tertiary: #777;
   --border: rgba(255, 255, 255, 0.1);
   --accent: #6b7fd4;
+  --mem-dot: #FBFAF6;
 }
 
 /* 底部导航：跟页面同色，只加透明度 + 模糊 */
