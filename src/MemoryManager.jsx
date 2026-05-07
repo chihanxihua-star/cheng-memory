@@ -2286,7 +2286,12 @@ function FantasyPanel() {
   );
 }
 
-// ── 简单密码 hash（SHA-256，hex 字符串） ───────────────────
+// ── 网关鉴权（共用 chat.jessaminee.top/api/auth） ───────────
+const AUTH_API_BASE = "https://chat.jessaminee.top";
+const AUTH_TOKEN_KEY = "memhome-auth-token";
+function getAuthToken() { return localStorage.getItem(AUTH_TOKEN_KEY) || ""; }
+
+// 旧版本本地 hash 兼容用：保留 hash 函数 + key，不再被 PasswordGate 使用
 async function pwdHash(text) {
   const buf = new TextEncoder().encode(text || "");
   const hash = await crypto.subtle.digest("SHA-256", buf);
@@ -2439,19 +2444,37 @@ function ThemePanel() {
 
 // ── 密码门：localStorage 存了 hash 就先验密码 ────────────
 function PasswordGate({ children }) {
-  const [unlocked, setUnlocked] = useState(() => !localStorage.getItem(PWD_KEY));
+  const [token, setToken] = useState(() => getAuthToken());
   const [input, setInput] = useState("");
   const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const onExpired = () => { localStorage.removeItem(AUTH_TOKEN_KEY); setToken(""); };
+    window.addEventListener("auth-expired", onExpired);
+    return () => window.removeEventListener("auth-expired", onExpired);
+  }, []);
+
+  if (token) return children;
 
   const submit = async () => {
-    const stored = localStorage.getItem(PWD_KEY);
-    if (!stored) { setUnlocked(true); return; }
-    const h = await pwdHash(input);
-    if (h === stored) { setUnlocked(true); setInput(""); setError(null); }
-    else { setError("密码不对"); }
+    if (!input || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const r = await fetch(AUTH_API_BASE + "/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: input }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.token) throw new Error(d.error || "密码不对");
+      localStorage.setItem(AUTH_TOKEN_KEY, d.token);
+      setToken(d.token);
+      setInput("");
+    } catch (e) { setError(e.message || "登录失败"); }
+    finally { setBusy(false); }
   };
 
-  if (unlocked) return children;
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 100,
@@ -2468,10 +2491,11 @@ function PasswordGate({ children }) {
         onKeyDown={e => { if (e.key === "Enter") submit(); }}
         style={{ ...inputStyle, maxWidth: 260, textAlign: "center" }}
       />
-      <button onClick={submit} style={{
+      <button onClick={submit} disabled={busy} style={{
         background: "#a89fd822", border: "1px solid #a89fd866", color: "#a89fd8",
-        borderRadius: 6, padding: "8px 24px", fontSize: 13, cursor: "pointer", fontFamily: "inherit",
-      }}>解锁</button>
+        borderRadius: 6, padding: "8px 24px", fontSize: 13,
+        cursor: busy ? "default" : "pointer", fontFamily: "inherit",
+      }}>{busy ? "…" : "解锁"}</button>
       {error && <div style={{ fontSize: 12, color: "#c0392b" }}>{error}</div>}
     </div>
   );

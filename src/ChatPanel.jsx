@@ -11,6 +11,22 @@ const API_BASE = "https://chat.jessaminee.top";
 const API = API_BASE + "/api";
 const PROJECT_ID = "b5e5d83a-0c17-4421-a0e2-217519ed62fb";
 const CONV_KEY = "memhome-conv-id";
+
+/* 鉴权：所有 /api/* 请求自动带 Bearer，401/4001 抛 auth-expired */
+const AUTH_TOKEN_KEY = "memhome-auth-token";
+function getAuthTokenCP() { return localStorage.getItem(AUTH_TOKEN_KEY) || ""; }
+function authedFetch(url, opts = {}) {
+  const t = getAuthTokenCP();
+  const headers = { ...(opts.headers || {}) };
+  if (t) headers.Authorization = "Bearer " + t;
+  return fetch(url, { ...opts, headers }).then(r => {
+    if (r.status === 401) {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      window.dispatchEvent(new CustomEvent("auth-expired"));
+    }
+    return r;
+  });
+}
 const TOOL_RESULT_MAX_CHARS = 2000;
 const TYPING_DELAY_MS = 1000;
 const TIME_SEP_GAP_MS = 10 * 60 * 1000;
@@ -827,7 +843,7 @@ export default function ChatPanel({ onBack }) {
   /* ─────── Health ─────── */
   const checkHealth = useCallback(async () => {
     try {
-      const r = await fetch(API + "/health");
+      const r = await authedFetch(API + "/health");
       const d = await r.json();
       setCcStatus(d.cc_running ? "ready" : "down");
       if (d.model && currentModel === "") setCurrentModel(d.model);
@@ -841,7 +857,7 @@ export default function ChatPanel({ onBack }) {
     const saved = localStorage.getItem(CONV_KEY);
     if (!saved) { setConvId(null); setMessages([]); return; }
     try {
-      const r = await fetch(API + "/conversations/" + saved + "/messages");
+      const r = await authedFetch(API + "/conversations/" + saved + "/messages");
       if (!r.ok) {
         localStorage.removeItem(CONV_KEY);
         setConvId(null); setMessages([]);
@@ -1053,14 +1069,20 @@ export default function ChatPanel({ onBack }) {
   const connectWS = useCallback(() => {
     if (wsRef.current && (wsRef.current.readyState === 0 || wsRef.current.readyState === 1)) return;
     try {
-      const ws = new WebSocket(WS_URL);
+      const _t = getAuthTokenCP();
+      const ws = new WebSocket(WS_URL + (_t ? ("?token=" + encodeURIComponent(_t)) : ""));
       ws.onopen = () => {
         clearTimeout(reconnectTimer.current);
         setCcStatus(s => s === "down" ? "unknown" : s);
       };
-      ws.onclose = () => {
+      ws.onclose = (e) => {
         setCcStatus("down");
         clearTimeout(reconnectTimer.current);
+        if (e && e.code === 4001) {
+          localStorage.removeItem(AUTH_TOKEN_KEY);
+          window.dispatchEvent(new CustomEvent("auth-expired"));
+          return; // 不重连
+        }
         reconnectTimer.current = setTimeout(() => connectWSRef.current && connectWSRef.current(), 3000);
       };
       ws.onerror = () => { /* noop */ };
@@ -1097,7 +1119,7 @@ export default function ChatPanel({ onBack }) {
     let cid = convId;
     if (!cid) {
       try {
-        const r = await fetch(API + "/conversations", {
+        const r = await authedFetch(API + "/conversations", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: (text || "对话").slice(0, 40), project_id: PROJECT_ID }),
         });
@@ -1159,7 +1181,7 @@ export default function ChatPanel({ onBack }) {
   const newChat = useCallback(async () => {
     if (isGenerating) stop();
     try {
-      const r = await fetch(API + "/conversations", {
+      const r = await authedFetch(API + "/conversations", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "新对话", project_id: PROJECT_ID }),
       });
@@ -1184,7 +1206,7 @@ export default function ChatPanel({ onBack }) {
     try {
       const body = {};
       if (opts.model !== undefined) body.model = opts.model;
-      const r = await fetch(API + "/cc/restart", {
+      const r = await authedFetch(API + "/cc/restart", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -1207,16 +1229,16 @@ export default function ChatPanel({ onBack }) {
     if (!messageId || !convId) return;
     if (!newText.trim()) return;
     try {
-      await fetch(API + "/messages/" + messageId, {
+      await authedFetch(API + "/messages/" + messageId, {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: newText }),
       });
-      const r = await fetch(API + "/conversations/" + convId + "/messages");
+      const r = await authedFetch(API + "/conversations/" + convId + "/messages");
       const all = await r.json();
       const editedIdx = all.findIndex(m => m.id === messageId);
       if (editedIdx !== -1) {
         for (let i = editedIdx + 1; i < all.length; i++) {
-          await fetch(API + "/messages/" + all[i].id, { method: "DELETE" });
+          await authedFetch(API + "/messages/" + all[i].id, { method: "DELETE" });
         }
       }
       await loadCurrentConversation();
@@ -1235,14 +1257,14 @@ export default function ChatPanel({ onBack }) {
   const regenerateMessage = useCallback(async (messageId) => {
     if (!convId || !messageId) return;
     try {
-      const r = await fetch(API + "/conversations/" + convId + "/messages");
+      const r = await authedFetch(API + "/conversations/" + convId + "/messages");
       const ms = await r.json();
       const idx = ms.findIndex(m => m.id === messageId);
       if (idx === -1) return;
       let prevUser = null;
       for (let j = idx - 1; j >= 0; j--) if (ms[j].role === "user") { prevUser = ms[j]; break; }
       if (!prevUser) { showToast("无法重新生成"); return; }
-      await fetch(API + "/messages/" + messageId, { method: "DELETE" });
+      await authedFetch(API + "/messages/" + messageId, { method: "DELETE" });
       await loadCurrentConversation();
       const ws = wsRef.current;
       if (ws && ws.readyState === 1) {
@@ -1309,7 +1331,7 @@ export default function ChatPanel({ onBack }) {
   const confirmRename = useCallback(async (id, title) => {
     if (!title || !id) return;
     try {
-      await fetch(API + "/conversations/" + id, {
+      await authedFetch(API + "/conversations/" + id, {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
       });
@@ -2125,7 +2147,7 @@ function StatsScreen({ onBack }) {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
   useEffect(() => {
-    fetch(API + "/stats/tokens").then(r => r.json()).then(setStats).catch(e => setError(e.message));
+    authedFetch(API + "/stats/tokens").then(r => r.json()).then(setStats).catch(e => setError(e.message));
   }, []);
   if (error) {
     return (
