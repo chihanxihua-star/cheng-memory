@@ -2637,6 +2637,11 @@ function chatDisplayName(role) {
   return role || "—";
 }
 
+// 去掉多气泡分隔符（---bubble---），用于历史记录显示
+function stripBubbleMarkers(s) {
+  return (s || "").replace(/\n?---bubble---\n?/g, "\n\n").trim();
+}
+
 // 微信风格的时间戳：2026/02/03 18:38
 function formatChatTime(iso) {
   const d = new Date(iso);
@@ -3015,6 +3020,22 @@ function HistoryModal({ onClose, showToast }) {
             </div>
           </div>
 
+          {/* 导出 */}
+          <div>
+            <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 10 }}>导出</div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <select value={exportRange} onChange={e => setExportRange(e.target.value)} style={{ flex: 1, ...HM_INPUT }}>
+                {EXPORT_RANGES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+              <button onClick={doExport} disabled={exporting} style={{
+                background: "var(--text-primary)", color: "var(--bg-page)",
+                border: "1px solid var(--text-primary)", padding: "6px 14px", borderRadius: 4,
+                fontSize: 11, letterSpacing: "0.18em",
+                cursor: exporting ? "default" : "pointer", fontFamily: "inherit",
+              }}>{exporting ? "…" : "导出 .md"}</button>
+            </div>
+          </div>
+
           {/* 搜索 */}
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <input
@@ -3052,27 +3073,11 @@ function HistoryModal({ onClose, showToast }) {
                       <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{chatDisplayName(r.role)}</span>
                       {"  "}{formatChatTime(r.created_at)}
                     </div>
-                    <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.65, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{r.content || ""}</div>
+                    <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.65, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{stripBubbleMarkers(r.content)}</div>
                   </div>
                 ))}
               </div>
             )}
-          </div>
-
-          {/* 导出 */}
-          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-            <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 10 }}>导出</div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <select value={exportRange} onChange={e => setExportRange(e.target.value)} style={{ flex: 1, ...HM_INPUT }}>
-                {EXPORT_RANGES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-              </select>
-              <button onClick={doExport} disabled={exporting} style={{
-                background: "var(--text-primary)", color: "var(--bg-page)",
-                border: "1px solid var(--text-primary)", padding: "6px 14px", borderRadius: 4,
-                fontSize: 11, letterSpacing: "0.18em",
-                cursor: exporting ? "default" : "pointer", fontFamily: "inherit",
-              }}>{exporting ? "…" : "导出 .md"}</button>
-            </div>
           </div>
 
         </div>
