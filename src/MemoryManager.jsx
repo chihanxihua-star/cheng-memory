@@ -292,20 +292,53 @@ function MemoryCard({ mem, onEdit, onDelete }) {
   const meta = LEVEL_META[mem.level] || LEVEL_META[1];
   const [cd, setCd] = useState(false);
   const [sheet, setSheet] = useState(false);
-  const linkBtn = { background: "none", border: "none", color: "var(--text-secondary)", fontSize: 11, padding: 0, cursor: "pointer", fontFamily: "inherit" };
+  const [tx, setTx] = useState(0);
+  const startX = useRef(null);
+  const baseTx = useRef(0);
+  const REVEAL = 130;
   const tagPill = { fontSize: 10, color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: 99, padding: "1px 8px", letterSpacing: "0.04em" };
+  const actionBtn = { background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 12, padding: "0 8px", cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em", height: "100%" };
+  const onTouchStart = (e) => { startX.current = e.touches[0].clientX; baseTx.current = tx; };
+  const onTouchMove = (e) => {
+    if (startX.current === null) return;
+    const dx = e.touches[0].clientX - startX.current;
+    let nx = baseTx.current + dx;
+    nx = Math.min(0, Math.max(-REVEAL, nx));
+    setTx(nx);
+  };
+  const onTouchEnd = () => { setTx(tx < -REVEAL / 2 ? -REVEAL : 0); startX.current = null; };
   return (
-    <div style={{
-      background: "var(--bg-card)",
-      border: "1px solid var(--border)",
-      borderRadius: 16,
-      padding: "18px 20px",
-      display: "flex", flexDirection: "column", gap: 14,
-    }}>
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 16 }}>
+      {/* 左滑显示的操作（在右侧露出） */}
+      <div style={{
+        position: "absolute", right: 0, top: 0, bottom: 0, width: REVEAL,
+        display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, paddingRight: 12,
+      }}>
+        <button onClick={() => { onEdit(mem); setTx(0); }} style={actionBtn}>编辑</button>
+        {cd
+          ? <button onClick={() => { onDelete(mem.id); setCd(false); setTx(0); }} style={{ ...actionBtn, color: "#c0392b" }}>确认</button>
+          : <button onClick={() => setCd(true)} style={{ ...actionBtn, color: "#c0392b" }}>删除</button>}
+      </div>
+
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+          borderRadius: 16,
+          padding: "18px 20px",
+          display: "flex", flexDirection: "column", gap: 14,
+          transform: `translateX(${tx}px)`,
+          transition: startX.current === null ? "transform 0.22s ease" : "none",
+        }}
+      >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         <EmotionDot valence={mem.valence} arousal={mem.arousal}/>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{mem.content}</p>
+          <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{mem.content}</p>
           {sheet && (
             <BottomSheet onClose={() => setSheet(false)}>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
@@ -339,12 +372,6 @@ function MemoryCard({ mem, onEdit, onDelete }) {
         {(mem.tags||[]).slice(0,3).map(t => <span key={t} style={tagPill}>{t}</span>)}
         <span style={{ marginLeft: "auto", color: "var(--text-tertiary)" }}>{formatDate(mem.created_at)} · 引用 {mem.ref_count??0}</span>
       </div>
-
-      <div style={{ display: "flex", gap: 16 }}>
-        <button onClick={() => onEdit(mem)} style={linkBtn}>编辑</button>
-        {cd
-          ? <button onClick={() => { onDelete(mem.id); setCd(false); }} style={{ ...linkBtn, color: "#c0392b" }}>确认删除</button>
-          : <button onClick={() => setCd(true)} style={linkBtn}>删除</button>}
       </div>
     </div>
   );
