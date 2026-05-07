@@ -1361,17 +1361,16 @@ export default function App() {
           overflowY: tab === "chat" ? "hidden" : "auto",
           overscrollBehavior: "contain",
           WebkitOverflowScrolling: "touch",
-          display: "flex", flexDirection: "column",
         }}>
-          {/* chat：占满 main 自带内部滚动 */}
+          {/* chat：自带内部滚动，靠 height:100% 撑满 main */}
           <div style={{
-            flex: 1, minHeight: 0,
+            height: "100%",
             display: tab === "chat" ? "flex" : "none",
             flexDirection: "column",
           }}>
             <ChatPanel onBack={() => setTab("memory")}/>
           </div>
-          {/* 非 chat：随 main 滚动 */}
+          {/* 非 chat：普通块流，随 main 滚动 */}
           <div style={{
             display: tab === "chat" ? "none" : "block",
             paddingTop: "env(safe-area-inset-top)",
