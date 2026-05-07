@@ -1350,7 +1350,7 @@ function MilestoneInlineForm({ editing, onCancel, onSave }) {
   );
 }
 
-function MilestoneItem({ milestone, side, onEdit, onDelete }) {
+function MilestoneItem({ milestone, side, onEdit, onDelete, onMoveUp, onMoveDown, canUp, canDown }) {
   const [open, setOpen] = useState(false);
   const [cd, setCd] = useState(false);
   const isLeft = side === "left";
@@ -1411,7 +1411,18 @@ function MilestoneItem({ milestone, side, onEdit, onDelete }) {
             display: "flex", gap: 14,
             justifyContent: isLeft ? "flex-start" : "flex-end",
             marginTop: 8,
+            alignItems: "center",
           }}>
+            <button onClick={(e) => { e.stopPropagation(); if (canUp) onMoveUp(milestone); }} disabled={!canUp} style={{
+              background: "none", border: "none", padding: 0,
+              fontSize: 14, color: canUp ? "var(--text-secondary)" : "var(--border)",
+              cursor: canUp ? "pointer" : "default", fontFamily: "inherit", lineHeight: 1,
+            }} title="上移">↑</button>
+            <button onClick={(e) => { e.stopPropagation(); if (canDown) onMoveDown(milestone); }} disabled={!canDown} style={{
+              background: "none", border: "none", padding: 0,
+              fontSize: 14, color: canDown ? "var(--text-secondary)" : "var(--border)",
+              cursor: canDown ? "pointer" : "default", fontFamily: "inherit", lineHeight: 1,
+            }} title="下移">↓</button>
             <button onClick={(e) => { e.stopPropagation(); onEdit(milestone); }} style={{
               background: "none", border: "none", padding: 0,
               fontSize: 10.5, color: "var(--text-tertiary)", letterSpacing: "0.18em",
@@ -1446,7 +1457,7 @@ function MilestonesTimelinePanel({ onBack }) {
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setItems(await sbGet("milestones_cheng", "&order=event_date.desc")); }
+    try { setItems(await sbGet("milestones_cheng", "&order=sort_order.asc.nullslast,event_date.desc")); }
     catch(e) { setError(e.message); } finally { setLoading(false); }
   }, []);
 
@@ -1455,6 +1466,36 @@ function MilestonesTimelinePanel({ onBack }) {
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (m) => { setEditing(m); setFormOpen(true); };
   const closeForm = () => { setFormOpen(false); setEditing(null); };
+
+  // 与相邻项交换 sort_order
+  const swapSort = async (idx, otherIdx) => {
+    const a = items[idx], b = items[otherIdx];
+    if (!a || !b) return;
+    const aOrder = a.sort_order, bOrder = b.sort_order;
+    // 乐观更新：先在本地把数组顺序对调，再写库
+    setItems(prev => {
+      const next = [...prev];
+      [next[idx], next[otherIdx]] = [
+        { ...next[otherIdx], sort_order: aOrder },
+        { ...next[idx],      sort_order: bOrder },
+      ];
+      return next;
+    });
+    try {
+      await Promise.all([
+        sbPatch("milestones_cheng", a.id, { sort_order: bOrder }),
+        sbPatch("milestones_cheng", b.id, { sort_order: aOrder }),
+      ]);
+    } catch (e) { setError(e.message); load(); }
+  };
+  const moveUp = (m) => {
+    const idx = items.findIndex(x => x.id === m.id);
+    if (idx > 0) swapSort(idx, idx - 1);
+  };
+  const moveDown = (m) => {
+    const idx = items.findIndex(x => x.id === m.id);
+    if (idx >= 0 && idx < items.length - 1) swapSort(idx, idx + 1);
+  };
 
   return (
     <div>
@@ -1474,7 +1515,7 @@ function MilestonesTimelinePanel({ onBack }) {
         textAlign: "center", marginBottom: 22,
         fontSize: 11, color: "var(--text-tertiary)",
         fontStyle: "italic", letterSpacing: "0.18em",
-      }}>Anrrow &amp; Claude · {items.length} tracce</div>
+      }}>Sun &amp; Jasmin · {items.length} tracce</div>
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
@@ -1484,8 +1525,12 @@ function MilestonesTimelinePanel({ onBack }) {
           editing={editing}
           onCancel={closeForm}
           onSave={async (patch) => {
-            if (editing) await sbPatch("milestones_cheng", editing.id, patch);
-            else await sbPost("milestones_cheng", patch);
+            if (editing) {
+              await sbPatch("milestones_cheng", editing.id, patch);
+            } else {
+              const minOrder = items.reduce((m, x) => x.sort_order != null && x.sort_order < m ? x.sort_order : m, 0);
+              await sbPost("milestones_cheng", { ...patch, sort_order: minOrder - 1 });
+            }
             closeForm(); load();
           }}
         />
@@ -1508,7 +1553,10 @@ function MilestonesTimelinePanel({ onBack }) {
                 onDelete={async (id) => {
                   try { await sbDelete("milestones_cheng", id); load(); }
                   catch(e) { setError(e.message); }
-                }}/>
+                }}
+                onMoveUp={moveUp} onMoveDown={moveDown}
+                canUp={i > 0} canDown={i < items.length - 1}
+              />
             ))}
           </div>
         )}
