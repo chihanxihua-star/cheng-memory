@@ -690,6 +690,19 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", pref);
   }, []);
 
+  // theme-color meta 跟 <html data-theme> 同步：状态栏 / 系统 UI 颜色融进页面背景
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) return;
+    const sync = () => {
+      meta.content = document.documentElement.getAttribute("data-theme") === "dark" ? "#2A2A2C" : "#FBFAF6";
+    };
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, []);
+
   // iOS 双指缩放手势在所有 tab 全程拦掉（viewport 设了 user-scalable=no
   // 后，部分 iOS Safari 仍会响应 gesture* 事件）
   useEffect(() => {
@@ -776,7 +789,7 @@ function BottomTabBar({ tab, setTab }) {
       display:"flex", justifyContent:"space-around", alignItems:"center",
       padding:"2px 4px 0",
       paddingBottom:"calc(4px + env(safe-area-inset-bottom, 20px))",
-      background:"hotpink",
+      background:"var(--bg-page)",
       borderTop:"1px solid var(--border)",
       transition:"background 0.35s ease",
     }}>
