@@ -2792,8 +2792,7 @@ function UsagePanel() {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      // 至少要昨天 00:00 起的数据，才能比"昨天此时"
-      const start = new Date(); start.setDate(start.getDate() - 1); start.setHours(0, 0, 0, 0);
+      const start = new Date(); start.setHours(0, 0, 0, 0);
       const params = `&created_at=gte.${encodeURIComponent(start.toISOString())}&order=created_at.asc&limit=10000`;
       setRows(await sbGet("app_usage", params));
     } catch(e) { setError(e.message); } finally { setLoading(false); }
@@ -2802,8 +2801,6 @@ function UsagePanel() {
 
   const now = new Date();
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
-  const yStart = new Date(todayStart); yStart.setDate(yStart.getDate() - 1);
-  const yNow = new Date(now); yNow.setDate(yNow.getDate() - 1);
 
   const sessions = buildUsageSessions(rows, now);
 
@@ -2811,22 +2808,12 @@ function UsagePanel() {
   let todayTotal = 0;
   for (const s of sessions) todayTotal += intersectMs(s.start, s.end, todayStart, now);
 
-  // 今天 vs 昨天此时 —— 按 app 拆
+  // 板块 TOP（今日）
   const tByApp = {};
-  const yByApp = {};
   for (const s of sessions) {
     const t = intersectMs(s.start, s.end, todayStart, now);
-    const y = intersectMs(s.start, s.end, yStart, yNow);
     if (t > 0) tByApp[s.app] = (tByApp[s.app] || 0) + t;
-    if (y > 0) yByApp[s.app] = (yByApp[s.app] || 0) + y;
   }
-  const compareApps = Array.from(new Set([...Object.keys(tByApp), ...Object.keys(yByApp)]))
-    .map(a => ({ app: a, today: tByApp[a] || 0, y: yByApp[a] || 0 }))
-    .sort((a, b) => (b.today + b.y) - (a.today + a.y))
-    .slice(0, 6);
-  const compareMax = Math.max(1, ...compareApps.map(c => Math.max(c.today, c.y)));
-
-  // 板块 TOP（今日）
   const topApps = Object.entries(tByApp).sort((a, b) => b[1] - a[1]).slice(0, 8);
 
   const z = n => String(n).padStart(2, "0");
@@ -2855,50 +2842,7 @@ function UsagePanel() {
         </div>
       </div>
 
-      {/* 第二栏：今天 vs 昨天此时 */}
-      <div style={{
-        background: "var(--bg-card)", border: "1px solid var(--border)",
-        borderRadius: 8, padding: "14px 14px 12px",
-        marginBottom: 14,
-      }}>
-        <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 4 }}>
-          今天 vs 昨天此时
-        </div>
-        <div style={{ fontSize: 9, color: "var(--text-tertiary)", letterSpacing: "0.12em", marginBottom: 12 }}>
-          0:00 — {nowStr}
-        </div>
-        {compareApps.length === 0 ? (
-          <div style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "20px 0", textAlign: "center" }}>—</div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {compareApps.map(c => {
-              const tw = (c.today / compareMax) * 100;
-              const yw = (c.y / compareMax) * 100;
-              return (
-                <div key={c.app} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <div style={{ fontSize: 12, color: "var(--text-primary)" }}>{c.app}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ flex: "0 0 32px", fontSize: 9, color: "var(--text-tertiary)", letterSpacing: "0.12em" }}>今天</span>
-                    <div style={{ flex: 1, height: 4, background: "var(--border)" }}>
-                      <div style={{ width: `${tw}%`, height: "100%", background: "var(--text-primary)", opacity: 0.7 }}/>
-                    </div>
-                    <span style={{ flex: "0 0 56px", fontSize: 11, color: "var(--text-secondary)", textAlign: "right" }}>{fmtUsageDur(c.today)}</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ flex: "0 0 32px", fontSize: 9, color: "var(--text-tertiary)", letterSpacing: "0.12em" }}>昨天</span>
-                    <div style={{ flex: 1, height: 4, background: "var(--border)" }}>
-                      <div style={{ width: `${yw}%`, height: "100%", background: "var(--text-tertiary)", opacity: 0.5 }}/>
-                    </div>
-                    <span style={{ flex: "0 0 56px", fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>{fmtUsageDur(c.y)}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* 第三栏：板块 TOP（今日） */}
+      {/* 板块 TOP（今日） */}
       <div style={{
         background: "var(--bg-card)", border: "1px solid var(--border)",
         borderRadius: 8, padding: "14px 14px 12px",
