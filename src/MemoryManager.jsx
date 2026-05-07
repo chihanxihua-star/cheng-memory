@@ -308,7 +308,7 @@ function MemoryCard({ mem, onEdit, onDelete }) {
   };
   const onTouchEnd = () => { setTx(tx < -REVEAL / 2 ? -REVEAL : 0); startX.current = null; };
   return (
-    <div style={{ position: "relative", overflow: "hidden", borderRadius: 16 }}>
+    <div style={{ position: "relative", overflow: "hidden" }}>
       {/* 左滑显示的操作（在右侧露出） */}
       <div style={{
         position: "absolute", right: 0, top: 0, bottom: 0, width: REVEAL,
@@ -328,7 +328,6 @@ function MemoryCard({ mem, onEdit, onDelete }) {
         style={{
           background: "var(--bg-card)",
           border: "1px solid var(--border)",
-          borderRadius: 16,
           padding: "18px 20px",
           display: "flex", flexDirection: "column", gap: 14,
           transform: `translateX(${tx}px)`,
@@ -338,7 +337,7 @@ function MemoryCard({ mem, onEdit, onDelete }) {
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         <EmotionDot valence={mem.valence} arousal={mem.arousal}/>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{mem.content}</p>
+          <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{mem.summary || mem.content}</p>
           {sheet && (
             <BottomSheet onClose={() => setSheet(false)}>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
@@ -352,7 +351,6 @@ function MemoryCard({ mem, onEdit, onDelete }) {
               <div>{mem.content}</div>
             </BottomSheet>
           )}
-          {mem.summary && <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.5 }}>{mem.summary}</p>}
           <SensoryAnchors context={mem.context}/>
         </div>
       </div>
