@@ -2763,18 +2763,18 @@ function fmtUsageDur(ms) {
 }
 
 function buildUsageSessions(rows, now) {
+  // 只用 open 事件配对：每段 session = [open, next_open) 或 [open, now)
+  // close 事件忽略 —— 实测 close 噪声大（66/192 是 5 秒内就重新 open，
+  // 144/192 在 open 后 60 秒内触发），按 close 切会把真实使用时长砍到 ~1/2
+  const opens = rows
+    .filter(r => r.action === "open" && r.app_name)
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   const out = [];
-  let cur = null;
-  for (const r of rows) {
-    const t = new Date(r.created_at);
-    if (r.action === "open" && r.app_name) {
-      if (cur) out.push({ app: cur.app, start: cur.start, end: t });
-      cur = { app: r.app_name, start: t };
-    } else if (r.action === "close") {
-      if (cur) { out.push({ app: cur.app, start: cur.start, end: t }); cur = null; }
-    }
+  for (let i = 0; i < opens.length; i++) {
+    const start = new Date(opens[i].created_at);
+    const end = i + 1 < opens.length ? new Date(opens[i + 1].created_at) : now;
+    out.push({ app: opens[i].app_name, start, end });
   }
-  if (cur) out.push({ app: cur.app, start: cur.start, end: now });
   return out;
 }
 
