@@ -281,7 +281,19 @@ function MemoryCard({ mem, onEdit, onDelete }) {
         <EmotionDot valence={mem.valence} arousal={mem.arousal}/>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 13.5, color: "var(--text-primary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{mem.content}</p>
-          {sheet && <BottomSheet onClose={() => setSheet(false)}>{mem.content}</BottomSheet>}
+          {sheet && (
+            <BottomSheet onClose={() => setSheet(false)}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+                {mem.summary && <div style={{ fontSize: 16, color: "var(--text-primary)", fontWeight: 500, lineHeight: 1.4 }}>{mem.summary}</div>}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                  <AuthorBadge author={mem.author}/>
+                  {(mem.tags||[]).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
+                  <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-secondary)" }}>{formatDate(mem.created_at)}</span>
+                </div>
+              </div>
+              <div>{mem.content}</div>
+            </BottomSheet>
+          )}
           {mem.summary && <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.4 }}>{mem.summary}</p>}
           <SensoryAnchors context={mem.context}/>
         </div>
@@ -412,7 +424,19 @@ function DiaryCard({ entry, onEdit, onDelete }) {
           <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{entry.content}</p>
         </div>
       </div>
-      {sheet && <BottomSheet onClose={() => setSheet(false)}>{entry.content}</BottomSheet>}
+      {sheet && (
+        <BottomSheet onClose={() => setSheet(false)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+            {entry.title && <div style={{ fontSize: 16, color: "var(--text-primary)", fontWeight: 500, lineHeight: 1.4 }}>{entry.title}</div>}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+              <AuthorBadge author={entry.author}/>
+              {(entry.tags||[]).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
+              <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-secondary)" }}>{formatDateTime(entry.created_at)}</span>
+            </div>
+          </div>
+          <div>{entry.content}</div>
+        </BottomSheet>
+      )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
         <AuthorBadge author={entry.author}/>
         {(entry.tags||[]).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
