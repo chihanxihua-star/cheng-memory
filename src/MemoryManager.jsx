@@ -362,9 +362,9 @@ function MemoryCard({ mem, onEdit, onDelete }) {
         </span>
         <span style={{ color: "var(--text-tertiary)" }}>·</span>
         <span style={{ color: "var(--text-tertiary)" }}>{mem.author}</span>
-        {mem.pinned && <span title="置顶">📌</span>}
-        {mem.flashbulb && <span title="闪光">⚡</span>}
-        {mem.resolved === false && <span style={{ color: "var(--text-secondary)" }}>未愈</span>}
+        {mem.pinned && <span style={{ color: "var(--text-tertiary)" }}>锚</span>}
+        {mem.flashbulb && <span style={{ color: "var(--text-tertiary)" }}>沉鸣</span>}
+        {mem.resolved === false && <span style={{ color: "var(--text-tertiary)" }}>未愈</span>}
         {(mem.tags||[]).slice(0,3).map(t => <span key={t} style={tagPill}>{t}</span>)}
         <span style={{ marginLeft: "auto", color: "var(--text-tertiary)" }}>{formatDate(mem.created_at)} · 引用 {mem.ref_count??0}</span>
       </div>
