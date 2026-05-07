@@ -1830,20 +1830,21 @@ export default function App() {
       /* 极简发丝 slider —— 用在 MemoryFullForm 情绪/情绪浓度/强度 */
       input[type=range].cm-slider {
         -webkit-appearance: none; appearance: none;
-        width: 100%; height: 1px; padding: 0; margin: 12px 0 8px;
-        background: var(--border); border: none; outline: none; cursor: pointer;
+        width: 100%; height: 2px; padding: 0; margin: 12px 0 8px;
+        background: var(--cm-slider-color, var(--border)); border: none; outline: none; cursor: pointer;
+        border-radius: 99px;
       }
-      input[type=range].cm-slider::-webkit-slider-runnable-track { height: 1px; background: var(--border); }
-      input[type=range].cm-slider::-moz-range-track { height: 1px; background: var(--border); }
+      input[type=range].cm-slider::-webkit-slider-runnable-track { height: 2px; background: var(--cm-slider-color, var(--border)); border-radius: 99px; }
+      input[type=range].cm-slider::-moz-range-track { height: 2px; background: var(--cm-slider-color, var(--border)); border-radius: 99px; }
       input[type=range].cm-slider::-webkit-slider-thumb {
         -webkit-appearance: none; appearance: none;
         width: 14px; height: 14px; border-radius: 50%;
-        background: var(--cm-slider-color, var(--text-primary)); border: none; cursor: pointer;
-        margin-top: -7px;
+        background: var(--text-primary); border: none; cursor: pointer;
+        margin-top: -6px;
       }
       input[type=range].cm-slider::-moz-range-thumb {
         width: 14px; height: 14px; border-radius: 50%;
-        background: var(--cm-slider-color, var(--text-primary)); border: none; cursor: pointer;
+        background: var(--text-primary); border: none; cursor: pointer;
       }
     `}</style>
   );
