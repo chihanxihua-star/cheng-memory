@@ -1611,11 +1611,14 @@ export default function App() {
           </div>
         ))}
 
-        {/* 花信风：自管全屏布局 */}
+        {/* 花信风：自管全屏布局；常驻 display:flex，只切 visibility，避免 flex 链被 hide/show 重算 */}
         <div style={{
           position: "absolute", inset: 0,
-          display: tab === "chat" ? "flex" : "none",
+          display: "flex",
           flexDirection: "column",
+          visibility: tab === "chat" ? "visible" : "hidden",
+          pointerEvents: tab === "chat" ? "auto" : "none",
+          zIndex: tab === "chat" ? 10 : -1,
         }}>
           <ChatPanel onBack={() => setTab("home")}/>
         </div>
