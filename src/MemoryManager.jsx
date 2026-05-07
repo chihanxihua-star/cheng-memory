@@ -1259,52 +1259,179 @@ function MoodCalendarPanel({ onTimeline }) {
   );
 }
 
-// ─── 时间轴：旧的纪念日板块 ─────────────────────────────
-function MilestoneDrawer({ entry, isNew, onSave, onClose }) {
-  const [f, setF] = useState({
-    title: entry.title || "", description: entry.description || "",
-    event_date: entry.event_date || new Date().toISOString().split("T")[0],
-    tags: Array.isArray(entry.tags) ? entry.tags.join(", ") : "",
-    author: entry.author || "小茉莉",
-  });
-  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+// ─── 时间轴：纪念日（左右交替 + 中线小圆点 + 内联表单） ─────
+const MILESTONE_DATE_COLOR = "#B8A065"; // 橄榄金，参照原图
+
+function fmtDot(s) { return (s || "").replace(/-/g, "."); }
+function toIso(s) { return (s || "").replace(/\./g, "-"); }
+
+function MilestoneInlineForm({ editing, onCancel, onSave }) {
+  const [title, setTitle] = useState(editing?.title || "");
+  const [description, setDescription] = useState(editing?.description || "");
+  const [eventDate, setEventDate] = useState(editing?.event_date ? fmtDot(editing.event_date) : fmtDot(ymdLocal(new Date())));
+  const [tags, setTags] = useState(Array.isArray(editing?.tags) ? editing.tags.join(", ") : "");
+  const [author, setAuthor] = useState(editing?.author || "小茉莉");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async () => {
+    if (!title.trim()) return;
+    setSaving(true); setError(null);
+    try {
+      await onSave({
+        title: title.trim(),
+        description: description.trim() || null,
+        event_date: toIso(eventDate.trim()),
+        tags: tags.split(",").map(t => t.trim()).filter(Boolean),
+        author,
+      });
+    } catch (e) { setError(e.message); setSaving(false); }
+  };
+
+  const inputUL = {
+    background: "transparent", border: "none",
+    borderBottom: "1px solid var(--border)", borderRadius: 0,
+    color: "var(--text-primary)", padding: "8px 2px",
+    fontSize: 13, width: "100%", fontFamily: "inherit",
+    outline: "none", boxSizing: "border-box", lineHeight: 1.5,
+  };
+
   return (
-    <Drawer title={isNew ? "添加纪念日" : "编辑纪念日"} onClose={onClose} footer={<>
-      <ActionBtn onClick={onClose}>取消</ActionBtn>
-      <ActionBtn accent color="#e8b86d" disabled={!f.title.trim()} onClick={() => onSave({ title: f.title, description: f.description || null, event_date: f.event_date, tags: f.tags.split(",").map(t=>t.trim()).filter(Boolean), author: f.author })} flex={2}>{isNew ? "添加" : "保存"}</ActionBtn>
-    </>}>
-      <div><label style={labelStyle}>标题</label><input style={inputStyle} value={f.title} onChange={e => set("title", e.target.value)} placeholder="第一次…"/></div>
-      <div><label style={labelStyle}>日期</label><input type="date" style={inputStyle} value={f.event_date} onChange={e => set("event_date", e.target.value)}/></div>
-      <div><label style={labelStyle}>描述</label><textarea rows={4} style={inputStyle} value={f.description} onChange={e => set("description", e.target.value)} placeholder="可选"/></div>
-      <div><label style={labelStyle}>标签（逗号分隔）</label><input style={inputStyle} value={f.tags} onChange={e => set("tags", e.target.value)}/></div>
-      <div><label style={labelStyle}>添加者</label><input style={inputStyle} value={f.author} onChange={e => set("author", e.target.value)}/></div>
-    </Drawer>
+    <div style={{
+      background: "var(--bg-card)",
+      border: "1px solid var(--border)", borderRadius: 4,
+      padding: "18px 20px 16px",
+      marginBottom: 26,
+      animation: "fadeUp 0.22s ease both",
+      position: "relative",
+    }}>
+      <button onClick={onCancel} style={{
+        position: "absolute", top: 10, right: 12,
+        background: "none", border: "none", padding: 0,
+        color: "var(--text-tertiary)", fontSize: 16, lineHeight: 1, cursor: "pointer",
+      }}>×</button>
+
+      <input value={eventDate} onChange={e => setEventDate(e.target.value)}
+        placeholder="Data （例如 2026.03.13）"
+        style={{ ...inputUL, fontStyle: "italic", color: MILESTONE_DATE_COLOR, fontSize: 12 }}/>
+
+      <input value={title} onChange={e => setTitle(e.target.value)}
+        placeholder="记录新的里程碑..."
+        style={{ ...inputUL, marginTop: 14, fontSize: 14 }}/>
+
+      <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)}
+        placeholder="描述（可选）"
+        style={{ ...inputUL, marginTop: 12, resize: "none", fontSize: 12.5, color: "var(--text-secondary)" }}/>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+        <input value={tags} onChange={e => setTags(e.target.value)}
+          placeholder="标签（逗号分隔）"
+          style={{ ...inputUL, fontSize: 11.5, flex: 2 }}/>
+        <select value={author} onChange={e => setAuthor(e.target.value)}
+          style={{ ...inputUL, fontSize: 11.5, flex: 1, color: "var(--text-secondary)" }}>
+          <option value="小茉莉">小茉莉</option>
+          <option value="澄">澄</option>
+        </select>
+      </div>
+
+      {error && <div style={{ fontSize: 12, color: "#c0392b", marginTop: 8 }}>{error}</div>}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+        <button onClick={submit} disabled={!title.trim() || saving} style={{
+          background: "transparent", border: "1px solid var(--border)",
+          padding: "6px 22px", borderRadius: 2,
+          fontSize: 11, letterSpacing: "0.3em",
+          color: title.trim() ? "var(--text-secondary)" : "var(--text-tertiary)",
+          cursor: title.trim() ? "pointer" : "not-allowed",
+          fontFamily: "inherit", fontWeight: 400,
+        }}>{editing ? "SAVE" : "REGISTRA"}</button>
+      </div>
+    </div>
   );
 }
 
-function MilestoneCard({ milestone, onEdit, onDelete }) {
+function MilestoneItem({ milestone, side, onEdit, onDelete }) {
+  const [open, setOpen] = useState(false);
   const [cd, setCd] = useState(false);
-  return (
-    <div style={{ position: "relative", marginBottom: 16, animation: "fadeUp 0.25s ease both" }}>
-      {/* 时间轴圆点 */}
-      <div style={{ position: "absolute", left: -17, top: 14, width: 8, height: 8, borderRadius: 99, background: "#e8b86d", boxShadow: "0 0 8px rgba(232,184,109,0.4)" }}/>
+  const isLeft = side === "left";
+  const align = isLeft ? "flex-start" : "flex-end";
+  const textAlign = isLeft ? "left" : "right";
 
-      <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)" }}>{milestone.title}</p>
-            {milestone.description && <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>{milestone.description}</p>}
+  return (
+    <div style={{
+      position: "relative",
+      display: "flex", justifyContent: align,
+      marginBottom: 30,
+      animation: "fadeUp 0.25s ease both",
+    }}>
+      {/* 中线小圆点 */}
+      <div style={{
+        position: "absolute", left: "50%", top: 8,
+        width: 5, height: 5, borderRadius: "50%",
+        background: MILESTONE_DATE_COLOR,
+        transform: "translateX(-50%)",
+      }}/>
+
+      {/* 内容（占一半宽，与中线留 18px 间距） */}
+      <div onClick={() => setOpen(o => !o)} style={{
+        width: "calc(50% - 18px)", textAlign,
+        cursor: "pointer",
+      }}>
+        <div style={{
+          fontSize: 11, color: MILESTONE_DATE_COLOR, marginBottom: 6,
+          fontStyle: "italic", letterSpacing: "0.06em",
+        }}>{fmtDot(milestone.event_date)}</div>
+        <div style={{
+          fontSize: 13, color: "var(--text-primary)", lineHeight: 1.7,
+        }}>
+          {milestone.title}
+        </div>
+        {milestone.description && (
+          <div style={{
+            fontSize: 12.5, color: "var(--text-secondary)",
+            marginTop: 4, lineHeight: 1.6,
+          }}>{milestone.description}</div>
+        )}
+        {(milestone.tags || []).length > 0 && (
+          <div style={{
+            display: "flex", flexWrap: "wrap", gap: 4,
+            justifyContent: isLeft ? "flex-start" : "flex-end",
+            marginTop: 6,
+          }}>
+            {milestone.tags.map(t => (
+              <span key={t} style={{
+                fontSize: 10, color: "var(--text-tertiary)",
+                letterSpacing: "0.04em", fontStyle: "italic",
+              }}>· {t}</span>
+            ))}
           </div>
-          <span style={{ fontSize: 11, color: "#e8b86d", flexShrink: 0, marginLeft: 12 }}>{milestone.event_date}</span>
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
-          <AuthorBadge author={milestone.author}/>
-          {(milestone.tags||[]).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <ActionBtn onClick={() => onEdit(milestone)}>编辑</ActionBtn>
-          {cd ? <ActionBtn accent color="#c0392b" onClick={() => { onDelete(milestone.id); setCd(false); }}>确认删除</ActionBtn> : <ActionBtn onClick={() => setCd(true)}>删除</ActionBtn>}
-        </div>
+        )}
+        {open && (
+          <div style={{
+            display: "flex", gap: 14,
+            justifyContent: isLeft ? "flex-start" : "flex-end",
+            marginTop: 8,
+          }}>
+            <button onClick={(e) => { e.stopPropagation(); onEdit(milestone); }} style={{
+              background: "none", border: "none", padding: 0,
+              fontSize: 10.5, color: "var(--text-tertiary)", letterSpacing: "0.18em",
+              cursor: "pointer", fontFamily: "inherit",
+            }}>编辑</button>
+            {cd ? (
+              <button onClick={(e) => { e.stopPropagation(); onDelete(milestone.id); setCd(false); }} style={{
+                background: "none", border: "none", padding: 0,
+                fontSize: 10.5, color: "#c0392b", letterSpacing: "0.18em",
+                cursor: "pointer", fontFamily: "inherit",
+              }}>确认删除</button>
+            ) : (
+              <button onClick={(e) => { e.stopPropagation(); setCd(true); }} style={{
+                background: "none", border: "none", padding: 0,
+                fontSize: 10.5, color: "var(--text-tertiary)", letterSpacing: "0.18em",
+                cursor: "pointer", fontFamily: "inherit",
+              }}>删除</button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1314,7 +1441,8 @@ function MilestonesTimelinePanel({ onBack }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [drawer, setDrawer] = useState(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -1324,33 +1452,66 @@ function MilestonesTimelinePanel({ onBack }) {
 
   useEffect(() => { load(); }, [load]);
 
+  const openCreate = () => { setEditing(null); setFormOpen(true); };
+  const openEdit = (m) => { setEditing(m); setFormOpen(true); };
+  const closeForm = () => { setFormOpen(false); setEditing(null); };
+
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
         <button onClick={onBack} style={{
           background: "none", border: "none", padding: 0, cursor: "pointer",
           fontSize: 11, letterSpacing: "0.2em", color: "var(--text-secondary)", fontFamily: "inherit",
         }}>← 日历</button>
         <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
-          <button onClick={() => setDrawer({ mode: "create", entry: {} })} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 添加</button>
+          <button onClick={openCreate} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 添加</button>
           <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
         </div>
       </div>
 
-      <p style={{ margin: "0 0 14px", fontSize: 11, color: "var(--text-tertiary)" }}>共 {items.length} 个纪念日</p>
+      {/* 顶部小标题（参考图的 italic 装饰） */}
+      <div style={{
+        textAlign: "center", marginBottom: 22,
+        fontSize: 11, color: "var(--text-tertiary)",
+        fontStyle: "italic", letterSpacing: "0.18em",
+      }}>Anrrow &amp; Claude · {items.length} tracce</div>
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
+      {formOpen && (
+        <MilestoneInlineForm
+          key={editing?.id || "new"}
+          editing={editing}
+          onCancel={closeForm}
+          onSave={async (patch) => {
+            if (editing) await sbPatch("milestones_cheng", editing.id, patch);
+            else await sbPost("milestones_cheng", patch);
+            closeForm(); load();
+          }}
+        />
+      )}
+
       {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
-        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有纪念日</div>
-        : <div style={{ position: "relative", paddingLeft: 20 }}>
-            {/* 时间轴竖线 */}
-            <div style={{ position: "absolute", left: 6, top: 8, bottom: 8, width: 2, background: "rgba(232,184,109,0.2)", borderRadius: 99 }}/>
-
-            {items.map(m => <MilestoneCard key={m.id} milestone={m} onEdit={mil => setDrawer({ mode: "edit", entry: mil })} onDelete={async id => { try { await sbDelete("milestones_cheng", id); load(); } catch(e) { setError(e.message); } }}/>)}
-          </div>}
-
-      {drawer && <MilestoneDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("milestones_cheng", patch); else await sbPatch("milestones_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
+        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13, fontStyle: "italic" }}>nessuna traccia ancora …</div>
+        : (
+          <div style={{ position: "relative", paddingTop: 8, paddingBottom: 8 }}>
+            {/* 中线 */}
+            <div style={{
+              position: "absolute", left: "50%", top: 0, bottom: 0,
+              width: 1, background: "rgba(184,160,101,0.32)",
+              transform: "translateX(-0.5px)",
+            }}/>
+            {items.map((m, i) => (
+              <MilestoneItem key={m.id} milestone={m}
+                side={i % 2 === 0 ? "right" : "left"}
+                onEdit={openEdit}
+                onDelete={async (id) => {
+                  try { await sbDelete("milestones_cheng", id); load(); }
+                  catch(e) { setError(e.message); }
+                }}/>
+            ))}
+          </div>
+        )}
     </div>
   );
 }
