@@ -419,14 +419,55 @@ function MemoryPanel() {
         </div>)}
       </div>}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16, alignItems: "center" }}>
-        <input placeholder="搜索…" value={filters.search} onChange={e => filterChange("search", e.target.value)} style={{ ...inputStyle, width: 140, borderRadius: 99, padding: "5px 14px", fontSize: 12 }}/>
-        {[1,2,3].map(l => <button key={l} style={chipStyle(filters.level===l, LEVEL_META[l].color)} onClick={() => filterChange("level", filters.level===l?"":l)}>{LEVEL_META[l].label}</button>)}
-        <button style={chipStyle(filters.pinned,"#e8c473")} onClick={() => filterChange("pinned",!filters.pinned)}>📌</button>
-        <button style={chipStyle(filters.flashbulb,"#e87a50")} onClick={() => filterChange("flashbulb",!filters.flashbulb)}>⚡</button>
-        <button style={chipStyle(filters.unresolved,"#a0c4a0")} onClick={() => filterChange("unresolved",!filters.unresolved)}>未愈</button>
+      {/* 搜索条 */}
+      <div style={{ marginBottom: 12 }}>
+        <input placeholder="搜索…" value={filters.search} onChange={e => filterChange("search", e.target.value)} style={{ ...inputStyle, borderRadius: 99, padding: "8px 16px", fontSize: 12, width: "100%", maxWidth: 320 }}/>
+      </div>
+
+      {/* 星级 + 标志 chip + 排序 */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16, alignItems: "center" }}>
+        {[1,2,3].map(l => {
+          const a = filters.level === l;
+          return (
+            <button key={l} onClick={() => filterChange("level", a ? "" : l)} style={{
+              padding: "5px 14px", borderRadius: 6,
+              fontSize: 12, letterSpacing: "0.08em",
+              fontFamily: "inherit", cursor: "pointer",
+              background: a ? "var(--text-primary)" : "transparent",
+              color: a ? "var(--bg-page)" : "var(--text-tertiary)",
+              border: `1px solid ${a ? "var(--text-primary)" : "var(--border)"}`,
+            }}>{"★".repeat(l)}</button>
+          );
+        })}
+        <button onClick={() => filterChange("pinned", !filters.pinned)} style={{
+          padding: "5px 14px", borderRadius: 6,
+          fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+          background: filters.pinned ? "var(--text-primary)" : "transparent",
+          color: filters.pinned ? "var(--bg-page)" : "var(--text-tertiary)",
+          border: `1px solid ${filters.pinned ? "var(--text-primary)" : "var(--border)"}`,
+        }}>📌</button>
+        <button onClick={() => filterChange("flashbulb", !filters.flashbulb)} style={{
+          padding: "5px 14px", borderRadius: 6,
+          fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+          background: filters.flashbulb ? "var(--text-primary)" : "transparent",
+          color: filters.flashbulb ? "var(--bg-page)" : "var(--text-tertiary)",
+          border: `1px solid ${filters.flashbulb ? "var(--text-primary)" : "var(--border)"}`,
+        }}>⚡</button>
+        <button onClick={() => filterChange("unresolved", !filters.unresolved)} style={{
+          padding: "5px 14px", borderRadius: 6,
+          fontSize: 11, letterSpacing: "0.1em",
+          fontFamily: "inherit", cursor: "pointer",
+          background: filters.unresolved ? "var(--text-primary)" : "transparent",
+          color: filters.unresolved ? "var(--bg-page)" : "var(--text-tertiary)",
+          border: `1px solid ${filters.unresolved ? "var(--text-primary)" : "var(--border)"}`,
+        }}>未愈</button>
         <span style={{ marginLeft: "auto" }}/>
-        <select value={sort} onChange={e => { setSort(e.target.value); load(filters, e.target.value); }} style={{ ...inputStyle, width: "auto", borderRadius: 6, padding: "4px 8px", fontSize: 11 }}>
+        <select value={sort} onChange={e => { setSort(e.target.value); load(filters, e.target.value); }} style={{
+          background: "transparent", border: "1px solid var(--border)",
+          borderRadius: 6, padding: "5px 10px",
+          fontSize: 11, color: "var(--text-tertiary)",
+          fontFamily: "inherit", cursor: "pointer", outline: "none",
+        }}>
           {MEM_SORTS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
         </select>
       </div>
