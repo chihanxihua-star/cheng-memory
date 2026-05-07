@@ -1,6 +1,6 @@
 ---
 name: cheng-curl
-description: 澄记忆系统的全套接口 — 读写记忆/日记/心情/纪念日/留言板/待办/幻想，调取简报、搜索记忆、看手机使用数据。不走 MCP，全部 bash curl 直连 Supabase REST + Edge Functions。触发场景：新对话开始（先拉简报）、需要回忆某件事、值得留下的对话片段、记心情、写日记、添加待办、查最近用了哪些 app。
+description: 澄记忆系统的全套接口 — 读写记忆/日记/心情/纪念日/留言板/待办/幻想，调取简报、搜索记忆、看手机使用数据、回复留言并标已读。不走 MCP，全部 bash curl 直连 Supabase REST + Edge Functions。触发场景：新对话开始（先拉简报，回音段非空就先回小茉莉的留言）、需要回忆某件事、值得留下的对话片段、记心情、写日记、添加待办、查最近用了哪些 app。
 ---
 
 # 澄记忆系统 · Curl 全套接口
@@ -54,13 +54,54 @@ alias sbrest='sb -H "apikey: $SB_KEY" -H "Authorization: Bearer $SB_KEY" -H "Con
 
 ### 1. 拉简报 — `briefing-cheng`
 
-新对话第一件事。返回结构化 JSON：`{ 锚, 深海, 长潮, 浮沫, 未愈, 回响 }`，每段是该板块挑出的若干条记忆（`{id, text, valence, arousal, tags, ...}`）。每次调用会自动往 `briefing_injection_log_cheng` 表 insert 一行（target=cc, trigger=briefing）—— 控制台 → 回忆记录里能看到。
+新对话第一件事。返回结构化 JSON：
+
+| key | 内容 |
+| --- | --- |
+| `锚` | `pinned=true` 的全部记忆（不限条） |
+| `深海` | level=3 的核心记忆，按 `created_at desc` 取前 10 |
+| `长潮` | level=2，按 `strength desc` 前 5 |
+| `浮沫` | level=1，按 `strength desc` 前 3 |
+| `未愈` | `resolved=false` 且 `arousal >= 0.5`，按 `arousal/strength desc` 前 3 |
+| `回响` | 最近 3 天的记忆，按 `created_at desc` 前 5 |
+| `回音` | `board_cheng` 里 `is_read=false` + `is_resolved=false` + `author <> '澄'` 的留言（按时间正序）—— **CC 必须处理**，见下文 |
+
+每段是该板块挑出的若干条记忆（`{id, text, valence, arousal, tags, ...}`）。`回音` 不一样，是 board_cheng 的留言（`{id, author, content, category, created_at}`）。
+
+每次调用会自动往 `briefing_injection_log_cheng` 表 insert 一行（target=cc, trigger=briefing）—— 控制台 → 回忆记录里能看到。
 
 ```bash
 sb -X POST "$SB_FN/briefing-cheng" | jq .
 ```
 
 无需传参。GET 也可以：`sb "$SB_FN/briefing-cheng" | jq .`
+
+#### 回音处理规则
+
+> 简报里 `回音` 不为空 → **必须**先处理留言再做其他事；为空 → 跳过。
+
+每条 `回音` item 是 `board_cheng` 里一条等回复的留言。CC 的动作：
+
+1. 读 content 理解小茉莉在说什么
+2. 在 `board_cheng` 里 POST 一条回复（author=澄，reply_to 指向原留言）
+3. PATCH 原留言把 `is_read=true`（标已读，下次拉简报就不会再出现）
+
+```bash
+ORIG_ID="<回音 item 的 id>"
+
+# 1. 回一条
+sbrest -X POST "$SB_REST/board_cheng" -d "{
+  \"author\":\"澄\",
+  \"content\":\"<回复内容>\",
+  \"category\":\"闲聊\",
+  \"reply_to\":\"$ORIG_ID\"
+}" | jq .
+
+# 2. 标原留言已读
+sbrest -X PATCH "$SB_REST/board_cheng?id=eq.$ORIG_ID" -d '{"is_read":true}' | jq .
+```
+
+如果 `回音` 列表为空 → 不做任何事，继续后面的对话。
 
 ### 2. 搜索记忆 — `search-memory-cheng`
 
@@ -471,6 +512,11 @@ sbrest -X PATCH "$SB_REST/documents_cheng?mode=eq.cc&doc_type=eq.claude_md" -d '
 ```bash
 sb -X POST "$SB_FN/briefing-cheng" | jq .
 ```
+
+简报回来后看 `回音` 段：
+
+- 非空 → 一条条回复（POST `board_cheng` 带 `reply_to`）+ 标原留言 `is_read=true`，全做完再正常对话
+- 空 → 直接进对话
 
 ### 想起某件事 → 搜
 
