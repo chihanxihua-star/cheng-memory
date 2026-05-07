@@ -1232,13 +1232,15 @@ function ConsolePanel() {
     fontWeight: active ? 600 : 400,
   });
   return (
-    <div>
+    <div style={{ paddingTop: 52 /* 给固定的 sub-tab 让位 */ }}>
       <div style={{
-        position: "sticky", top: 0, zIndex: 5,
+        position: "fixed",
+        top: "env(safe-area-inset-top, 0px)", left: 0, right: 0,
+        zIndex: 20,
         background: "var(--bg-page)",
         display: "flex", flexWrap: "wrap", gap: 22, alignItems: "center",
-        padding: "10px 0 14px",
-        margin: "-20px 0 0",
+        padding: "12px 16px",
+        borderBottom: "1px solid var(--border)",
       }}>
         {subTabs.map(t => <button key={t.key} style={tabBtn(sub === t.key)} onClick={() => setSub(t.key)}>{t.label}</button>)}
       </div>
