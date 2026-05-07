@@ -646,8 +646,8 @@ function BoardMessage({ msg, onEdit, onDelete, onToggleRead, onToggleResolved, o
       alignItems: isMe ? "flex-end" : "flex-start",
       marginBottom: 14, opacity: msg.is_resolved ? 0.55 : 1,
     }}>
+      <div style={{ fontSize: 10, color: authorColor, fontWeight: 500, marginBottom: 3, padding: "0 6px" }}>{msg.author}</div>
       <div className={"bd-bubble " + (isMe ? "me" : "them")} onClick={() => setActionsOpen(o => !o)}>
-        <div style={{ display: "flex", justifyContent: "flex-end", fontSize: 10, color: authorColor, fontWeight: 500 }}>{msg.author}</div>
         <p style={{ margin: 0, fontSize: 13.5, color: "inherit", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{msg.content}</p>
       </div>
 
