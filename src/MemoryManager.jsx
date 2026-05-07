@@ -1061,7 +1061,13 @@ function MoodInlineForm({ date, initialAuthor, existing, onClose, onSaved }) {
       <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
         {cur && <ActionBtn onClick={remove} color="#c0392b">删除</ActionBtn>}
         <ActionBtn onClick={onClose}>取消</ActionBtn>
-        <ActionBtn accent color="#8aab9e" disabled={saving} onClick={save} flex={2}>{cur ? "保存" : "添加"}</ActionBtn>
+        <button onClick={save} disabled={saving} style={{
+          flex: 2, padding: "5px 0", fontFamily: "inherit", fontSize: 11.5,
+          cursor: saving ? "not-allowed" : "pointer", borderRadius: 5,
+          background: "#F2DCE0", border: "1px solid #F2DCE0",
+          color: saving ? "rgba(90,74,82,0.5)" : "#5a4a52",
+          transition: "all 0.15s",
+        }}>{cur ? "保存" : "添加"}</button>
       </div>
     </div>
   );
