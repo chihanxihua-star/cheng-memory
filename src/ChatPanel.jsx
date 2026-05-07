@@ -1668,12 +1668,18 @@ const thinkingOpenStore = new Map();
 function ThinkingBlock({ text, isThinking }) {
   const [open, setOpen] = useState(() => thinkingOpenStore.get(text) === true);
   useEffect(() => { thinkingOpenStore.set(text, open); }, [text, open]);
+  const contentRef = useRef(null);
+  useEffect(() => {
+    if (open && isThinking && contentRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    }
+  }, [text, open, isThinking]);
   return (
     <div className={"cp-thinking-block" + (open ? " open" : "")}>
       <button className={"cp-thinking-toggle" + (isThinking ? " thinking" : "")} onClick={() => setOpen(o => !o)}>
         思绪
       </button>
-      {text && <div className="cp-thinking-content">{text}</div>}
+      {text && <div ref={contentRef} className="cp-thinking-content">{text}</div>}
     </div>
   );
 }
