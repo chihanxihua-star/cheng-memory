@@ -379,16 +379,29 @@ function MemoryPanel() {
   const reload = () => load(filters, sort);
   const filterChange = (k, v) => { const n = { ...filters, [k]: v }; setFilters(n); if (k==="search") { clearTimeout(timer.current); timer.current = setTimeout(() => load(n,sort), 400); } else load(n,sort); };
 
+  const [creating, setCreating] = useState(false);
+  const createMemory = async (patch) => {
+    const tempId = "tmp-" + Date.now();
+    const tempMem = { id: tempId, ...patch, created_at: new Date().toISOString(), strength: 1, ref_count: 0 };
+    setItems(arr => [tempMem, ...arr]);
+    setCreating(false);
+    try {
+      const saved = await sbPost("memories_cheng", patch);
+      const real = Array.isArray(saved) ? saved[0] : saved;
+      setItems(arr => arr.map(it => it.id === tempId ? (real || it) : it));
+    } catch(e) {
+      setError(e.message);
+      setItems(arr => arr.filter(it => it.id !== tempId));
+    }
+  };
+
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <div>
-          {stats && <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {stats.total} 条 · 均强度 {stats.avgStr} · 📌{stats.pinned} ⚡{stats.flash}</p>}
+          {stats && <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {stats.total} 条 · 均强度 {stats.avgStr} · 📌{stats.pinned} ⚡{stats.flash}</p>}
         </div>
-        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
-          <button onClick={() => setDrawer({ mode: "create", memory: EMPTY_MEM })} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 写入</button>
-          <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-secondary)" }}>{loading ? "…" : "刷新"}</button>
-        </div>
+        <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
       </div>
 
       {stats && <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 16 }}>
@@ -412,13 +425,124 @@ function MemoryPanel() {
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
-        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有记忆</div>
-        : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
-            {items.map(m => <div key={m.id} style={{ animation: "fadeUp 0.25s ease both" }}><MemoryCard mem={m} onEdit={mem => setDrawer({ mode: "edit", memory: mem })} onDelete={async id => { try { await sbDelete("memories_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
-          </div>}
+      <PullToCreate onCreate={() => setCreating(true)}>
+        <div style={{ maxHeight: creating ? 600 : 0, overflow: "hidden", transition: "max-height 0.3s ease" }}>
+          {creating && <InlineMemoryForm onCancel={() => setCreating(false)} onSave={createMemory}/>}
+        </div>
+
+        {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>正在拉取…</div>
+          : items.length === 0 && !creating ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>没有记忆</div>
+          : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
+              {items.map(m => <div key={m.id} style={{ animation: "fadeUp 0.25s ease both" }}><MemoryCard mem={m} onEdit={mem => setDrawer({ mode: "edit", memory: mem })} onDelete={async id => { try { await sbDelete("memories_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
+            </div>}
+      </PullToCreate>
 
       {drawer && <MemoryDrawer memory={drawer.memory} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("memories_cheng", patch); else await sbPatch("memories_cheng", drawer.memory.id, patch); setDrawer(null); reload(); } catch(e) { setError(e.message); } }}/>}
+    </div>
+  );
+}
+
+function InlineMemoryForm({ onCancel, onSave }) {
+  const [f, setF] = useState({ author: "澄", summary: "", event_date: "", content: "" });
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  const contentRef = useRef(null);
+  useEffect(() => {
+    const el = contentRef.current;
+    if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
+  }, [f.content]);
+
+  const save = () => {
+    if (!f.content.trim()) return;
+    onSave({
+      content: f.content,
+      summary: f.summary || null,
+      author: f.author,
+      level: 1,
+      valence: 0.5,
+      arousal: 0.5,
+      tags: [],
+      context: f.event_date ? { event_date: f.event_date } : null,
+    });
+  };
+
+  const labelSt = { fontSize: 11, color: "var(--text-tertiary)", letterSpacing: "0.22em", marginBottom: 8 };
+  const underline = {
+    background: "none", border: "none",
+    borderBottom: "1px solid var(--border)",
+    outline: "none", padding: "6px 0",
+    fontFamily: "Georgia, 'Noto Serif SC', serif",
+    fontSize: 14, color: "var(--text-primary)", width: "100%",
+    fontStyle: "italic",
+  };
+  const can = !!f.content.trim();
+
+  return (
+    <div style={{ borderBottom: "1px solid var(--border)", padding: "20px 4px 28px" }}>
+      {/* 顶栏 */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 26 }}>
+        <button onClick={onCancel} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>CANCEL</button>
+        <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.22em" }}>新涟漪</span>
+        <button onClick={save} disabled={!can} style={{
+          background: can ? "var(--text-primary)" : "transparent",
+          color: can ? "var(--bg-page)" : "var(--text-tertiary)",
+          border: can ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+          padding: "8px 18px", borderRadius: 4,
+          fontSize: 12, letterSpacing: "0.18em",
+          cursor: can ? "pointer" : "not-allowed", fontFamily: "inherit",
+        }}>SEND ✓</button>
+      </div>
+
+      {/* 作者 chip */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 28 }}>
+        {["澄", "小茉莉"].map(a => {
+          const active = f.author === a;
+          return (
+            <button key={a} onClick={() => set("author", a)} style={{
+              background: active ? "var(--text-primary)" : "transparent",
+              color: active ? "var(--bg-page)" : "var(--text-tertiary)",
+              border: active ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+              padding: "6px 18px", borderRadius: 4,
+              fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
+            }}>{a}</button>
+          );
+        })}
+      </div>
+
+      {/* TITLE */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={labelSt}>TITLE</div>
+        <input
+          value={f.summary}
+          onChange={e => set("summary", e.target.value)}
+          placeholder="一句话摘要…"
+          style={underline}
+        />
+      </div>
+
+      {/* DATE */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={labelSt}>DATE</div>
+        <input
+          type="date"
+          value={f.event_date}
+          onChange={e => set("event_date", e.target.value)}
+          style={{ ...underline, color: f.event_date ? "var(--text-primary)" : "var(--text-tertiary)", colorScheme: "light" }}
+        />
+      </div>
+
+      {/* CONTENT */}
+      <div>
+        <div style={labelSt}>CONTENT</div>
+        <textarea
+          ref={contentRef}
+          autoFocus
+          value={f.content}
+          onChange={e => set("content", e.target.value)}
+          placeholder="dear…"
+          rows={3}
+          style={{ ...underline, borderBottom: "none", resize: "none", overflow: "hidden", lineHeight: 1.6 }}
+        />
+      </div>
     </div>
   );
 }
@@ -1186,6 +1310,15 @@ function InlineTodoForm({ entry, isNew, onCancel, onSave }) {
   );
 }
 
+function findScrollableAncestor(el) {
+  while (el && el !== document.body) {
+    const ov = getComputedStyle(el).overflowY;
+    if (ov === "auto" || ov === "scroll") return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
 function PullToCreate({ onCreate, children }) {
   const [pullY, setPullY] = useState(0);
   const startY = useRef(null);
@@ -1193,9 +1326,9 @@ function PullToCreate({ onCreate, children }) {
   const MAX = 110;
 
   const onTouchStart = (e) => {
-    // 只有滚动到 main 顶部时才触发下拉
-    const main = document.querySelector("main");
-    if (main && main.scrollTop > 0) return;
+    // 只在滚动容器顶部时才触发
+    const scroller = findScrollableAncestor(e.target);
+    if (scroller && scroller.scrollTop > 0) return;
     startY.current = e.touches[0].clientY;
   };
   const onTouchMove = (e) => {
