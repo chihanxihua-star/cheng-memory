@@ -428,45 +428,43 @@ function MemoryPanel() {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 22, marginBottom: 16, alignItems: "center" }}>
         {[1,2,3].map(l => {
           const a = filters.level === l;
-          const colors = { 1: "#C99FA8", 2: "#A66975", 3: "#7E4853" };
-          const c = colors[l];
           return (
             <button key={l} onClick={() => filterChange("level", a ? "" : l)} style={{
               background: "none", border: "none",
               padding: "5px 0 7px", cursor: "pointer", fontFamily: "inherit",
               fontSize: 13, letterSpacing: "0.15em",
-              color: a ? c : "var(--text-tertiary)",
+              color: a ? "var(--text-primary)" : "var(--text-tertiary)",
               fontWeight: a ? 600 : 400,
-              borderBottom: a ? `2px solid ${c}` : "2px solid transparent",
+              borderBottom: a ? "2px solid var(--text-primary)" : "2px solid transparent",
               transition: "all 0.15s",
-            }}>{"★".repeat(l)}</button>
+            }}>{LEVEL_META[l].label}</button>
           );
         })}
         <button onClick={() => filterChange("pinned", !filters.pinned)} style={{
           background: "none", border: "none",
           padding: "5px 0 7px", cursor: "pointer", fontFamily: "inherit",
           fontSize: 13, letterSpacing: "0.15em",
-          color: filters.pinned ? "#8A6432" : "var(--text-tertiary)",
+          color: filters.pinned ? "var(--text-primary)" : "var(--text-tertiary)",
           fontWeight: filters.pinned ? 600 : 400,
-          borderBottom: filters.pinned ? "2px solid #8A6432" : "2px solid transparent",
+          borderBottom: filters.pinned ? "2px solid var(--text-primary)" : "2px solid transparent",
           transition: "all 0.15s",
         }}>锚</button>
         <button onClick={() => filterChange("flashbulb", !filters.flashbulb)} style={{
           background: "none", border: "none",
           padding: "5px 0 7px", cursor: "pointer", fontFamily: "inherit",
           fontSize: 13, letterSpacing: "0.15em",
-          color: filters.flashbulb ? "#5C4263" : "var(--text-tertiary)",
+          color: filters.flashbulb ? "var(--text-primary)" : "var(--text-tertiary)",
           fontWeight: filters.flashbulb ? 600 : 400,
-          borderBottom: filters.flashbulb ? "2px solid #5C4263" : "2px solid transparent",
+          borderBottom: filters.flashbulb ? "2px solid var(--text-primary)" : "2px solid transparent",
           transition: "all 0.15s",
         }}>沉鸣</button>
         <button onClick={() => filterChange("unresolved", !filters.unresolved)} style={{
           background: "none", border: "none",
           padding: "5px 0 7px", cursor: "pointer", fontFamily: "inherit",
           fontSize: 13, letterSpacing: "0.15em",
-          color: filters.unresolved ? "#4F624A" : "var(--text-tertiary)",
+          color: filters.unresolved ? "var(--text-primary)" : "var(--text-tertiary)",
           fontWeight: filters.unresolved ? 600 : 400,
-          borderBottom: filters.unresolved ? "2px solid #4F624A" : "2px solid transparent",
+          borderBottom: filters.unresolved ? "2px solid var(--text-primary)" : "2px solid transparent",
           transition: "all 0.15s",
         }}>未愈</button>
         <span style={{ marginLeft: "auto" }}/>
