@@ -286,7 +286,7 @@ const CSS = `
   display: flex; align-items: center; justify-content: center;
   font-size: 17px; margin-top: 1px; overflow: hidden;
 }
-.cp-avatar.u { background: var(--bg-bubble-user); }
+.cp-avatar.u { background: var(--bg-bubble-user); cursor: pointer; }
 .cp-avatar.b { background: var(--bg-bubble-bot); border: 1px solid var(--border-bubble); cursor: pointer; }
 .cp-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
@@ -773,6 +773,7 @@ export default function ChatPanel({ onBack }) {
   // UI 开关
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [psScreen, setPsScreen] = useState("main");
   const [showSettings, setShowSettings] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -1399,7 +1400,10 @@ export default function ChatPanel({ onBack }) {
       </div>
 
       {/* MESSAGES */}
-      <div className="cp-messages" ref={messagesScrollRef} onClick={(e) => { if (e.target.closest(".cp-avatar.b")) setTerminalOpen(true); }}>
+      <div className="cp-messages" ref={messagesScrollRef} onClick={(e) => {
+        if (e.target.closest(".cp-avatar.b")) setTerminalOpen(true);
+        else if (e.target.closest(".cp-avatar.u")) setHistoryOpen(true);
+      }}>
         {renderItems.length === 0 && !streamSnap && !showTyping && (
           <div className="cp-empty">开始一段新对话</div>
         )}
@@ -1476,6 +1480,9 @@ export default function ChatPanel({ onBack }) {
 
       {/* TERMINAL placeholder */}
       {terminalOpen && <TerminalPlaceholder onClose={() => setTerminalOpen(false)} />}
+
+      {/* HISTORY full-screen modal (user avatar) */}
+      {historyOpen && <HistoryModal onClose={() => setHistoryOpen(false)} showToast={showToast} />}
 
       {/* SIDEBAR */}
       {sidebarOpen && (
@@ -2829,6 +2836,252 @@ function HistoryScreen({ onBack, showToast }) {
 }
 
 /* ─────── 字数统计：当前对话字数 vs 压缩阈值 ─────── */
+/* ─────── 用户头像点开：全屏聊天记录（带日历） ─────── */
+const HM_NAV_BTN = {
+  background: "none", border: "none", color: "var(--text-secondary)",
+  fontSize: 18, lineHeight: 1, cursor: "pointer", padding: "4px 12px", fontFamily: "inherit",
+};
+const HM_INPUT = {
+  background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+  borderRadius: 0, padding: "8px 0", color: "var(--text-primary)", fontSize: 13,
+  outline: "none", fontFamily: "inherit",
+};
+
+function HistoryModal({ onClose, showToast }) {
+  const todayStr = useMemo(() => ymd(new Date()), []);
+  const initial = new Date();
+  const [viewYear, setViewYear] = useState(initial.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initial.getMonth());
+  const [activeDays, setActiveDays] = useState(() => new Set());
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [keyword, setKeyword] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [exportRange, setExportRange] = useState("7");
+  const [exporting, setExporting] = useState(false);
+
+  // 当月有聊天的日期
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      const start = ymd(new Date(viewYear, viewMonth, 1));
+      const end = ymd(new Date(viewYear, viewMonth + 1, 0));
+      try {
+        const { rows } = await fetchProjectMessages({ start, end, keyword: "", ascending: true, limit: 5000 });
+        if (cancel) return;
+        const set = new Set();
+        for (const r of rows) set.add(ymd(new Date(r.created_at)));
+        setActiveDays(set);
+      } catch {}
+    })();
+    return () => { cancel = true; };
+  }, [viewYear, viewMonth]);
+
+  // 拉取当前选中日期 / 关键词的消息
+  const search = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const useDate = !keyword.trim();
+      const { rows } = await fetchProjectMessages({
+        start: useDate ? selectedDate : null,
+        end: useDate ? selectedDate : null,
+        keyword: keyword.trim(),
+        ascending: true, limit: 500,
+      });
+      setResults(rows);
+    } catch (e) {
+      setError(e.message || String(e));
+      setResults([]);
+    } finally { setLoading(false); }
+  }, [selectedDate, keyword]);
+
+  useEffect(() => { search(); /* 选择日期变化时 */ }, [selectedDate]); // eslint-disable-line
+
+  const days = useMemo(() => {
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+    const lastDate = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let d = 1; d <= lastDate; d++) cells.push(d);
+    return cells;
+  }, [viewYear, viewMonth]);
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
+    else setViewMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
+    else setViewMonth(m => m + 1);
+  };
+
+  const doExport = async () => {
+    setExporting(true);
+    try {
+      let exportStart = null;
+      let label;
+      if (exportRange !== "all") {
+        const days = parseInt(exportRange, 10);
+        const since = new Date();
+        since.setDate(since.getDate() - (days - 1));
+        since.setHours(0, 0, 0, 0);
+        exportStart = ymd(since);
+        label = "最近 " + days + " 天（" + exportStart + " 至 " + ymd(new Date()) + "）";
+      } else {
+        label = "全部";
+      }
+      const { rows } = await fetchProjectMessages({ start: exportStart, end: null, keyword: "", ascending: true, limit: 5000 });
+      if (rows.length === 0) { showToast("范围内没有消息"); return; }
+      const md = buildExportMarkdown(rows, label);
+      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "chat-export-" + ymd(new Date()) + (exportRange === "all" ? "-all" : "-" + exportRange + "d") + ".md";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast("已导出 " + rows.length + " 条消息");
+    } catch (e) {
+      showToast("导出失败：" + (e.message || e));
+    } finally { setExporting(false); }
+  };
+
+  return createPortal(
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1000,
+      background: "var(--bg-page)",
+      display: "flex", flexDirection: "column",
+      animation: "slideDown 0.28s ease",
+      fontFamily: "Georgia, 'Noto Serif SC', serif",
+      color: "var(--text-primary)",
+    }}>
+      <div style={{
+        flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>CLOSE</button>
+        <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.22em" }}>聊天记录</span>
+        <span style={{ width: 60 }}/>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 16px calc(28px + env(safe-area-inset-bottom, 0px))" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto", display: "flex", flexDirection: "column", gap: 22 }}>
+
+          {/* 日历 */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <button onClick={prevMonth} style={HM_NAV_BTN}>‹</button>
+              <span style={{ fontSize: 13, letterSpacing: "0.22em", color: "var(--text-primary)" }}>
+                {viewYear} 年 {String(viewMonth + 1).padStart(2, "0")} 月
+              </span>
+              <button onClick={nextMonth} style={HM_NAV_BTN}>›</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+              {["日","一","二","三","四","五","六"].map(d => (
+                <div key={d} style={{ textAlign: "center", color: "var(--text-tertiary)", fontSize: 10, letterSpacing: "0.1em", padding: "8px 0" }}>{d}</div>
+              ))}
+              {days.map((d, i) => {
+                if (d === null) return <div key={"e"+i} style={{ height: 42 }}/>;
+                const dateStr = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                const active = activeDays.has(dateStr);
+                const selected = selectedDate === dateStr;
+                const isToday = dateStr === todayStr;
+                return (
+                  <button key={d} onClick={() => setSelectedDate(dateStr)} style={{
+                    background: selected ? "var(--text-primary)" : "transparent",
+                    color: selected ? "var(--bg-page)" : (isToday ? "var(--text-primary)" : "var(--text-secondary)"),
+                    border: "none",
+                    height: 42,
+                    cursor: "pointer", fontFamily: "inherit", fontSize: 13,
+                    fontWeight: isToday ? 600 : 400,
+                    borderRadius: 4,
+                    position: "relative",
+                    padding: 0,
+                  }}>
+                    {d}
+                    {active && (
+                      <span style={{
+                        position: "absolute", bottom: 7, left: "50%", transform: "translateX(-50%)",
+                        width: 4, height: 4, borderRadius: "50%",
+                        background: selected ? "var(--bg-page)" : "var(--text-primary)",
+                      }}/>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 搜索 */}
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <input
+              value={keyword}
+              onChange={e => setKeyword(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") search(); }}
+              placeholder="搜索消息内容…"
+              style={{ flex: 1, ...HM_INPUT }}
+            />
+            <button onClick={search} disabled={loading} style={{
+              background: "transparent", color: "var(--text-secondary)",
+              border: "1px solid var(--border)", padding: "6px 14px", borderRadius: 4,
+              fontSize: 11, letterSpacing: "0.18em",
+              cursor: loading ? "default" : "pointer", fontFamily: "inherit",
+            }}>{loading ? "…" : "搜索"}</button>
+          </div>
+
+          {/* 结果 */}
+          <div>
+            <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", margin: "0 0 10px" }}>
+              {keyword.trim() ? `搜索结果  ·  ${results.length} 条` : `${selectedDate}  ·  ${results.length} 条`}
+            </div>
+            {error && (
+              <div style={{ fontSize: 12, color: "#c0392b", padding: "8px 0", borderBottom: "1px solid var(--border)", marginBottom: 8 }}>{error}</div>
+            )}
+            {loading ? (
+              <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "40px 0", fontSize: 13 }}>加载中…</div>
+            ) : results.length === 0 ? (
+              <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "40px 0", fontSize: 13 }}>无消息</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingTop: 4 }}>
+                {results.map(r => (
+                  <div key={r.id} style={{ paddingBottom: 14, borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 5 }}>
+                      <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{chatDisplayName(r.role)}</span>
+                      {"  "}{formatChatTime(r.created_at)}
+                    </div>
+                    <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.65, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{r.content || ""}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 导出 */}
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+            <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 10 }}>导出</div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <select value={exportRange} onChange={e => setExportRange(e.target.value)} style={{ flex: 1, ...HM_INPUT }}>
+                {EXPORT_RANGES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+              <button onClick={doExport} disabled={exporting} style={{
+                background: "var(--text-primary)", color: "var(--bg-page)",
+                border: "1px solid var(--text-primary)", padding: "6px 14px", borderRadius: 4,
+                fontSize: 11, letterSpacing: "0.18em",
+                cursor: exporting ? "default" : "pointer", fontFamily: "inherit",
+              }}>{exporting ? "…" : "导出 .md"}</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function CharStatsScreen({ onBack, convId }) {
   const [stats, setStats] = useState({ totalChars: 0, msgCount: 0, byRole: {} });
   const [loading, setLoading] = useState(true);
