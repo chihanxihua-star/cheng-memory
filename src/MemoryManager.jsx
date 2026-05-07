@@ -135,18 +135,18 @@ function EmotionDot({ valence = 0.5, arousal = 0.5, level = 1, size = 44 }) {
   return (
     <svg width={size} height={size} style={{ flexShrink: 0 }}>
       <rect x={0} y={0} width={size} height={size} rx={4} fill="var(--bg-card)" />
-      <line x1={size/2} y1={2} x2={size/2} y2={size-2} stroke="var(--text-tertiary)" strokeWidth={1}/>
-      <line x1={2} y1={size/2} x2={size-2} y2={size/2} stroke="var(--text-tertiary)" strokeWidth={1}/>
+      <line x1={size/2} y1={2} x2={size/2} y2={size-2} stroke="var(--border)" strokeWidth={0.8}/>
+      <line x1={2} y1={size/2} x2={size-2} y2={size/2} stroke="var(--border)" strokeWidth={0.8}/>
       <circle cx={x} cy={y} r={4.5} fill={dotColor}/>
     </svg>
   );
 }
 
-function StrengthBar({ value = 0 }) {
+function StrengthBar({ value = 0, color = "var(--text-tertiary)" }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
       <div style={{ flex: 1, height: 1, background: "var(--border)", borderRadius: 99 }}>
-        <div style={{ width: `${(value*100).toFixed(0)}%`, height: "100%", background: "var(--text-tertiary)", borderRadius: 99, transition: "width 0.4s" }}/>
+        <div style={{ width: `${(value*100).toFixed(0)}%`, height: "100%", background: color, borderRadius: 99, transition: "width 0.4s" }}/>
       </div>
       <span style={{ fontSize: 10, color: "var(--text-tertiary)", minWidth: 28, textAlign: "right" }}>{(value*100).toFixed(0)}%</span>
     </div>
@@ -354,7 +354,7 @@ function MemoryCard({ mem, onEdit, onDelete }) {
         </div>
       </div>
 
-      <StrengthBar value={mem.strength ?? 0}/>
+      <StrengthBar value={mem.strength ?? 0} color={LEVEL_META[mem.level]?.color || "#FFEEEE"}/>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)" }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
