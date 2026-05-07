@@ -59,12 +59,14 @@ const ICONS = {
 
 const TABS = [
   { key: "memory", label: "涟漪" },
-  { key: "diary", label: "溯洄" },
+  { key: "diary", label: "潮汐" },
   { key: "milestones", label: "逢春" },
   { key: "board", label: "回音" },
   { key: "chat", label: "花信风" },
   { key: "console", label: "控制台" },
 ];
+
+const PANEL_NAME = Object.fromEntries(TABS.map(t => [t.key, t.label]));
 
 const TODO_STATUSES = ["全部", "待办", "完成"];
 const TODO_STATUS_COLORS = { 待办: "#e8b86d", 完成: "#8aab9e" };
@@ -502,23 +504,15 @@ function DiaryPanel() {
   const reload = () => load(search);
 
   return (
-    <div style={{ paddingTop: 90 /* 给固定顶部让位 */ }}>
-      <div style={{
-        position: "fixed",
-        top: "env(safe-area-inset-top, 0px)", left: 0, right: 0,
-        zIndex: 20,
-        background: "var(--bg-page)",
-        padding: "10px 16px",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 篇</p>
-          <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
-            <button onClick={() => setDrawer({ mode: "create", entry: {} })} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 写日记</button>
-            <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-secondary)" }}>{loading ? "…" : "刷新"}</button>
-          </div>
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {items.length} 篇</p>
+        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
+          <button onClick={() => setDrawer({ mode: "create", entry: {} })} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 写日记</button>
+          <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
         </div>
-        <input placeholder="搜索标题或内容…" value={search} onChange={e => { setSearch(e.target.value); clearTimeout(timer.current); timer.current = setTimeout(() => load(e.target.value), 400); }} style={{ ...inputStyle, borderRadius: 99, padding: "5px 14px", fontSize: 12, width: "100%" }}/>
       </div>
+      <input placeholder="搜索标题或内容…" value={search} onChange={e => { setSearch(e.target.value); clearTimeout(timer.current); timer.current = setTimeout(() => load(e.target.value), 400); }} style={{ ...inputStyle, borderRadius: 99, padding: "5px 14px", fontSize: 12, width: "100%", marginBottom: 16 }}/>
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
@@ -601,19 +595,12 @@ function MilestonesPanel() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div style={{ paddingTop: 56 /* 给固定顶部让位 */ }}>
-      <div style={{
-        position: "fixed",
-        top: "env(safe-area-inset-top, 0px)", left: 0, right: 0,
-        zIndex: 20,
-        background: "var(--bg-page)",
-        padding: "12px 16px",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-      }}>
-        <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 个</p>
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {items.length} 个</p>
         <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
           <button onClick={() => setDrawer({ mode: "create", entry: {} })} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 添加</button>
-          <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-secondary)" }}>{loading ? "…" : "刷新"}</button>
+          <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
         </div>
       </div>
 
@@ -873,20 +860,15 @@ function BoardPanel() {
 
   const filterBtn = (active) => ({
     background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13,
-    color: active ? "var(--text-primary)" : "var(--text-secondary)",
+    color: active ? "var(--text-primary)" : "var(--text-tertiary)",
     fontWeight: active ? 600 : 400,
   });
 
   return (
-    <div style={{ paddingTop: 52, paddingBottom: 70 /* 给固定的顶部筛选 + 底部输入栏让位 */ }}>
+    <div style={{ paddingBottom: 70 /* 给固定底部输入栏让位 */ }}>
       <div style={{
-        position: "fixed",
-        top: "env(safe-area-inset-top, 0px)", left: 0, right: 0,
-        zIndex: 20,
-        background: "var(--bg-page)",
         display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center",
-        padding: "12px 16px",
-        borderBottom: "1px solid var(--border)",
+        marginBottom: 14,
       }}>
         {BOARD_CATS.map(c => <button key={c} style={filterBtn(catFilter===c)} onClick={() => setCatFilter(c)}>{c}</button>)}
         <button style={filterBtn(onlyUnread)} onClick={() => setOnlyUnread(!onlyUnread)}>仅未读</button>
@@ -909,7 +891,7 @@ function BoardPanel() {
 
       <div style={{
         position: "fixed",
-        bottom: "calc(50px + env(safe-area-inset-bottom, 20px))",
+        bottom: "calc(8px + env(safe-area-inset-bottom, 0px))",
         left: 0, right: 0,
         zIndex: 20,
         background: "transparent",
@@ -1402,15 +1384,10 @@ function ConsolePanel() {
     letterSpacing: "0.05em",
   });
   return (
-    <div style={{ paddingTop: 52 /* 给固定的 sub-tab 让位 */ }}>
+    <div>
       <div style={{
-        position: "fixed",
-        top: "env(safe-area-inset-top, 0px)", left: 0, right: 0,
-        zIndex: 20,
-        background: "var(--bg-page)",
         display: "flex", flexWrap: "wrap", gap: 22, alignItems: "center",
-        padding: "12px 16px",
-        borderBottom: "1px solid var(--border)",
+        marginBottom: 16,
       }}>
         {subTabs.map(t => <button key={t.key} style={tabBtn(sub === t.key)} onClick={() => setSub(t.key)}>{t.label}</button>)}
       </div>
@@ -1464,8 +1441,60 @@ function PasswordGate({ children }) {
 // ════════════════════════════════════════════════════════════
 //  主应用
 // ════════════════════════════════════════════════════════════
+function HomePanel({ onPick }) {
+  const cards = [
+    { key: "memory", icon: "🫧", name: "涟漪", sub: "记忆的海", span: 1 },
+    { key: "diary", icon: "🗻", name: "潮汐", sub: "日常笔记", span: 1 },
+    { key: "chat", icon: "🌙", name: "花信风", sub: "聊天", span: 2 },
+    { key: "milestones", icon: "🌱", name: "逢春", sub: "时间轴", span: 1 },
+    { key: "board", icon: "🎧", name: "回音", sub: "留言板", span: 1 },
+    { key: "console", icon: "🖤", name: "控制台", sub: "工具箱", span: 2 },
+  ];
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "calc(28px + env(safe-area-inset-top, 0px)) 16px 28px" }}>
+      <div style={{ maxWidth: 860, margin: "0 auto" }}>
+        <div style={{ marginBottom: 28, fontSize: 14, color: "var(--text-tertiary)", letterSpacing: "0.3em", textAlign: "center", fontWeight: 500 }}>澄</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          {cards.map(c => (
+            <button key={c.key} onClick={() => onPick(c.key)} style={{
+              gridColumn: c.span === 2 ? "1 / -1" : "auto",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: 14,
+              padding: "20px 22px 22px",
+              display: "flex", flexDirection: "column",
+              textAlign: "left",
+              cursor: "pointer", fontFamily: "inherit",
+              minHeight: c.span === 2 ? 130 : 160,
+            }}>
+              <span style={{ fontSize: 26, marginBottom: c.span === 2 ? 24 : 32 }}>{c.icon}</span>
+              <div style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.18em", fontWeight: 500, marginBottom: 4 }}>{c.name}</div>
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontStyle: "italic", letterSpacing: "0.05em" }}>{c.sub}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PanelHeader({ name, onBack }) {
+  return (
+    <div style={{
+      flexShrink: 0,
+      display: "flex", alignItems: "center", gap: 14,
+      padding: "calc(12px + env(safe-area-inset-top, 0px)) 16px 12px",
+      background: "var(--bg-page)",
+      borderBottom: "1px solid var(--border)",
+    }}>
+      <button onClick={onBack} aria-label="返回" style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 20, cursor: "pointer", padding: 0, lineHeight: 1, width: 24, fontFamily: "inherit" }}>←</button>
+      <span style={{ fontSize: 14, color: "var(--text-primary)", letterSpacing: "0.15em" }}>{name}</span>
+    </div>
+  );
+}
+
 export default function App() {
-  const [tab, setTab] = useState("memory");
+  const [tab, setTab] = useState("home");
 
   // 启动时把 data-theme 写到 <html>，让 :root[data-theme="…"] 的 token 立即生效
   useEffect(() => {
@@ -1531,46 +1560,47 @@ export default function App() {
         display: "flex", flexDirection: "column",
         background: "var(--bg-page)", color: "var(--text-primary)",
         overflow: "hidden",
+        position: "relative",
       }}>
-        {/* main 用 relative 锚定 chat 容器；非 chat 时 block + overflow auto 让内容滚 */}
-        <main style={{
-          position: "relative",
-          flex: 1, minHeight: 0,
-          overflowY: tab === "chat" ? "hidden" : "auto",
-          overscrollBehavior: "contain",
-          WebkitOverflowScrolling: "touch",
-        }}>
-          {/* chat：absolute 填满 main，hide/show 不依赖 flex 重算 */}
-          <div style={{
-            position: "absolute", inset: 0,
-            display: tab === "chat" ? "flex" : "none",
-            flexDirection: "column",
-          }}>
-            <ChatPanel onBack={() => setTab("memory")}/>
-          </div>
-          {/* 非 chat：普通块流，随 main 滚动 */}
-          <div style={{
-            display: tab === "chat" ? "none" : "block",
-            paddingTop: "env(safe-area-inset-top)",
-          }}>
-            <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 22px 28px 16px", width: "100%" }}>
-              <div style={{ display: tab === "memory" ? "block" : "none" }}><MemoryPanel/></div>
-              <div style={{ display: tab === "diary" ? "block" : "none" }}><DiaryPanel/></div>
-              <div style={{ display: tab === "milestones" ? "block" : "none" }}><MilestonesPanel/></div>
-              <div style={{ display: tab === "board" ? "block" : "none" }}><BoardPanel/></div>
-              <div style={{ display: tab === "console" ? "block" : "none" }}><ConsolePanel/></div>
+        {/* 首页 */}
+        <div style={{ display: tab === "home" ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column" }}>
+          <HomePanel onPick={setTab}/>
+        </div>
+
+        {/* 各板块：统一 PanelHeader + 滚动内容 */}
+        {[
+          { key: "memory", Comp: MemoryPanel },
+          { key: "diary", Comp: DiaryPanel },
+          { key: "milestones", Comp: MilestonesPanel },
+          { key: "board", Comp: BoardPanel },
+          { key: "console", Comp: ConsolePanel },
+        ].map(({ key, Comp }) => (
+          <div key={key} style={{ display: tab === key ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column" }}>
+            <PanelHeader name={PANEL_NAME[key]} onBack={() => setTab("home")}/>
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}>
+              <div style={{ maxWidth: 860, margin: "0 auto", padding: "16px 16px 24px", width: "100%" }}>
+                <Comp/>
+              </div>
             </div>
           </div>
-        </main>
+        ))}
 
-        {tab !== "chat" && <BottomTabBar tab={tab} setTab={setTab}/>}
+        {/* 花信风：自管全屏布局 */}
+        <div style={{
+          position: "absolute", inset: 0,
+          display: tab === "chat" ? "flex" : "none",
+          flexDirection: "column",
+        }}>
+          <ChatPanel onBack={() => setTab("home")}/>
+        </div>
       </div>
       </PasswordGate>
     </>
   );
 }
 
-function BottomTabBar({ tab, setTab }) {
+// _BottomTabBar 已退役（保留以防引用，未挂载）
+function _UnusedBottomTabBar({ tab, setTab }) {
   return (
     <div style={{
       flexShrink: 0,
