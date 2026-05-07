@@ -872,12 +872,7 @@ export default function ChatPanel({ onBack }) {
         };
         setIsGenerating(true);
         setStreamSnap({ thinking: "", delta: "", tools: [], bubbles: null });
-        // 1s 没有可见内容则显示 typing
-        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-        typingTimerRef.current = setTimeout(() => {
-          setShowTyping(true);
-          typingTimerRef.current = null;
-        }, TYPING_DELAY_MS);
+        setShowTyping(true);
         break;
       case "thinking": {
         if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
