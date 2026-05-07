@@ -367,6 +367,18 @@ const CSS = `
   line-height: 1.45; margin-top: 4px; max-height: 200px; overflow-y: auto;
 }
 .cp-thinking-block.open .cp-thinking-content { display: block; }
+@keyframes cp-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.cp-thinking-toggle.thinking {
+  background: linear-gradient(90deg, var(--text-tertiary) 25%, var(--text-primary) 50%, var(--text-tertiary) 75%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: cp-shimmer 1.8s linear infinite;
+}
 
 /* TOOL CALLS — card-style，类似 Claude app */
 .cp-tool-block {
@@ -1665,11 +1677,11 @@ function MessageBubble({ item, profile, onCopy, onOpenImage, onEdit, onRegen }) 
   );
 }
 
-function ThinkingBlock({ text }) {
+function ThinkingBlock({ text, isThinking }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={"cp-thinking-block" + (open ? " open" : "")}>
-      <button className="cp-thinking-toggle" onClick={() => setOpen(o => !o)}>
+      <button className={"cp-thinking-toggle" + (isThinking ? " thinking" : "")} onClick={() => setOpen(o => !o)}>
         思绪
       </button>
       <div className="cp-thinking-content">{text}</div>
@@ -1783,7 +1795,7 @@ function StreamingBubble({ snap, profile, showTyping }) {
           {profile.botImg ? <img src={profile.botImg} alt="" /> : profile.botEmoji}
         </div>
         <div className="cp-msg-body">
-          {snap.thinking && <ThinkingBlock text={snap.thinking} />}
+          {snap.thinking && <ThinkingBlock text={snap.thinking} isThinking={true} />}
           {snap.tools && snap.tools.length > 0 && <ToolCallsBlock calls={snap.tools} />}
           {bubbles.length > 0 ? (
             <div className="cp-msg-bubble assistant">
