@@ -128,16 +128,15 @@ function AuthorBadge({ author }) {
   return <Badge color={c + "22"} text={c}>{author}</Badge>;
 }
 
-function EmotionDot({ valence = 0.5, arousal = 0.5, level = 1, size = 44 }) {
+function EmotionDot({ valence = 0.5, arousal = 0.5, size = 44 }) {
   const x = valence * (size - 8) + 4;
   const y = (1 - arousal) * (size - 8) + 4;
-  const dotColor = LEVEL_META[level]?.color || "#FFEEEE";
   return (
     <svg width={size} height={size} style={{ flexShrink: 0 }}>
       <rect x={0} y={0} width={size} height={size} rx={4} fill="var(--bg-card)" />
       <line x1={size/2} y1={2} x2={size/2} y2={size-2} stroke="var(--border)" strokeWidth={0.8}/>
       <line x1={2} y1={size/2} x2={size-2} y2={size/2} stroke="var(--border)" strokeWidth={0.8}/>
-      <circle cx={x} cy={y} r={4.5} fill={dotColor}/>
+      <circle cx={x} cy={y} r={4.5} fill="var(--text-secondary)"/>
     </svg>
   );
 }
@@ -334,7 +333,7 @@ function MemoryCard({ mem, onEdit, onDelete }) {
         }}
       >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-        <EmotionDot valence={mem.valence} arousal={mem.arousal} level={mem.level}/>
+        <EmotionDot valence={mem.valence} arousal={mem.arousal}/>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{mem.summary || mem.content}</p>
           {sheet && (
@@ -359,7 +358,7 @@ function MemoryCard({ mem, onEdit, onDelete }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)" }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
           <span style={{ width: 6, height: 6, borderRadius: 99, background: meta.color, display: "inline-block" }}/>
-          <span style={{ color: meta.color, letterSpacing: "0.05em" }}>{meta.label}</span>
+          <span style={{ color: AUTHOR_COLORS["小茉莉"], letterSpacing: "0.05em" }}>{meta.label}</span>
         </span>
         <span style={{ color: "var(--text-tertiary)" }}>·</span>
         <span style={{ color: "var(--text-tertiary)" }}>{mem.author}</span>
