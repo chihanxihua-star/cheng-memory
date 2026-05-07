@@ -914,11 +914,14 @@ function DiaryFullForm({ entry, isNew, onCancel, onSave }) {
 //  逢春板块：心情日历 + 纪念日时间轴
 // ════════════════════════════════════════════════════════════
 const MOODS = [
-  { key: "嘻嘻",   color: "#BDD8B8" }, // 浅绿
-  { key: "还行",   color: "#BCCDDB" }, // 浅蓝
-  { key: "不嘻嘻", color: "#E8C8CE" }, // 浅粉
-  { key: "上头了", color: "#D8A8A8" }, // 浅红
-  { key: "淡淡的", color: "#E5DAB0" }, // 浅黄
+  { key: "开心", color: "#ECB884" }, // 浅橙
+  { key: "兴奋", color: "#E8CE6A" }, // 浅黄
+  { key: "心动", color: "#E8A0B3" }, // 浅粉
+  { key: "平静", color: "#ABC59C" }, // 浅绿
+  { key: "伤心", color: "#A8CCDF" }, // 浅蓝
+  { key: "烦躁", color: "#ABB5CE" }, // 蓝紫
+  { key: "心累", color: "#B2A59B" }, // 灰棕
+  { key: "生气", color: "#D87878" }, // 浅红
 ];
 const MOOD_COLOR = Object.fromEntries(MOODS.map(m => [m.key, m.color]));
 const MOOD_AUTHORS = [
@@ -1032,7 +1035,7 @@ function MoodInlineForm({ date, initialAuthor, existing, onClose, onSaved }) {
 
       <div>
         <label style={labelStyle}>心情</label>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
           {MOODS.map(m => {
             const active = mood === m.key;
             return (
