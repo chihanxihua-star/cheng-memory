@@ -66,10 +66,9 @@ const AUTHOR_COLORS = {
   小茉莉: "#d89fa8", default: "#8aab9e",
 };
 
-const BOARD_CATS = ["全部", "紧急", "需求", "闲聊", "回复", "通知"];
-const BOARD_CAT_COLORS = {
-  紧急: "#e07070", 需求: "#7fb3c8", 闲聊: "#8aab9e", 回复: "#a89fd8", 通知: "#e8b86d",
-};
+const BOARD_CATS = ["全部", "紧急", "闲聊", "其他"];
+const BOARD_CAT_COLORS = { 紧急: "#e07070", 闲聊: "#8aab9e", 其他: "#7fb3c8" };
+const BOARD_REACTIONS = ["❤️", "👍", "😂", "🥺", "✨"];
 
 // ── API 层 ──────────────────────────────────────────────
 function hdr() {
@@ -541,8 +540,7 @@ function MilestonesPanel() {
 // ════════════════════════════════════════════════════════════
 //  留言板板块
 // ════════════════════════════════════════════════════════════
-function BoardDrawer({ entry, isNew, replyTo, onSave, onClose }) {
-  // 作者固定为「小茉莉」，不再提供选择
+function BoardDrawer({ entry, isNew, onSave, onClose }) {
   const AUTHOR = "小茉莉";
   const [f, setF] = useState({
     content: entry.content || "",
@@ -550,68 +548,100 @@ function BoardDrawer({ entry, isNew, replyTo, onSave, onClose }) {
   });
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
   return (
-    <Drawer title={isNew ? (replyTo ? "回复留言" : "写留言") : "编辑留言"} onClose={onClose} footer={<>
+    <Drawer title={isNew ? "写留言" : "编辑留言"} onClose={onClose} footer={<>
       <ActionBtn onClick={onClose}>取消</ActionBtn>
-      <ActionBtn accent color="#a89fd8" disabled={!f.content.trim()} onClick={() => onSave({ content: f.content, author: AUTHOR, category: replyTo ? "回复" : f.category, reply_to: replyTo || null })} flex={2}>{isNew ? "发送" : "保存"}</ActionBtn>
+      <ActionBtn accent color="#a89fd8" disabled={!f.content.trim()} onClick={() => onSave({ content: f.content, author: AUTHOR, category: f.category })} flex={2}>{isNew ? "发送" : "保存"}</ActionBtn>
     </>}>
       <div><label style={labelStyle}>内容</label><textarea rows={5} style={inputStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="留言…"/></div>
-      {!replyTo && (
-        <div><label style={labelStyle}>分类</label>
-          <select style={inputStyle} value={f.category} onChange={e => set("category", e.target.value)}>
-            {["紧急","需求","闲聊","通知"].map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-      )}
+      <div><label style={labelStyle}>分类</label>
+        <select style={inputStyle} value={f.category} onChange={e => set("category", e.target.value)}>
+          {["紧急","闲聊","其他"].map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
     </Drawer>
   );
 }
 
-function BoardMessage({ msg, replies, onEdit, onDelete, onReply, onToggleRead, onToggleResolved }) {
+function BoardMessage({ msg, onEdit, onDelete, onToggleRead, onToggleResolved, onAddReaction }) {
   const [cd, setCd] = useState(false);
-  const catColor = BOARD_CAT_COLORS[msg.category] || "#8aab9e";
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const isMe = msg.author === "小茉莉";
   const authorColor = AUTHOR_COLORS[msg.author] || AUTHOR_COLORS.default;
-  const bgColor = authorColor + "08";
-  const borderColor = authorColor + "22";
+  const catColor = BOARD_CAT_COLORS[msg.category] || "#8aab9e";
+  const reactions = Array.isArray(msg.reactions) ? msg.reactions : [];
+  const grouped = reactions.reduce((acc, r) => {
+    if (!r || !r.emoji) return acc;
+    (acc[r.emoji] = acc[r.emoji] || []).push(r.from);
+    return acc;
+  }, {});
+  const linkBtn = { background: "none", border: "none", color: "var(--text-secondary)", fontSize: 10, padding: "0 4px", cursor: "pointer", fontFamily: "inherit" };
 
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8, opacity: msg.is_resolved ? 0.6 : 1 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <AuthorBadge author={msg.author}/>
-          <Badge color={catColor+"22"} text={catColor}>{msg.category}</Badge>
-          <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-secondary)" }}>{formatDateTime(msg.created_at)}</span>
+    <div style={{
+      display: "flex", flexDirection: "column",
+      alignItems: isMe ? "flex-end" : "flex-start",
+      marginBottom: 14, opacity: msg.is_resolved ? 0.55 : 1,
+    }}>
+      <div style={{
+        maxWidth: "82%",
+        background: isMe ? authorColor + "1f" : "var(--bg-card)",
+        border: `1px solid ${authorColor}33`,
+        borderRadius: 14,
+        padding: "8px 12px 10px",
+        display: "flex", flexDirection: "column", gap: 5,
+      }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end", fontSize: 10, color: "var(--text-secondary)" }}>
+          <span style={{ color: authorColor, fontWeight: 500 }}>{msg.author}</span>
+          <Badge color={catColor + "22"} text={catColor}>{msg.category}</Badge>
         </div>
-        <p style={{ margin: 0, fontSize: 13, color: "var(--text-primary)", lineHeight: 1.6 }}>{msg.content}</p>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-          {msg.is_resolved && <Badge color="#8aab9e22" text="#8aab9e">✓ 已处理</Badge>}
-          {msg.is_read && !msg.is_resolved && <Badge color="#ffffff11" text="var(--text-secondary)">已读</Badge>}
-          <span style={{ flex: 1 }}/>
-          <ActionBtn onClick={() => onReply(msg.id)}>回复</ActionBtn>
-          <ActionBtn onClick={() => onToggleRead(msg)}>{msg.is_read ? "标为未读" : "标为已读"}</ActionBtn>
-          <ActionBtn onClick={() => onToggleResolved(msg)}>{msg.is_resolved ? "重新打开" : "✓ 处理"}</ActionBtn>
-          <ActionBtn onClick={() => onEdit(msg)}>编辑</ActionBtn>
-          {cd ? <ActionBtn accent color="#c0392b" onClick={() => { onDelete(msg.id); setCd(false); }}>确认</ActionBtn> : <ActionBtn onClick={() => setCd(true)}>删除</ActionBtn>}
-        </div>
+        <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-primary)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{msg.content}</p>
+        {(Object.keys(grouped).length > 0 || !isMe) && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", marginTop: 2 }}>
+            {Object.entries(grouped).map(([emoji, froms]) => {
+              const mine = froms.includes("小茉莉");
+              return (
+                <span key={emoji}
+                  onClick={!isMe ? () => onAddReaction(msg, emoji) : undefined}
+                  style={{
+                    fontSize: 12, background: mine ? authorColor + "22" : "var(--bg-card)",
+                    border: `1px solid ${mine ? authorColor + "44" : "var(--border)"}`,
+                    borderRadius: 99, padding: "1px 6px",
+                    display: "inline-flex", alignItems: "center", gap: 3,
+                    cursor: !isMe ? "pointer" : "default",
+                  }}>
+                  {emoji}{froms.length > 1 && <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>{froms.length}</span>}
+                </span>
+              );
+            })}
+            {!isMe && (pickerOpen ? (
+              <span style={{ display: "inline-flex", gap: 3 }}>
+                {BOARD_REACTIONS.map(e => (
+                  <button key={e} onClick={() => { onAddReaction(msg, e); setPickerOpen(false); }} style={{
+                    background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 99,
+                    padding: "1px 6px", cursor: "pointer", fontSize: 14, fontFamily: "inherit",
+                  }}>{e}</button>
+                ))}
+                <button onClick={() => setPickerOpen(false)} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 13, cursor: "pointer", padding: "0 4px" }}>×</button>
+              </span>
+            ) : (
+              <button onClick={() => setPickerOpen(true)} style={{
+                background: "none", border: "1px dashed var(--border)", borderRadius: 99,
+                padding: "1px 8px", fontSize: 11, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "inherit",
+              }}>+</button>
+            ))}
+          </div>
+        )}
       </div>
-
-      {/* 回复列表 */}
-      {replies.length > 0 && (
-        <div style={{ marginLeft: 20, marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
-          {replies.map(r => {
-            const rc = AUTHOR_COLORS[r.author] || AUTHOR_COLORS.default;
-            return (
-              <div key={r.id} style={{ background: rc+"08", border: `1px solid ${rc}22`, borderRadius: 8, padding: "8px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <AuthorBadge author={r.author}/>
-                  <Badge color="#a89fd822" text="#a89fd8">回复</Badge>
-                  <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-secondary)" }}>{formatDateTime(r.created_at)}</span>
-                </div>
-                <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>{r.content}</p>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <div style={{ display: "flex", gap: 4, marginTop: 4, alignItems: "center" }}>
+        <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>{formatDateTime(msg.created_at)}</span>
+        {msg.is_resolved && <span style={{ fontSize: 10, color: "#8aab9e" }}>· ✓</span>}
+        <button onClick={() => onToggleRead(msg)} style={linkBtn}>{msg.is_read ? "未读" : "已读"}</button>
+        <button onClick={() => onToggleResolved(msg)} style={linkBtn}>{msg.is_resolved ? "重开" : "处理"}</button>
+        {isMe && <button onClick={() => onEdit(msg)} style={linkBtn}>编辑</button>}
+        {isMe && (cd
+          ? <button onClick={() => { onDelete(msg.id); setCd(false); }} style={{ ...linkBtn, color: "#c0392b" }}>确认</button>
+          : <button onClick={() => setCd(true)} style={linkBtn}>删除</button>)}
+      </div>
     </div>
   );
 }
@@ -626,27 +656,32 @@ function BoardPanel() {
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setItems(await sbGet("board_cheng", "&order=created_at.desc")); }
+    try { setItems(await sbGet("board_cheng", "&order=created_at.asc")); }
     catch(e) { setError(e.message); } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const topLevel = items.filter(m => !m.reply_to);
-  const repliesOf = id => items.filter(m => m.reply_to === id).sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
-
-  let filtered = topLevel;
+  let filtered = items;
   if (catFilter !== "全部") filtered = filtered.filter(m => m.category === catFilter);
   if (onlyUnread) filtered = filtered.filter(m => !m.is_read);
 
-  const unreadCount = topLevel.filter(m => !m.is_read).length;
+  const unreadCount = items.filter(m => !m.is_read).length;
+
+  const addReaction = async (msg, emoji) => {
+    const cur = Array.isArray(msg.reactions) ? msg.reactions : [];
+    const idx = cur.findIndex(r => r && r.from === "小茉莉" && r.emoji === emoji);
+    const next = idx >= 0 ? cur.filter((_, i) => i !== idx) : [...cur, { emoji, from: "小茉莉" }];
+    try { await sbPatch("board_cheng", msg.id, { reactions: next }); load(); }
+    catch(e) { setError(e.message); }
+  };
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {topLevel.length} 条 · 未读 {unreadCount}</p>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 条 · 未读 {unreadCount}</p>
         <div style={{ display: "flex", gap: 8 }}>
-          <ActionBtn accent color="#a89fd8" onClick={() => setDrawer({ mode: "create", entry: {}, replyTo: null })}>+ 留言</ActionBtn>
+          <ActionBtn accent color="#a89fd8" onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 留言</ActionBtn>
           <ActionBtn onClick={load}>{loading ? "…" : "刷新"}</ActionBtn>
         </div>
       </div>
@@ -661,16 +696,16 @@ function BoardPanel() {
       {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
         : filtered.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有留言</div>
         : filtered.map(m => (
-            <BoardMessage key={m.id} msg={m} replies={repliesOf(m.id)}
-              onEdit={msg => setDrawer({ mode: "edit", entry: msg, replyTo: null })}
+            <BoardMessage key={m.id} msg={m}
+              onEdit={msg => setDrawer({ mode: "edit", entry: msg })}
               onDelete={async id => { try { await sbDelete("board_cheng", id); load(); } catch(e) { setError(e.message); } }}
-              onReply={id => setDrawer({ mode: "create", entry: {}, replyTo: id })}
               onToggleRead={async msg => { try { await sbPatch("board_cheng", msg.id, { is_read: !msg.is_read }); load(); } catch(e) { setError(e.message); } }}
               onToggleResolved={async msg => { try { await sbPatch("board_cheng", msg.id, { is_resolved: !msg.is_resolved }); load(); } catch(e) { setError(e.message); } }}
+              onAddReaction={addReaction}
             />
           ))}
 
-      {drawer && <BoardDrawer entry={drawer.entry} isNew={drawer.mode==="create"} replyTo={drawer.replyTo} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("board_cheng", patch); else await sbPatch("board_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
+      {drawer && <BoardDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("board_cheng", patch); else await sbPatch("board_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
     </div>
   );
 }
