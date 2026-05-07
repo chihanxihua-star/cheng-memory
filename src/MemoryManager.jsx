@@ -809,7 +809,13 @@ function BoardPanel() {
 
   return (
     <div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 18, marginBottom: 18, alignItems: "center" }}>
+      <div style={{
+        position: "sticky", top: 0, zIndex: 5,
+        background: "var(--bg-page)",
+        display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center",
+        padding: "10px 0 12px",
+        margin: "-20px 0 0",
+      }}>
         {BOARD_CATS.map(c => <button key={c} style={filterBtn(catFilter===c)} onClick={() => setCatFilter(c)}>{c}</button>)}
         <button style={filterBtn(onlyUnread)} onClick={() => setOnlyUnread(!onlyUnread)}>仅未读</button>
         <button style={filterBtn(false)} onClick={load}>{loading ? "…" : "刷新"}</button>
@@ -829,6 +835,12 @@ function BoardPanel() {
             />
           ))}
 
+      <div style={{
+        position: "sticky", bottom: 0, zIndex: 5,
+        background: "var(--bg-page)",
+        padding: "8px 0 calc(12px + env(safe-area-inset-bottom, 0px))",
+        margin: "0 0 -28px",
+      }}>
       <BoardCompose
         onOpenDrawer={() => setDrawer({ mode: "create", entry: {} })}
         onSend={async patch => {
@@ -850,6 +862,7 @@ function BoardPanel() {
           }
         }}
       />
+      </div>
 
       {drawer && <BoardDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("board_cheng", patch); else await sbPatch("board_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
     </div>
