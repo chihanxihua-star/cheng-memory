@@ -49,6 +49,25 @@ export default function TerminalPanel({ onClose }) {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(containerRef.current);
+
+    // iOS 软键盘适配：把 xterm 的 helper textarea 撑大、透明、覆盖在终端上方
+    // 默认它是 0 尺寸 -> Safari 不弹键盘。撑大后 tap 会被它接住、键盘弹起、按键事件进 xterm
+    const helper = containerRef.current.querySelector(".xterm-helper-textarea");
+    if (helper) {
+      helper.style.position = "absolute";
+      helper.style.top = "0";
+      helper.style.left = "0";
+      helper.style.width = "100%";
+      helper.style.height = "100%";
+      helper.style.opacity = "0";
+      helper.style.zIndex = "10";
+      helper.style.fontSize = "16px"; // ≥16px 才能阻止 iOS 自动放大
+      helper.setAttribute("autocapitalize", "off");
+      helper.setAttribute("autocomplete", "off");
+      helper.setAttribute("autocorrect", "off");
+      helper.setAttribute("spellcheck", "false");
+    }
+
     requestAnimationFrame(() => {
       try { fit.fit(); } catch {}
       try { term.focus(); } catch {}
