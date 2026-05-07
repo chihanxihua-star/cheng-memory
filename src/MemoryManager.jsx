@@ -432,9 +432,16 @@ function MemoryPanel() {
         <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
       </div>
 
-      {/* 搜索条：横线 */}
-      <div style={{ marginBottom: 14 }}>
-        <input placeholder="搜索…" value={filters.search} onChange={e => filterChange("search", e.target.value)} style={{ ...underlineStyle, fontSize: 13, padding: "6px 0" }}/>
+      {/* 搜索条：横线 + 清空 */}
+      <div style={{ marginBottom: 14, position: "relative" }}>
+        <input placeholder="搜索…" value={filters.search} onChange={e => filterChange("search", e.target.value)} style={{ ...underlineStyle, fontSize: 13, padding: "6px 24px 6px 0" }}/>
+        {filters.search && (
+          <button onClick={() => filterChange("search", "")} aria-label="清空" style={{
+            position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)",
+            background: "none", border: "none", color: "var(--text-tertiary)",
+            fontSize: 18, lineHeight: 1, cursor: "pointer", padding: "4px 6px", fontFamily: "inherit",
+          }}>×</button>
+        )}
       </div>
 
       {/* 标签栏 — 无边框，仅文字 + 下划线（active） */}
@@ -622,19 +629,19 @@ function MemoryFullForm({ entry, isNew, onCancel, onSave }) {
 
           <div>
             <label style={labelStyle}>情绪 — {Number(f.valence).toFixed(2)}</label>
-            <input type="range" min={0} max={1} step={0.01} className="cm-slider" value={f.valence} onChange={e => set("valence", e.target.value)}/>
+            <input type="range" min={0} max={1} step={0.01} className="cm-slider" style={{ "--cm-slider-color": LEVEL_META[f.level]?.color || "#FAD9E6" }} value={f.valence} onChange={e => set("valence", e.target.value)}/>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-tertiary)" }}><span>不嘻嘻</span><span>稳定</span><span>嘻嘻</span></div>
           </div>
 
           <div>
             <label style={labelStyle}>情绪浓度 — {Number(f.arousal).toFixed(2)}</label>
-            <input type="range" min={0} max={1} step={0.01} className="cm-slider" value={f.arousal} onChange={e => set("arousal", e.target.value)}/>
+            <input type="range" min={0} max={1} step={0.01} className="cm-slider" style={{ "--cm-slider-color": LEVEL_META[f.level]?.color || "#FAD9E6" }} value={f.arousal} onChange={e => set("arousal", e.target.value)}/>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-tertiary)" }}><span>淡淡的</span><span>一般</span><span>上头了</span></div>
           </div>
 
           <div>
             <label style={labelStyle}>强度 — {Number(f.strength).toFixed(2)}</label>
-            <input type="range" min={0} max={1} step={0.01} className="cm-slider" value={f.strength} onChange={e => set("strength", e.target.value)}/>
+            <input type="range" min={0} max={1} step={0.01} className="cm-slider" style={{ "--cm-slider-color": LEVEL_META[f.level]?.color || "#FAD9E6" }} value={f.strength} onChange={e => set("strength", e.target.value)}/>
           </div>
 
           <div><label style={labelStyle}>标签（逗号分隔）</label><input style={underlineStyle} value={f.tags} onChange={e => set("tags", e.target.value)} placeholder="起源, 调试"/></div>
@@ -1831,12 +1838,12 @@ export default function App() {
       input[type=range].cm-slider::-webkit-slider-thumb {
         -webkit-appearance: none; appearance: none;
         width: 14px; height: 14px; border-radius: 50%;
-        background: var(--text-primary); border: none; cursor: pointer;
+        background: var(--cm-slider-color, var(--text-primary)); border: none; cursor: pointer;
         margin-top: -7px;
       }
       input[type=range].cm-slider::-moz-range-thumb {
         width: 14px; height: 14px; border-radius: 50%;
-        background: var(--text-primary); border: none; cursor: pointer;
+        background: var(--cm-slider-color, var(--text-primary)); border: none; cursor: pointer;
       }
     `}</style>
   );
