@@ -1355,7 +1355,8 @@ function MilestoneItem({ milestone, side, onEdit, onDelete, onMoveUp, onMoveDown
   const [cd, setCd] = useState(false);
   const isLeft = side === "left";
   const align = isLeft ? "flex-start" : "flex-end";
-  const textAlign = isLeft ? "left" : "right";
+  // 文字朝中线靠拢：左侧 → 右对齐；右侧 → 左对齐
+  const textAlign = isLeft ? "right" : "left";
 
   return (
     <div style={{
@@ -1395,7 +1396,7 @@ function MilestoneItem({ milestone, side, onEdit, onDelete, onMoveUp, onMoveDown
         {(milestone.tags || []).length > 0 && (
           <div style={{
             display: "flex", flexWrap: "wrap", gap: 4,
-            justifyContent: isLeft ? "flex-start" : "flex-end",
+            justifyContent: isLeft ? "flex-end" : "flex-start",
             marginTop: 6,
           }}>
             {milestone.tags.map(t => (
@@ -1409,7 +1410,7 @@ function MilestoneItem({ milestone, side, onEdit, onDelete, onMoveUp, onMoveDown
         {open && (
           <div style={{
             display: "flex", gap: 14,
-            justifyContent: isLeft ? "flex-start" : "flex-end",
+            justifyContent: isLeft ? "flex-end" : "flex-start",
             marginTop: 8,
             alignItems: "center",
           }}>
@@ -1504,18 +1505,18 @@ function MilestonesTimelinePanel({ onBack }) {
           background: "none", border: "none", padding: 0, cursor: "pointer",
           fontSize: 11, letterSpacing: "0.2em", color: "var(--text-secondary)", fontFamily: "inherit",
         }}>← 日历</button>
-        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
-          <button onClick={openCreate} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 添加</button>
-          <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
-        </div>
+        <button onClick={openCreate} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 添加</button>
       </div>
 
-      {/* 顶部小标题（参考图的 italic 装饰） */}
-      <div style={{
+      {/* 顶部小标题（点击刷新） */}
+      <button onClick={load} title="刷新" style={{
+        display: "block", width: "100%",
+        background: "none", border: "none", padding: "2px 0",
         textAlign: "center", marginBottom: 22,
         fontSize: 11, color: "var(--text-tertiary)",
         fontStyle: "italic", letterSpacing: "0.18em",
-      }}>Sun &amp; Jasmin · {items.length} tracce</div>
+        cursor: "pointer", fontFamily: "inherit",
+      }}>{loading ? "正在拉取 …" : `Sun & Jasmin · ${items.length} tracce`}</button>
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
