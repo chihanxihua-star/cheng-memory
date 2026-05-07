@@ -753,38 +753,65 @@ function BoardMessage({ msg, onEdit, onDelete, onToggleRead, onToggleResolved, o
   );
 }
 
-function BoardCompose({ onSend, onOpenDrawer }) {
+function BoardCompose({ onSend }) {
   const [text, setText] = useState("");
+  const [category, setCategory] = useState("闲聊");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const catColor = BOARD_CAT_COLORS[category] || "#8aab9e";
   const send = () => {
     const v = text.trim();
     if (!v) return;
-    onSend({ content: v, author: "小茉莉", category: "闲聊" });
+    onSend({ content: v, author: "小茉莉", category });
     setText("");
   };
   return (
-    <div style={{
-      display: "flex", gap: 8, alignItems: "center",
-      marginTop: 16,
-      padding: "8px 14px",
-      background: "var(--bg-card)",
-      border: "1px solid var(--border)",
-      borderRadius: 24,
-    }}>
-      <button onClick={onOpenDrawer} style={{
-        background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)",
-        fontSize: 22, lineHeight: 1, padding: "0 4px", fontFamily: "inherit",
-      }}>+</button>
-      <input
-        value={text}
-        onChange={e => setText(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-        placeholder="说点什么…"
-        style={{
-          flex: 1, background: "transparent", border: "none", outline: "none",
-          fontSize: 14, color: "var(--text-primary)", fontFamily: "inherit",
-          padding: "4px 0",
-        }}
-      />
+    <div style={{ position: "relative" }}>
+      {pickerOpen && (
+        <div style={{
+          position: "absolute", bottom: "100%", left: 0, right: 0,
+          marginBottom: 8,
+          display: "flex", gap: 8, justifyContent: "center",
+        }}>
+          {["紧急", "闲聊", "其他"].map(c => {
+            const color = BOARD_CAT_COLORS[c];
+            const active = category === c;
+            return (
+              <button key={c} onClick={() => { setCategory(c); setPickerOpen(false); }} style={{
+                background: active ? color + "22" : "var(--bg-card)",
+                border: `1px solid ${active ? color + "66" : "var(--border)"}`,
+                color: active ? color : "var(--text-secondary)",
+                borderRadius: 99, padding: "4px 14px", fontSize: 12,
+                cursor: "pointer", fontFamily: "inherit",
+              }}>{c}</button>
+            );
+          })}
+        </div>
+      )}
+      <div style={{
+        display: "flex", gap: 8, alignItems: "center",
+        padding: "8px 14px",
+        background: "var(--bg-card)",
+        border: "1px solid var(--border)",
+        borderRadius: 24,
+      }}>
+        <button onClick={() => setPickerOpen(o => !o)} style={{
+          background: "none", border: "none", cursor: "pointer",
+          color: catColor,
+          fontSize: 22, lineHeight: 1, padding: "0 4px", fontFamily: "inherit",
+          transition: "color 0.2s",
+        }}>+</button>
+        <input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+          placeholder="说点什么…"
+          style={{
+            flex: 1, background: "transparent", border: "none", outline: "none",
+            fontSize: 14, color: "var(--text-primary)", fontFamily: "inherit",
+            padding: "4px 0",
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -828,7 +855,7 @@ function BoardPanel() {
   return (
     <div style={{ paddingBottom: 64 /* 给固定底部输入栏让位 */ }}>
       <div style={{
-        position: "sticky", top: 0, zIndex: 5,
+        position: "sticky", top: "env(safe-area-inset-top, 0px)", zIndex: 5,
         background: "var(--bg-page)",
         display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center",
         padding: "10px 0 12px",
@@ -859,9 +886,8 @@ function BoardPanel() {
         padding: "8px 16px 10px",
         pointerEvents: "none",
       }}>
-        <div style={{ maxWidth: 480, margin: "0 auto", pointerEvents: "auto" }}>
+        <div style={{ maxWidth: 380, margin: "0 auto", pointerEvents: "auto" }}>
       <BoardCompose
-        onOpenDrawer={() => setDrawer({ mode: "create", entry: {} })}
         onSend={async patch => {
           // 乐观插入：先在本地 items 末尾追一条临时消息，UI 立即响应
           const tempId = "tmp-" + Date.now();
@@ -1204,7 +1230,7 @@ function ConsolePanel() {
   return (
     <div>
       <div style={{
-        position: "sticky", top: 0, zIndex: 5,
+        position: "sticky", top: "env(safe-area-inset-top, 0px)", zIndex: 5,
         background: "var(--bg-page)",
         display: "flex", flexWrap: "wrap", gap: 22, alignItems: "center",
         padding: "10px 0 14px",
