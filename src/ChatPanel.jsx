@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
+import TerminalPanel from "./TerminalPanel";
 
 /* ════════════════════════════════════════════════════════════
    配置
@@ -1524,7 +1525,7 @@ export default function ChatPanel({ onBack }) {
       </div>
 
       {/* TERMINAL placeholder */}
-      {terminalOpen && <TerminalPlaceholder onClose={() => setTerminalOpen(false)} />}
+      {terminalOpen && <TerminalPanel onClose={() => setTerminalOpen(false)} />}
 
       {/* HISTORY full-screen modal (user avatar) */}
       {historyOpen && <HistoryModal onClose={() => setHistoryOpen(false)} showToast={showToast} />}
@@ -1549,6 +1550,7 @@ export default function ChatPanel({ onBack }) {
                 setTheme={setTheme}
                 onNewChat={newChat}
                 onRestartCC={restartCC}
+                onOpenTerminal={() => { setTerminalOpen(true); setSidebarOpen(false); }}
                 showToast={showToast}
                 convId={convId}
               />
@@ -1915,7 +1917,7 @@ function StreamingBubble({ snap, profile, showTyping }) {
 }
 
 /* ─────── Sidebar 多屏 ─────── */
-function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, showToast, convId }) {
+function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, onOpenTerminal, showToast, convId }) {
   if (screen === "main") {
     return (
       <>
@@ -1923,6 +1925,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
         <div className="cp-ps-list">
           <SidebarItem onClick={() => setScreen("window")}>CC窗口</SidebarItem>
           <SidebarItem onClick={() => setScreen("voice")}>语音服务</SidebarItem>
+          <SidebarItem onClick={onOpenTerminal}>终端</SidebarItem>
         </div>
         <div className="cp-ps-section-title">管理</div>
         <div className="cp-ps-list">
