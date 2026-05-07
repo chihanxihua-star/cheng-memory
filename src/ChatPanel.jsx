@@ -1211,17 +1211,22 @@ export default function ChatPanel({ onBack }) {
         body: JSON.stringify(body),
       });
       const d = await r.json();
+      // 只重启进程：不清屏，不换 conversation_id
       setIsGenerating(false);
       setStreamSnap(null);
       streamRef.current = null;
-      await newChat();
-      if (opts.toastMessage) showToast(opts.toastMessage);
-      else if (!opts.silent) showToast("CC 已重启");
+      if (opts.toastMessage) {
+        // 模型切换等场景仍然走 toast，避免每次都在聊天里塞一条
+        showToast(opts.toastMessage);
+      } else if (!opts.silent) {
+        // 用户手动点"重启CC"：在聊天里插一条系统消息
+        setMessages(prev => [...prev, { id: "sys-" + Date.now(), role: "system", content: "CC 已重启" }]);
+      }
       return d;
     } catch (e) {
       showToast("重启失败: " + e.message);
     }
-  }, [isGenerating, newChat, showToast]);
+  }, [isGenerating, showToast]);
   useEffect(() => { restartCCRef.current = restartCC; }, [restartCC]);
 
   /* ─────── 编辑 / 重生成 ─────── */
@@ -1908,7 +1913,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
       <>
         <div className="cp-ps-section-title">通用</div>
         <div className="cp-ps-list">
-          <SidebarItem onClick={() => setScreen("window")}>窗口设置</SidebarItem>
+          <SidebarItem onClick={() => setScreen("window")}>CC窗口</SidebarItem>
           <SidebarItem onClick={() => setScreen("voice")}>语音服务</SidebarItem>
         </div>
         <div className="cp-ps-section-title">管理</div>
@@ -1939,7 +1944,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
   if (screen === "window") {
     return (
       <>
-        <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={() => setScreen("main")}>← 返回</button>窗口设置</div>
+        <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={() => setScreen("main")}>← 返回</button>CC窗口</div>
         <div className="cp-ps-list">
           <SidebarItem onClick={onNewChat}>新对话（清屏）</SidebarItem>
           <SidebarItem onClick={() => onRestartCC()}>重启 CC 进程</SidebarItem>
