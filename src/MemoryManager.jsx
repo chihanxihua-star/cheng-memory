@@ -1838,6 +1838,7 @@ function BoardPanel() {
         background: "transparent",
         padding: "8px 16px",
         pointerEvents: "none",
+        touchAction: "none",
       }}>
         <div style={{ maxWidth: 380, margin: "0 auto", pointerEvents: "auto" }}>
           <BoardCompose
@@ -2501,6 +2502,7 @@ function PanelHeader({ name, onBack }) {
       padding: "calc(12px + env(safe-area-inset-top, 0px)) 16px 12px",
       background: "var(--bg-page)",
       borderBottom: "1px solid var(--border)",
+      touchAction: "none",
     }}>
       <button onClick={onBack} aria-label="返回" style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 20, cursor: "pointer", padding: 0, lineHeight: 1, width: 24, fontFamily: "inherit" }}>←</button>
       <span style={{ fontSize: 14, color: "var(--text-primary)", letterSpacing: "0.15em" }}>{name}</span>
