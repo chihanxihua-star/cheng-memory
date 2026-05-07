@@ -914,9 +914,9 @@ function DiaryFullForm({ entry, isNew, onCancel, onSave }) {
 //  逢春板块：心情日历 + 纪念日时间轴
 // ════════════════════════════════════════════════════════════
 const MOODS = [
-  { key: "开心", color: "#ECB884" }, // 浅橙
-  { key: "兴奋", color: "#E8CE6A" }, // 浅黄
-  { key: "心动", color: "#E8A0B3" }, // 浅粉
+  { key: "开心", color: "#F2D2B5" }, // 浅橙（淡杏色）
+  { key: "兴奋", color: "#EFDFA8" }, // 浅黄（奶黄）
+  { key: "心动", color: "#EFCAD2" }, // 浅粉（柔粉）
   { key: "平静", color: "#ABC59C" }, // 浅绿
   { key: "伤心", color: "#A8CCDF" }, // 浅蓝
   { key: "烦躁", color: "#ABB5CE" }, // 蓝紫
