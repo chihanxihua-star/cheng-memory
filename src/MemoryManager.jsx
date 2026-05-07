@@ -792,7 +792,7 @@ export default function App() {
             <div style={{
               flex: 1,
               paddingTop: "env(safe-area-inset-top)",
-              paddingBottom: 100,  // 跟老版一致：给 fixed 底部导航留位
+              paddingBottom: "calc(60px + env(safe-area-inset-bottom))",
             }}>
               <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 16px 28px", width: "100%" }}>
                 {tab === "memory" && <MemoryPanel/>}
@@ -814,6 +814,7 @@ function BottomTabBar({ tab, setTab }) {
   return (
     <div style={{
       flexShrink: 0,
+      zIndex: 10,
       display:"flex", justifyContent:"space-around", alignItems:"center",
       padding:"0px 4px 0",
       paddingBottom:"calc(2px + env(safe-area-inset-bottom, 20px))",
