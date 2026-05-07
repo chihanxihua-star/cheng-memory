@@ -66,10 +66,8 @@ const TABS = [
   { key: "console", label: "控制台" },
 ];
 
-const TODO_STATUSES = ["全部", "待办", "进行中", "完成"];
-const TODO_PRIORITIES = ["紧急", "一般", "不急"];
-const TODO_PRIORITY_COLORS = { 紧急: "#e07070", 一般: "#7fb3c8", 不急: "#8aab9e" };
-const TODO_STATUS_COLORS = { 待办: "#e8b86d", 进行中: "#6b7fd4", 完成: "#8aab9e" };
+const TODO_STATUSES = ["全部", "待办", "完成"];
+const TODO_STATUS_COLORS = { 待办: "#e8b86d", 完成: "#8aab9e" };
 
 const LEVEL_META = {
   1: { label: "浮沫", color: "#7fb3c8" },
@@ -951,8 +949,7 @@ function BoardPanel() {
 // ════════════════════════════════════════════════════════════
 
 function TodoCard({ todo, onToggle, onEdit, onDelete }) {
-  const priColor = TODO_PRIORITY_COLORS[todo.priority] || "#8aab9e";
-  const statusColor = TODO_STATUS_COLORS[todo.status] || "#8aab9e";
+  const statusColor = TODO_STATUS_COLORS[todo.status] || "#e8b86d";
   const isDone = todo.status === "完成";
   const [cd, setCd] = useState(false);
   const linkBtn = { background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 11, padding: 0, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em" };
@@ -966,7 +963,7 @@ function TodoCard({ todo, onToggle, onEdit, onDelete }) {
       <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
         <button onClick={() => onToggle(todo)} title="切换状态" style={{
           width: 22, height: 22, borderRadius: 99, marginTop: 1,
-          border: `1.5px solid ${isDone ? statusColor : "var(--border)"}`,
+          border: `1.5px solid ${isDone ? statusColor : "#e8b86d"}`,
           background: isDone ? statusColor : "transparent",
           cursor: "pointer", flexShrink: 0, fontFamily: "inherit",
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -978,13 +975,7 @@ function TodoCard({ todo, onToggle, onEdit, onDelete }) {
           {todo.description && <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5 }}>{todo.description}</p>}
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <span style={{ width: 6, height: 6, borderRadius: 99, background: priColor, display: "inline-block" }}/>
-              <span style={{ color: priColor, letterSpacing: "0.05em" }}>{todo.priority}</span>
-            </span>
-            <span>·</span>
-            <span style={{ color: statusColor }}>{todo.status}</span>
-            {todo.due_date && <><span>·</span><span>{todo.due_date}</span></>}
+            {todo.due_date && <span>{todo.due_date}</span>}
             {(todo.tags || []).map(t => <span key={t} style={tagPill}>{t}</span>)}
             <span style={{ marginLeft: "auto" }}>{formatDate(todo.created_at)}</span>
           </div>
@@ -1006,7 +997,6 @@ function TodoDrawer({ entry, isNew, onSave, onClose }) {
     title: entry.title || "",
     description: entry.description || "",
     status: entry.status || "待办",
-    priority: entry.priority || "一般",
     due_date: entry.due_date || "",
     tags: Array.isArray(entry.tags) ? entry.tags.join(", ") : "",
     author: entry.author || "小茉莉",
@@ -1017,7 +1007,7 @@ function TodoDrawer({ entry, isNew, onSave, onClose }) {
       <ActionBtn onClick={onClose}>取消</ActionBtn>
       <ActionBtn accent color="#a89fd8" disabled={!f.title.trim()} onClick={() => onSave({
         title: f.title, description: f.description || null,
-        status: f.status, priority: f.priority,
+        status: f.status,
         due_date: f.due_date || null,
         tags: f.tags.split(",").map(t => t.trim()).filter(Boolean),
         author: f.author,
@@ -1027,12 +1017,7 @@ function TodoDrawer({ entry, isNew, onSave, onClose }) {
       <div><label style={labelStyle}>描述（可选）</label><textarea rows={3} style={inputStyle} value={f.description} onChange={e => set("description", e.target.value)}/></div>
       <div><label style={labelStyle}>状态</label>
         <select style={inputStyle} value={f.status} onChange={e => set("status", e.target.value)}>
-          {["待办","进行中","完成"].map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-      </div>
-      <div><label style={labelStyle}>优先级</label>
-        <select style={inputStyle} value={f.priority} onChange={e => set("priority", e.target.value)}>
-          {TODO_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+          {["待办","完成"].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
       <div><label style={labelStyle}>截止日期</label><input type="date" style={inputStyle} value={f.due_date} onChange={e => set("due_date", e.target.value)}/></div>
@@ -1059,7 +1044,7 @@ function TodoPanel() {
   const filtered = filter === "全部" ? items : items.filter(t => t.status === filter);
 
   const toggleStatus = async (todo) => {
-    const next = todo.status === "完成" ? "待办" : todo.status === "待办" ? "进行中" : "完成";
+    const next = todo.status === "完成" ? "待办" : "完成";
     setItems(arr => arr.map(t => t.id === todo.id ? { ...t, status: next } : t));
     try { await sbPatch("todos_cheng", todo.id, { status: next }); }
     catch(e) { setError(e.message); load(); }
@@ -1073,11 +1058,10 @@ function TodoPanel() {
 
   return (
     <div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 16, alignItems: "center" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 18, marginBottom: 16, alignItems: "center" }}>
         {TODO_STATUSES.map(s => <button key={s} style={filterBtn(filter===s)} onClick={() => setFilter(s)}>{s}</button>)}
         <span style={{ flex: 1 }}/>
-        <ActionBtn accent color="#a89fd8" onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 代办</ActionBtn>
-        <ActionBtn onClick={load}>{loading ? "…" : "刷新"}</ActionBtn>
+        <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-secondary)" }}>{loading ? "…" : "刷新"}</button>
       </div>
       <ErrorBar error={error} onClose={() => setError(null)}/>
       {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
@@ -1087,6 +1071,29 @@ function TodoPanel() {
             onEdit={todo => setDrawer({ mode: "edit", entry: todo })}
             onDelete={async id => { try { await sbDelete("todos_cheng", id); load(); } catch(e) { setError(e.message); } }}
           />)}
+
+      {/* 右下角悬浮加号：粉色圆 + 透明（页面色挖洞）加号 */}
+      <button
+        onClick={() => setDrawer({ mode: "create", entry: {} })}
+        title="新建代办"
+        aria-label="新建代办"
+        style={{
+          position: "fixed",
+          right: 20,
+          bottom: "calc(70px + env(safe-area-inset-bottom, 0px))",
+          width: 56, height: 56, borderRadius: 99,
+          background: "var(--bg-user-bubble)",
+          border: "none",
+          boxShadow: "0 6px 16px rgba(0,0,0,0.12)",
+          cursor: "pointer",
+          fontFamily: "inherit",
+          color: "var(--bg-page)",
+          fontSize: 32, lineHeight: 1, fontWeight: 300,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          paddingBottom: 4,
+          zIndex: 30,
+        }}>+</button>
+
       {drawer && <TodoDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("todos_cheng", patch); else await sbPatch("todos_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
     </div>
   );
