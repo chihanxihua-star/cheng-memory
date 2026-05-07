@@ -489,17 +489,23 @@ function DiaryPanel() {
   const reload = () => load(search);
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 篇</p>
-        <div style={{ display: "flex", gap: 8 }}>
-          <ActionBtn accent onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 写日记</ActionBtn>
-          <ActionBtn onClick={reload}>{loading ? "…" : "刷新"}</ActionBtn>
+    <div style={{ paddingTop: 90 /* 给固定顶部让位 */ }}>
+      <div style={{
+        position: "fixed",
+        top: "env(safe-area-inset-top, 0px)", left: 0, right: 0,
+        zIndex: 20,
+        background: "var(--bg-page)",
+        padding: "10px 16px",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 篇</p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <ActionBtn accent onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 写日记</ActionBtn>
+            <ActionBtn onClick={reload}>{loading ? "…" : "刷新"}</ActionBtn>
+          </div>
         </div>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <input placeholder="搜索标题或内容…" value={search} onChange={e => { setSearch(e.target.value); clearTimeout(timer.current); timer.current = setTimeout(() => load(e.target.value), 400); }} style={{ ...inputStyle, borderRadius: 99, padding: "5px 14px", fontSize: 12, width: 240 }}/>
+        <input placeholder="搜索标题或内容…" value={search} onChange={e => { setSearch(e.target.value); clearTimeout(timer.current); timer.current = setTimeout(() => load(e.target.value), 400); }} style={{ ...inputStyle, borderRadius: 99, padding: "5px 14px", fontSize: 12, width: "100%" }}/>
       </div>
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
@@ -583,8 +589,16 @@ function MilestonesPanel() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+    <div style={{ paddingTop: 56 /* 给固定顶部让位 */ }}>
+      <div style={{
+        position: "fixed",
+        top: "env(safe-area-inset-top, 0px)", left: 0, right: 0,
+        zIndex: 20,
+        background: "var(--bg-page)",
+        padding: "12px 16px",
+        borderBottom: "1px solid var(--border)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
         <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 个</p>
         <div style={{ display: "flex", gap: 8 }}>
           <ActionBtn accent color="#e8b86d" onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 添加</ActionBtn>
