@@ -49,7 +49,10 @@ export default function TerminalPanel({ onClose }) {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(containerRef.current);
-    requestAnimationFrame(() => { try { fit.fit(); } catch {} });
+    requestAnimationFrame(() => {
+      try { fit.fit(); } catch {}
+      try { term.focus(); } catch {}
+    });
     termRef.current = term;
     fitRef.current = fit;
 
@@ -134,10 +137,13 @@ export default function TerminalPanel({ onClose }) {
           fontSize: 20, lineHeight: 1, cursor: "pointer", padding: "4px 8px",
         }}>×</button>
       </div>
-      <div ref={containerRef} style={{
-        flex: 1, minHeight: 0, padding: "8px 10px",
-        background: "#1d1d1f", overflow: "hidden",
-      }}/>
+      <div ref={containerRef}
+        onMouseDown={() => { try { termRef.current?.focus(); } catch {} }}
+        onTouchStart={() => { try { termRef.current?.focus(); } catch {} }}
+        style={{
+          flex: 1, minHeight: 0, padding: "8px 10px",
+          background: "#1d1d1f", overflow: "hidden",
+        }}/>
     </div>,
     document.body
   );
