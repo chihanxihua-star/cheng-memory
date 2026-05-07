@@ -996,11 +996,11 @@ function TodoCard({ todo, onToggle, onEdit, onDelete }) {
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
           <button onClick={() => onToggle(todo)} title="切换状态" style={{
             width: 16, height: 16, borderRadius: 99, marginTop: 3,
-            border: `1px solid ${isDone ? statusColor : "rgba(0,0,0,0.5)"}`,
-            background: isDone ? statusColor : "transparent",
+            border: `1px solid ${isDone ? "var(--bg-user-bubble)" : "rgba(0,0,0,0.5)"}`,
+            background: isDone ? "var(--bg-user-bubble)" : "transparent",
             cursor: "pointer", flexShrink: 0, fontFamily: "inherit",
             display: "flex", alignItems: "center", justifyContent: "center",
-            color: isDone ? "white" : "transparent",
+            color: isDone ? "var(--text-primary)" : "transparent",
             fontSize: 10, lineHeight: 1, padding: 0,
           }}>{isDone ? "✓" : ""}</button>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1075,7 +1075,7 @@ function TodoPanel() {
     letterSpacing: "0.05em",
   });
 
-  const labelOf = s => s === "待办" ? "TO DO" : s === "完成" ? "DONE" : s;
+  const labelOf = s => s === "全部" ? "ALL" : s === "待办" ? "TO DO" : s === "完成" ? "DONE" : s;
 
   const [creating, setCreating] = useState(false);
   const createTodo = async (patch) => {
@@ -1391,7 +1391,7 @@ function SecurityPanel() {
 function ConsolePanel() {
   const [sub, setSub] = useState("todos");
   const subTabs = [
-    { key: "todos", label: "代办" },
+    { key: "todos", label: "待办" },
     { key: "fantasy", label: "幻想" },
     { key: "security", label: "安全设置" },
   ];
