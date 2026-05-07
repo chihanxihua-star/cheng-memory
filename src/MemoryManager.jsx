@@ -365,8 +365,8 @@ function MemoryPanel() {
   const filterChange = (k, v) => { const n = { ...filters, [k]: v }; setFilters(n); if (k==="search") { clearTimeout(timer.current); timer.current = setTimeout(() => load(n,sort), 400); } else load(n,sort); };
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "20px 16px 0" }}>
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
           {stats && <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {stats.total} 条 · 均强度 {stats.avgStr} · 📌{stats.pinned} ⚡{stats.flash}</p>}
         </div>
@@ -376,14 +376,14 @@ function MemoryPanel() {
         </div>
       </div>
 
-      {stats && <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 16 }}>
+      {stats && <div style={{ flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 16 }}>
         {[1,2,3].map(l => <div key={l} style={{ background: LEVEL_META[l].color+"0d", border: `1px solid ${LEVEL_META[l].color}33`, borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
           <div style={{ fontSize: 18, fontWeight: 300, color: LEVEL_META[l].color }}>{stats[`l${l}`]}</div>
           <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>{LEVEL_META[l].label}</div>
         </div>)}
       </div>}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16, alignItems: "center" }}>
+      <div style={{ flexShrink: 0, display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16, alignItems: "center" }}>
         <input placeholder="搜索…" value={filters.search} onChange={e => filterChange("search", e.target.value)} style={{ ...inputStyle, width: 140, borderRadius: 99, padding: "5px 14px", fontSize: 12 }}/>
         {[1,2,3].map(l => <button key={l} style={chipStyle(filters.level===l, LEVEL_META[l].color)} onClick={() => filterChange("level", filters.level===l?"":l)}>{LEVEL_META[l].label}</button>)}
         <button style={chipStyle(filters.pinned,"#e8c473")} onClick={() => filterChange("pinned",!filters.pinned)}>📌</button>
@@ -397,11 +397,13 @@ function MemoryPanel() {
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
-        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有记忆</div>
-        : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
-            {items.map(m => <div key={m.id} style={{ animation: "fadeUp 0.25s ease both" }}><MemoryCard mem={m} onEdit={mem => setDrawer({ mode: "edit", memory: mem })} onDelete={async id => { try { await sbDelete("memories_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
-          </div>}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: 24 }}>
+        {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+          : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有记忆</div>
+          : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
+              {items.map(m => <div key={m.id} style={{ animation: "fadeUp 0.25s ease both" }}><MemoryCard mem={m} onEdit={mem => setDrawer({ mode: "edit", memory: mem })} onDelete={async id => { try { await sbDelete("memories_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
+            </div>}
+      </div>
 
       {drawer && <MemoryDrawer memory={drawer.memory} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("memories_cheng", patch); else await sbPatch("memories_cheng", drawer.memory.id, patch); setDrawer(null); reload(); } catch(e) { setError(e.message); } }}/>}
     </div>
@@ -489,8 +491,8 @@ function DiaryPanel() {
   const reload = () => load(search);
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "20px 16px 0" }}>
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 篇</p>
         <div style={{ display: "flex", gap: 8 }}>
           <ActionBtn accent onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 写日记</ActionBtn>
@@ -498,17 +500,19 @@ function DiaryPanel() {
         </div>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ flexShrink: 0, marginBottom: 16 }}>
         <input placeholder="搜索标题或内容…" value={search} onChange={e => { setSearch(e.target.value); clearTimeout(timer.current); timer.current = setTimeout(() => load(e.target.value), 400); }} style={{ ...inputStyle, borderRadius: 99, padding: "5px 14px", fontSize: 12, width: 240 }}/>
       </div>
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
-        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有日记</div>
-        : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {items.map(e => <div key={e.id} style={{ animation: "fadeUp 0.25s ease both" }}><DiaryCard entry={e} onEdit={ent => setDrawer({ mode: "edit", entry: ent })} onDelete={async id => { try { await sbDelete("diary_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
-          </div>}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: 24 }}>
+        {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+          : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有日记</div>
+          : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {items.map(e => <div key={e.id} style={{ animation: "fadeUp 0.25s ease both" }}><DiaryCard entry={e} onEdit={ent => setDrawer({ mode: "edit", entry: ent })} onDelete={async id => { try { await sbDelete("diary_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
+            </div>}
+      </div>
 
       {drawer && <DiaryDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("diary_cheng", patch); else await sbPatch("diary_cheng", drawer.entry.id, patch); setDrawer(null); reload(); } catch(e) { setError(e.message); } }}/>}
     </div>
@@ -583,8 +587,8 @@ function MilestonesPanel() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "20px 16px 0" }}>
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 个</p>
         <div style={{ display: "flex", gap: 8 }}>
           <ActionBtn accent color="#e8b86d" onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 添加</ActionBtn>
@@ -594,14 +598,16 @@ function MilestonesPanel() {
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
-        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有纪念日</div>
-        : <div style={{ position: "relative", paddingLeft: 20 }}>
-            {/* 时间轴竖线 */}
-            <div style={{ position: "absolute", left: 6, top: 8, bottom: 8, width: 2, background: "rgba(232,184,109,0.2)", borderRadius: 99 }}/>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: 24 }}>
+        {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+          : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有纪念日</div>
+          : <div style={{ position: "relative", paddingLeft: 20 }}>
+              {/* 时间轴竖线 */}
+              <div style={{ position: "absolute", left: 6, top: 8, bottom: 8, width: 2, background: "rgba(232,184,109,0.2)", borderRadius: 99 }}/>
 
-            {items.map(m => <MilestoneCard key={m.id} milestone={m} onEdit={mil => setDrawer({ mode: "edit", entry: mil })} onDelete={async id => { try { await sbDelete("milestones_cheng", id); load(); } catch(e) { setError(e.message); } }}/>)}
-          </div>}
+              {items.map(m => <MilestoneCard key={m.id} milestone={m} onEdit={mil => setDrawer({ mode: "edit", entry: mil })} onDelete={async id => { try { await sbDelete("milestones_cheng", id); load(); } catch(e) { setError(e.message); } }}/>)}
+            </div>}
+      </div>
 
       {drawer && <MilestoneDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("milestones_cheng", patch); else await sbPatch("milestones_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
     </div>
@@ -853,13 +859,11 @@ function BoardPanel() {
   });
 
   return (
-    <div style={{ paddingBottom: 64 /* 给固定底部输入栏让位 */ }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "16px 16px 0" }}>
       <div style={{
-        position: "sticky", top: "env(safe-area-inset-top, 0px)", zIndex: 5,
-        background: "var(--bg-page)",
+        flexShrink: 0,
         display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center",
-        padding: "10px 0 12px",
-        margin: "-20px 0 0",
+        marginBottom: 14,
       }}>
         {BOARD_CATS.map(c => <button key={c} style={filterBtn(catFilter===c)} onClick={() => setCatFilter(c)}>{c}</button>)}
         <button style={filterBtn(onlyUnread)} onClick={() => setOnlyUnread(!onlyUnread)}>仅未读</button>
@@ -868,45 +872,41 @@ function BoardPanel() {
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
-        : filtered.length === 0 ? <div style={{ textAlign: "center", padding: "20px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有留言</div>
-        : filtered.map(m => (
-            <BoardMessage key={m.id} msg={m}
-              onEdit={msg => setDrawer({ mode: "edit", entry: msg })}
-              onDelete={async id => { try { await sbDelete("board_cheng", id); load(); } catch(e) { setError(e.message); } }}
-              onToggleRead={async msg => { try { await sbPatch("board_cheng", msg.id, { is_read: !msg.is_read }); load(); } catch(e) { setError(e.message); } }}
-              onToggleResolved={async msg => { try { await sbPatch("board_cheng", msg.id, { is_resolved: !msg.is_resolved }); load(); } catch(e) { setError(e.message); } }}
-              onAddReaction={addReaction}
-            />
-          ))}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: 8 }}>
+        {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+          : filtered.length === 0 ? <div style={{ textAlign: "center", padding: "20px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有留言</div>
+          : filtered.map(m => (
+              <BoardMessage key={m.id} msg={m}
+                onEdit={msg => setDrawer({ mode: "edit", entry: msg })}
+                onDelete={async id => { try { await sbDelete("board_cheng", id); load(); } catch(e) { setError(e.message); } }}
+                onToggleRead={async msg => { try { await sbPatch("board_cheng", msg.id, { is_read: !msg.is_read }); load(); } catch(e) { setError(e.message); } }}
+                onToggleResolved={async msg => { try { await sbPatch("board_cheng", msg.id, { is_resolved: !msg.is_resolved }); load(); } catch(e) { setError(e.message); } }}
+                onAddReaction={addReaction}
+              />
+            ))}
+      </div>
 
-      <div style={{
-        position: "fixed", bottom: NAV_HEIGHT, left: 0, right: 0, zIndex: 49,
-        background: "transparent",
-        padding: "8px 16px 10px",
-        pointerEvents: "none",
-      }}>
-        <div style={{ maxWidth: 380, margin: "0 auto", pointerEvents: "auto" }}>
-      <BoardCompose
-        onSend={async patch => {
-          // 乐观插入：先在本地 items 末尾追一条临时消息，UI 立即响应
-          const tempId = "tmp-" + Date.now();
-          const tempMsg = {
-            id: tempId, ...patch,
-            reactions: null, is_read: false, is_resolved: false,
-            created_at: new Date().toISOString(),
-          };
-          setItems(arr => [...arr, tempMsg]);
-          try {
-            const saved = await sbPost("board_cheng", patch);
-            const real = Array.isArray(saved) ? saved[0] : saved;
-            setItems(arr => arr.map(it => it.id === tempId ? (real || it) : it));
-          } catch(e) {
-            setError(e.message);
-            setItems(arr => arr.filter(it => it.id !== tempId));
-          }
-        }}
-      />
+      <div style={{ flexShrink: 0, padding: "8px 0 10px" }}>
+        <div style={{ maxWidth: 380, margin: "0 auto" }}>
+          <BoardCompose
+            onSend={async patch => {
+              const tempId = "tmp-" + Date.now();
+              const tempMsg = {
+                id: tempId, ...patch,
+                reactions: null, is_read: false, is_resolved: false,
+                created_at: new Date().toISOString(),
+              };
+              setItems(arr => [...arr, tempMsg]);
+              try {
+                const saved = await sbPost("board_cheng", patch);
+                const real = Array.isArray(saved) ? saved[0] : saved;
+                setItems(arr => arr.map(it => it.id === tempId ? (real || it) : it));
+              } catch(e) {
+                setError(e.message);
+                setItems(arr => arr.filter(it => it.id !== tempId));
+              }
+            }}
+          />
         </div>
       </div>
 
@@ -1024,21 +1024,23 @@ function TodoPanel() {
   });
 
   return (
-    <div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 16, alignItems: "center" }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div style={{ flexShrink: 0, display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 16, alignItems: "center" }}>
         {TODO_STATUSES.map(s => <button key={s} style={filterBtn(filter===s)} onClick={() => setFilter(s)}>{s}</button>)}
         <span style={{ flex: 1 }}/>
         <ActionBtn accent color="#a89fd8" onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 代办</ActionBtn>
         <ActionBtn onClick={load}>{loading ? "…" : "刷新"}</ActionBtn>
       </div>
       <ErrorBar error={error} onClose={() => setError(null)}/>
-      {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
-        : filtered.length === 0 ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有代办</div>
-        : filtered.map(t => <TodoCard key={t.id} todo={t}
-            onToggle={toggleStatus}
-            onEdit={todo => setDrawer({ mode: "edit", entry: todo })}
-            onDelete={async id => { try { await sbDelete("todos_cheng", id); load(); } catch(e) { setError(e.message); } }}
-          />)}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: 24 }}>
+        {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+          : filtered.length === 0 ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有代办</div>
+          : filtered.map(t => <TodoCard key={t.id} todo={t}
+              onToggle={toggleStatus}
+              onEdit={todo => setDrawer({ mode: "edit", entry: todo })}
+              onDelete={async id => { try { await sbDelete("todos_cheng", id); load(); } catch(e) { setError(e.message); } }}
+            />)}
+      </div>
       {drawer && <TodoDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("todos_cheng", patch); else await sbPatch("todos_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
     </div>
   );
@@ -1114,18 +1116,20 @@ function FantasyPanel() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 14 }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div style={{ flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 14 }}>
         <ActionBtn accent color="#a89fd8" onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 幻想</ActionBtn>
         <ActionBtn onClick={load}>{loading ? "…" : "刷新"}</ActionBtn>
       </div>
       <ErrorBar error={error} onClose={() => setError(null)}/>
-      {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
-        : items.length === 0 ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有幻想</div>
-        : items.map(e => <FantasyCard key={e.id} entry={e}
-            onEdit={ent => setDrawer({ mode: "edit", entry: ent })}
-            onDelete={async id => { try { await sbDelete("fantasy_cheng", id); load(); } catch(e) { setError(e.message); } }}
-          />)}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: 24 }}>
+        {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+          : items.length === 0 ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有幻想</div>
+          : items.map(e => <FantasyCard key={e.id} entry={e}
+              onEdit={ent => setDrawer({ mode: "edit", entry: ent })}
+              onDelete={async id => { try { await sbDelete("fantasy_cheng", id); load(); } catch(e) { setError(e.message); } }}
+            />)}
+      </div>
       {drawer && <FantasyDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("fantasy_cheng", patch); else await sbPatch("fantasy_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
     </div>
   );
@@ -1177,7 +1181,7 @@ function SecurityPanel() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 18, paddingBottom: 24 }}>
       <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "16px 18px" }}>
         <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)" }}>密码保护</p>
         <p style={{ margin: "4px 0 12px", fontSize: 12, color: "var(--text-secondary)" }}>
@@ -1228,19 +1232,17 @@ function ConsolePanel() {
     fontWeight: active ? 600 : 400,
   });
   return (
-    <div>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "16px 16px 0" }}>
       <div style={{
-        position: "sticky", top: "env(safe-area-inset-top, 0px)", zIndex: 5,
-        background: "var(--bg-page)",
+        flexShrink: 0,
         display: "flex", flexWrap: "wrap", gap: 22, alignItems: "center",
-        padding: "10px 0 14px",
-        margin: "-20px 0 0",
+        marginBottom: 14,
       }}>
         {subTabs.map(t => <button key={t.key} style={tabBtn(sub === t.key)} onClick={() => setSub(t.key)}>{t.label}</button>)}
       </div>
-      <div style={{ display: sub === "todos" ? "block" : "none" }}><TodoPanel/></div>
-      <div style={{ display: sub === "fantasy" ? "block" : "none" }}><FantasyPanel/></div>
-      <div style={{ display: sub === "security" ? "block" : "none" }}><SecurityPanel/></div>
+      <div style={{ flex: 1, minHeight: 0, display: sub === "todos" ? "flex" : "none", flexDirection: "column" }}><TodoPanel/></div>
+      <div style={{ flex: 1, minHeight: 0, display: sub === "fantasy" ? "flex" : "none", flexDirection: "column" }}><FantasyPanel/></div>
+      <div style={{ flex: 1, minHeight: 0, display: sub === "security" ? "flex" : "none", flexDirection: "column" }}><SecurityPanel/></div>
     </div>
   );
 }
@@ -1359,31 +1361,29 @@ export default function App() {
         <main style={{
           flex: 1, minHeight: 0,
           display: "flex", flexDirection: "column",
-          overflow: tab === "chat" ? "hidden" : "auto",
           overscrollBehavior: "contain",
           WebkitOverflowScrolling: "touch",
         }}>
-          {/* 切 tab 时不卸载，避免 ChatPanel 的 WebSocket 断连 / 各板块重复拉数据 */}
+          {/* Chat panel — 自带内部 flex column + 滚动 */}
           <div style={{
             flex: 1, minHeight: 0,
             display: tab === "chat" ? "flex" : "none",
             flexDirection: "column",
-            overflow: "hidden",
           }}>
             <ChatPanel onBack={() => setTab("memory")}/>
           </div>
+          {/* 非 chat 容器：flex column，把高度传给里面的板块 */}
           <div style={{
-            flex: 1,
-            display: tab === "chat" ? "none" : "block",
+            flex: 1, minHeight: 0,
+            display: tab === "chat" ? "none" : "flex", flexDirection: "column",
             paddingTop: "env(safe-area-inset-top)",
-            paddingBottom: NAV_HEIGHT,
           }}>
-            <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 16px 28px", width: "100%" }}>
-              <div style={{ display: tab === "memory" ? "block" : "none" }}><MemoryPanel/></div>
-              <div style={{ display: tab === "diary" ? "block" : "none" }}><DiaryPanel/></div>
-              <div style={{ display: tab === "milestones" ? "block" : "none" }}><MilestonesPanel/></div>
-              <div style={{ display: tab === "board" ? "block" : "none" }}><BoardPanel/></div>
-              <div style={{ display: tab === "console" ? "block" : "none" }}><ConsolePanel/></div>
+            <div style={{ flex: 1, minHeight: 0, maxWidth: 860, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column" }}>
+              <div style={{ flex: 1, minHeight: 0, display: tab === "memory" ? "flex" : "none", flexDirection: "column" }}><MemoryPanel/></div>
+              <div style={{ flex: 1, minHeight: 0, display: tab === "diary" ? "flex" : "none", flexDirection: "column" }}><DiaryPanel/></div>
+              <div style={{ flex: 1, minHeight: 0, display: tab === "milestones" ? "flex" : "none", flexDirection: "column" }}><MilestonesPanel/></div>
+              <div style={{ flex: 1, minHeight: 0, display: tab === "board" ? "flex" : "none", flexDirection: "column" }}><BoardPanel/></div>
+              <div style={{ flex: 1, minHeight: 0, display: tab === "console" ? "flex" : "none", flexDirection: "column" }}><ConsolePanel/></div>
             </div>
           </div>
         </main>
@@ -1398,8 +1398,8 @@ export default function App() {
 function BottomTabBar({ tab, setTab }) {
   return (
     <div style={{
-      position: "fixed", bottom: 0, left: 0, right: 0,
-      zIndex: 50,
+      flexShrink: 0,
+      zIndex: 10,
       display:"flex", justifyContent:"space-around", alignItems:"center",
       padding:"0px 4px 0",
       paddingTop: 6,
