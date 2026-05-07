@@ -324,7 +324,7 @@ function MemoryCard({ mem, onEdit, onDelete }) {
         onTouchEnd={onTouchEnd}
         onTouchCancel={onTouchEnd}
         style={{
-          background: "var(--bg-card)",
+          background: "var(--bg-card-solid)",
           border: "1px solid var(--border)",
           padding: "18px 20px",
           display: "flex", flexDirection: "column", gap: 14,
