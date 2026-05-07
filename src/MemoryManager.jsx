@@ -407,7 +407,7 @@ function MemoryPanel() {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <div>
-          {stats && <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {stats.total} 条 · 均强度 {stats.avgStr} · 📌{stats.pinned} ⚡{stats.flash}</p>}
+          {stats && <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {stats.total} 条 · 均强度 {stats.avgStr}</p>}
         </div>
         <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
       </div>
@@ -460,7 +460,6 @@ function MemoryPanel() {
           borderBottom: filters.unresolved ? "2px solid var(--text-primary)" : "2px solid transparent",
           transition: "all 0.15s",
         }}>未愈</button>
-        <span style={{ marginLeft: "auto" }}/>
         <select value={sort} onChange={e => { setSort(e.target.value); load(filters, e.target.value); }} style={{
           background: "transparent", border: "none",
           padding: "5px 0", fontSize: 12, color: "var(--text-tertiary)",
