@@ -82,7 +82,7 @@ const AUTHOR_COLORS = {
   小茉莉: "#d89fa8", default: "#8aab9e",
 };
 
-const BOARD_CATS = ["全部", "紧急", "闲聊", "其他"];
+const BOARD_CATS = ["全部", "紧急", "闲聊"];
 const BOARD_CAT_COLORS = { 紧急: "#e07070", 闲聊: "#8aab9e", 其他: "#7fb3c8" };
 const BOARD_REACTIONS = ["❤️", "👍", "😂", "🥺", "✨"];
 
@@ -677,7 +677,7 @@ function BoardMessage({ msg, onEdit, onDelete, onToggleRead, onToggleResolved, o
       marginBottom: 14, opacity: msg.is_resolved ? 0.55 : 1,
       animation: "fadeUp 0.22s ease both",
     }}>
-      <div style={{ fontSize: 10, color: authorColor, fontWeight: 500, marginBottom: 3, padding: "0 6px" }}>{msg.author}</div>
+      <div style={{ fontSize: 10, color: isMe ? authorColor : "var(--text-tertiary)", fontWeight: 500, marginBottom: 3, padding: "0 6px" }}>{msg.author}</div>
       <div className={"bd-bubble " + (isMe ? "me" : "them")} onClick={() => setActionsOpen(o => !o)}>
         <p style={{ margin: 0, fontSize: 13.5, color: "inherit", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{msg.content}</p>
       </div>
@@ -754,8 +754,8 @@ function BoardMessage({ msg, onEdit, onDelete, onToggleRead, onToggleResolved, o
       >
         <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>{formatDateTime(msg.created_at)}</span>
         {msg.is_resolved && <span style={{ fontSize: 10, color: "#8aab9e" }}>· ✓</span>}
-        <button onClick={() => onToggleRead(msg)} style={linkBtn}>{msg.is_read ? "未读" : "已读"}</button>
-        <button onClick={() => onToggleResolved(msg)} style={linkBtn}>{msg.is_resolved ? "重开" : "处理"}</button>
+        {!isMe && <button onClick={() => onToggleRead(msg)} style={linkBtn}>{msg.is_read ? "未读" : "已读"}</button>}
+        {!isMe && !msg.is_resolved && <button onClick={() => onToggleResolved(msg)} style={linkBtn}>处理</button>}
         {isMe && <button onClick={() => onEdit(msg)} style={linkBtn}>编辑</button>}
         {isMe && (cd
           ? <button onClick={() => { onDelete(msg.id); setCd(false); }} style={{ ...linkBtn, color: "#c0392b" }}>确认</button>
@@ -784,7 +784,7 @@ function BoardCompose({ onSend }) {
           marginBottom: 8,
           display: "flex", gap: 8, justifyContent: "center",
         }}>
-          {["紧急", "闲聊", "其他"].map(c => {
+          {["紧急", "闲聊"].map(c => {
             const color = BOARD_CAT_COLORS[c];
             const active = category === c;
             return (
@@ -846,7 +846,7 @@ function BoardPanel() {
 
   let filtered = items;
   if (catFilter !== "全部") filtered = filtered.filter(m => m.category === catFilter);
-  if (onlyUnread) filtered = filtered.filter(m => !m.is_read);
+  if (onlyUnread) filtered = filtered.filter(m => !m.is_read && m.author !== "小茉莉");
 
   const addReaction = async (msg, emoji) => {
     const cur = Array.isArray(msg.reactions) ? msg.reactions : [];
@@ -1394,7 +1394,7 @@ export default function App() {
             display: tab === "chat" ? "none" : "block",
             paddingTop: "env(safe-area-inset-top)",
           }}>
-            <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 16px 28px", width: "100%" }}>
+            <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 22px 28px 16px", width: "100%" }}>
               <div style={{ display: tab === "memory" ? "block" : "none" }}><MemoryPanel/></div>
               <div style={{ display: tab === "diary" ? "block" : "none" }}><DiaryPanel/></div>
               <div style={{ display: tab === "milestones" ? "block" : "none" }}><MilestonesPanel/></div>

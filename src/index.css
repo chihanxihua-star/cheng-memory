@@ -10,6 +10,7 @@
   --bg-ai-bubble: #ffffff;
   --text-primary: #2A2A2C;
   --text-secondary: #666;
+  --text-tertiary: #999;
   --border: rgba(0, 0, 0, 0.08);
   --accent: #6b7fd4;
 }
@@ -21,6 +22,7 @@
   --bg-ai-bubble: rgba(255, 255, 255, 0.06);
   --text-primary: #F8F5F0;
   --text-secondary: rgba(255, 255, 255, 0.5);
+  --text-tertiary: #777;
   --border: rgba(255, 255, 255, 0.1);
   --accent: #6b7fd4;
 }
