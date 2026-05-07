@@ -267,7 +267,10 @@ const CSS = `
 
 /* MESSAGES */
 .cp-messages {
-  flex: 1; overflow-y: auto; padding: 14px 12px 14px;
+  flex: 1 1 0; min-height: 0;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 14px 12px 14px;
 }
 .cp-empty {
   height: 100%; display: flex; align-items: center; justify-content: center;

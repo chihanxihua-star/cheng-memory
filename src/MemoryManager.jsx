@@ -2624,6 +2624,7 @@ export default function App() {
           position: "absolute", inset: 0,
           display: "flex",
           flexDirection: "column",
+          minHeight: 0, overflow: "hidden",
           visibility: tab === "chat" ? "visible" : "hidden",
           pointerEvents: tab === "chat" ? "auto" : "none",
           zIndex: tab === "chat" ? 10 : -1,
