@@ -1031,7 +1031,6 @@ function TodoPanel() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [drawer, setDrawer] = useState(null);
   const [filter, setFilter] = useState("全部");
 
   const load = useCallback(async () => {
@@ -1059,19 +1058,27 @@ function TodoPanel() {
 
   const labelOf = s => s === "全部" ? "ALL" : s === "待办" ? "TO DO" : s === "完成" ? "DONE" : s;
 
-  const [creating, setCreating] = useState(false);
-  const createTodo = async (patch) => {
-    const tempId = "tmp-" + Date.now();
-    const tempTodo = { id: tempId, ...patch, created_at: new Date().toISOString() };
-    setItems(arr => [tempTodo, ...arr]);
-    setCreating(false);
-    try {
-      const saved = await sbPost("todos_cheng", patch);
-      const real = Array.isArray(saved) ? saved[0] : saved;
-      setItems(arr => arr.map(it => it.id === tempId ? (real || it) : it));
-    } catch(e) {
-      setError(e.message);
-      setItems(arr => arr.filter(it => it.id !== tempId));
+  const [editor, setEditor] = useState(null); // null | { mode: "create" | "edit", entry }
+  const submitTodo = async (patch) => {
+    if (editor?.mode === "create") {
+      const tempId = "tmp-" + Date.now();
+      const tempTodo = { id: tempId, ...patch, created_at: new Date().toISOString() };
+      setItems(arr => [tempTodo, ...arr]);
+      setEditor(null);
+      try {
+        const saved = await sbPost("todos_cheng", patch);
+        const real = Array.isArray(saved) ? saved[0] : saved;
+        setItems(arr => arr.map(it => it.id === tempId ? (real || it) : it));
+      } catch(e) {
+        setError(e.message);
+        setItems(arr => arr.filter(it => it.id !== tempId));
+      }
+    } else if (editor?.mode === "edit") {
+      const id = editor.entry.id;
+      setItems(arr => arr.map(it => it.id === id ? { ...it, ...patch } : it));
+      setEditor(null);
+      try { await sbPatch("todos_cheng", id, patch); }
+      catch(e) { setError(e.message); load(); }
     }
   };
 
@@ -1084,54 +1091,73 @@ function TodoPanel() {
       </div>
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      <PullToCreate onCreate={() => setCreating(true)}>
-        {/* 顶部内联展开新建表单 */}
+      <PullToCreate onCreate={() => setEditor({ mode: "create", entry: null })}>
+        {/* 顶部内联展开新建/编辑表单 */}
         <div style={{
-          maxHeight: creating ? 320 : 0,
+          maxHeight: editor ? 360 : 0,
           overflow: "hidden",
           transition: "max-height 0.3s ease",
         }}>
-          {creating && <InlineTodoCreate onCancel={() => setCreating(false)} onSave={createTodo}/>}
+          {editor && (
+            <InlineTodoForm
+              key={editor.entry?.id || "new"}
+              entry={editor.entry}
+              isNew={editor.mode === "create"}
+              onCancel={() => setEditor(null)}
+              onSave={submitTodo}
+            />
+          )}
         </div>
 
         {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-tertiary)", fontSize: 13 }}>正在拉取…</div>
-          : filtered.length === 0 && !creating ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-tertiary)", fontSize: 13 }}>没有代办</div>
+          : filtered.length === 0 && !editor ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-tertiary)", fontSize: 13 }}>没有代办</div>
           : filtered.map(t => <TodoCard key={t.id} todo={t}
               onToggle={toggleStatus}
-              onEdit={todo => setDrawer({ mode: "edit", entry: todo })}
+              onEdit={todo => setEditor({ mode: "edit", entry: todo })}
               onDelete={async id => { try { await sbDelete("todos_cheng", id); load(); } catch(e) { setError(e.message); } }}
             />)}
       </PullToCreate>
-
-      {drawer && <TodoDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("todos_cheng", patch); else await sbPatch("todos_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
     </div>
   );
 }
 
-function InlineTodoCreate({ onCancel, onSave }) {
-  const [f, setF] = useState({ title: "", description: "", due_date: "", tags: "" });
+function InlineTodoForm({ entry, isNew, onCancel, onSave }) {
+  const [f, setF] = useState({
+    title: entry?.title || "",
+    description: entry?.description || "",
+    due_date: entry?.due_date || "",
+    tags: Array.isArray(entry?.tags) ? entry.tags.join(", ") : "",
+  });
+  const titleRef = useRef(null);
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  const autoSize = () => {
+    const el = titleRef.current;
+    if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
+  };
+  useEffect(() => { autoSize(); }, [f.title]);
+
   const save = () => {
     if (!f.title.trim()) return;
     onSave({
       title: f.title,
       description: f.description || null,
-      status: "待办",
+      status: entry?.status || "待办",
       due_date: f.due_date || null,
       tags: f.tags.split(",").map(t => t.trim()).filter(Boolean),
-      author: "小茉莉",
+      author: entry?.author || "小茉莉",
     });
   };
   const fieldStyle = { background: "none", border: "none", outline: "none", fontFamily: "inherit", padding: 0, width: "100%", color: "var(--text-primary)" };
   return (
     <div style={{ borderBottom: "1px solid var(--border)", padding: "16px 6px", display: "flex", flexDirection: "column", gap: 10 }}>
-      <input
+      <textarea
+        ref={titleRef}
         autoFocus
         value={f.title}
         onChange={e => set("title", e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); } }}
         placeholder="我想…"
-        style={{ ...fieldStyle, fontSize: 16 }}
+        rows={1}
+        style={{ ...fieldStyle, fontSize: 16, lineHeight: 1.5, resize: "none", overflow: "hidden" }}
       />
       <input
         type="date"
@@ -1154,7 +1180,7 @@ function InlineTodoCreate({ onCancel, onSave }) {
       />
       <div style={{ display: "flex", gap: 18, alignItems: "center", marginTop: 4 }}>
         <button onClick={onCancel} style={{ background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 12, padding: 0, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em" }}>取消</button>
-        <button onClick={save} disabled={!f.title.trim()} style={{ background: "none", border: "none", color: "var(--text-primary)", fontSize: 12, padding: 0, cursor: f.title.trim() ? "pointer" : "not-allowed", fontFamily: "inherit", fontWeight: 600, opacity: f.title.trim() ? 1 : 0.4, letterSpacing: "0.05em" }}>添加</button>
+        <button onClick={save} disabled={!f.title.trim()} style={{ background: "none", border: "none", color: "var(--text-primary)", fontSize: 12, padding: 0, cursor: f.title.trim() ? "pointer" : "not-allowed", fontFamily: "inherit", fontWeight: 600, opacity: f.title.trim() ? 1 : 0.4, letterSpacing: "0.05em" }}>{isNew ? "添加" : "保存"}</button>
       </div>
     </div>
   );
