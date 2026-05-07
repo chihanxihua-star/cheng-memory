@@ -838,7 +838,7 @@ function BoardPanel() {
       <div style={{
         position: "sticky", bottom: 0, zIndex: 5,
         background: "var(--bg-page)",
-        padding: "8px 0 calc(12px + env(safe-area-inset-bottom, 0px))",
+        padding: "8px 0 12px",
         margin: "0 0 -28px",
       }}>
       <BoardCompose
@@ -960,7 +960,6 @@ export default function App() {
             flex: 1,
             display: tab === "chat" ? "none" : "block",
             paddingTop: "env(safe-area-inset-top)",
-            paddingBottom: "calc(60px + env(safe-area-inset-bottom))",
           }}>
             <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 16px 28px", width: "100%" }}>
               <div style={{ display: tab === "memory" ? "block" : "none" }}><MemoryPanel/></div>
