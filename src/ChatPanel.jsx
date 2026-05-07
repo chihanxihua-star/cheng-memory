@@ -221,6 +221,8 @@ const CSS = `
   display: flex; align-items: center; justify-content: space-between;
   padding: calc(2px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 2px calc(12px + env(safe-area-inset-left));
   background: var(--bg-primary); flex-shrink: 0;
+  /* iOS：在顶栏拖动不再 rubber-band 整个页面 */
+  touch-action: none;
 }
 .cp-top .left, .cp-top .center, .cp-top .right {
   flex: 1 1 0; min-width: 0; display: flex; align-items: center;
@@ -450,7 +452,12 @@ const CSS = `
 .cp-input-container {
   background: var(--bg-primary); border-top: 1px solid var(--border-primary);
   flex-shrink: 0;
+  /* iOS：在输入栏空白区域拖动不再 rubber-band */
+  touch-action: none;
 }
+.cp-input-container textarea,
+.cp-input-container input,
+.cp-input-container .cp-input-wrapper { touch-action: pan-y; }
 .cp-image-preview {
   display: none; gap: 6px; flex-wrap: wrap;
   padding: 8px 12px; background: var(--bg-sidebar); border-bottom: 1px solid var(--border-primary);
