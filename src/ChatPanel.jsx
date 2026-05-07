@@ -540,11 +540,11 @@ const CSS = `
 .cp-ps-form { margin-bottom: 14px; }
 .cp-ps-form label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
 .cp-ps-form input, .cp-ps-form textarea, .cp-ps-form select {
-  width: 100%; background: var(--bg-input); border: 1px solid var(--border-input); border-radius: 6px;
-  padding: 8px 10px; color: var(--text-primary); font-size: 13px; outline: none; font-family: inherit;
+  width: 100%; background: transparent; border: none; border-bottom: 1px solid var(--border-input); border-radius: 0;
+  padding: 8px 0; color: var(--text-primary); font-size: 13px; outline: none; font-family: inherit;
 }
 .cp-ps-form textarea { min-height: 100px; resize: vertical; line-height: 1.5; }
-.cp-ps-form input:focus, .cp-ps-form textarea:focus, .cp-ps-form select:focus { border-color: var(--border-input-focus); }
+.cp-ps-form input:focus, .cp-ps-form textarea:focus, .cp-ps-form select:focus { border-bottom-color: var(--border-input-focus); }
 .cp-ps-form small { font-size: 10px; color: var(--text-tertiary); display: block; margin-top: 4px; }
 
 .cp-ps-btn {
@@ -553,16 +553,16 @@ const CSS = `
 }
 .cp-ps-btn:hover { background: var(--bg-button-hover); }
 
-.cp-ps-tabs { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; }
+.cp-ps-tabs { display: flex; gap: 14px; margin-bottom: 12px; overflow-x: auto; }
 .cp-ps-tab {
-  background: var(--bg-card); border: 1px solid var(--border-card); color: var(--text-secondary);
-  padding: 6px 12px; font-size: 11px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-secondary);
+  padding: 6px 2px; font-size: 11px; border-radius: 0; cursor: pointer; white-space: nowrap;
 }
-.cp-ps-tab.active { background: var(--bg-sidebar-active); color: var(--text-primary); border-color: var(--border-input-focus); }
+.cp-ps-tab.active { background: transparent; color: var(--text-primary); border-bottom-color: var(--border-input-focus); }
 .cp-ps-mem-list { max-height: 320px; overflow-y: auto; }
 .cp-ps-mem-item {
-  background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 6px;
-  padding: 10px 12px; margin-bottom: 8px; font-size: 12px;
+  background: transparent; border: none; border-bottom: 1px solid var(--border-card); border-radius: 0;
+  padding: 10px 0; margin-bottom: 0; font-size: 12px;
 }
 .cp-ps-mem-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
 .cp-ps-mem-layer { color: var(--border-input-focus); font-size: 10px; text-transform: uppercase; }
@@ -576,8 +576,8 @@ const CSS = `
 
 .cp-ps-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 18px; }
 .cp-ps-stat-card {
-  background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 8px;
-  padding: 14px; text-align: center;
+  background: transparent; border: none; border-bottom: 1px solid var(--border-card); border-radius: 0;
+  padding: 12px 4px; text-align: center;
 }
 .cp-ps-stat-label { font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px; }
 .cp-ps-stat-value { font-size: 19px; color: var(--border-input-focus); font-weight: 500; }
@@ -617,10 +617,10 @@ const CSS = `
 .cp-section-title { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
 .cp-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .cp-row input[type="text"], .cp-modal input[type="text"] {
-  flex: 1; background: var(--bg-input); border: 1px solid var(--border-input); border-radius: 6px;
-  padding: 7px 10px; color: var(--text-primary); font-size: 13px; outline: none;
+  flex: 1; background: transparent; border: none; border-bottom: 1px solid var(--border-input); border-radius: 0;
+  padding: 7px 0; color: var(--text-primary); font-size: 13px; outline: none;
 }
-.cp-row input[type="text"]:focus, .cp-modal input[type="text"]:focus { border-color: var(--border-input-focus); }
+.cp-row input[type="text"]:focus, .cp-modal input[type="text"]:focus { border-bottom-color: var(--border-input-focus); }
 .cp-avatar-preview {
   width: 44px; height: 44px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
   font-size: 22px; overflow: hidden; cursor: pointer; position: relative; flex-shrink: 0;
@@ -634,17 +634,17 @@ const CSS = `
 }
 .cp-emoji-grid {
   display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px;
-  margin-top: 6px; padding: 6px; background: var(--bg-card); border-radius: 6px; border: 1px solid var(--border-card);
+  margin-top: 6px; padding: 6px 0; background: transparent; border-radius: 0; border: none; border-bottom: 1px solid var(--border-card);
 }
 .cp-emoji-grid span { text-align: center; font-size: 18px; padding: 4px; cursor: pointer; border-radius: 4px; }
 .cp-emoji-grid span:hover { background: var(--bg-sidebar-hover); }
 .cp-emoji-grid span.active { background: var(--bg-sidebar-active); outline: 1px solid var(--border-input-focus); }
 .cp-upload-row { display: flex; gap: 8px; margin-top: 6px; align-items: center; }
 .cp-upload-btn {
-  background: var(--bg-sidebar-hover); border: 1px solid var(--border-input);
-  color: var(--text-secondary); border-radius: 6px; padding: 5px 12px; font-size: 11px; cursor: pointer;
+  background: transparent; border: none; border-bottom: 1px solid var(--border-input);
+  color: var(--text-secondary); border-radius: 0; padding: 5px 2px; font-size: 11px; cursor: pointer;
 }
-.cp-upload-btn:hover { background: var(--bg-sidebar-active); color: var(--text-primary); }
+.cp-upload-btn:hover { color: var(--text-primary); border-bottom-color: var(--border-input-focus); }
 .cp-clear-btn { background: none; border: none; color: var(--text-tertiary); font-size: 11px; cursor: pointer; }
 .cp-clear-btn:hover { color: #ef4444; }
 .cp-save-btn {
@@ -2014,8 +2014,8 @@ function APISettingsScreen({ onBack, showToast }) {
   };
 
   const inputStyle = {
-    width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-input)",
-    borderRadius: 6, padding: "8px 10px", color: "var(--text-primary)", fontSize: 13,
+    width: "100%", background: "transparent", border: "none", borderBottom: "1px solid var(--border-input)",
+    borderRadius: 0, padding: "8px 0", color: "var(--text-primary)", fontSize: 13,
     outline: "none", fontFamily: "inherit",
   };
 
@@ -2307,7 +2307,7 @@ function FileListPanel({ tableName, filterEq, hint, showToast, onChange }) {
         <div style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 14px" }}>{hint}</div>
       )}
       {error && (
-        <div style={{ fontSize: 12, color: "#c0392b", padding: "10px 12px", background: "var(--bg-card)", border: "1px solid var(--border-card)", borderRadius: 6, marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: "#c0392b", padding: "10px 0", background: "transparent", border: "none", borderBottom: "1px solid var(--border-card)", borderRadius: 0, marginBottom: 12 }}>
           加载失败：{error}
         </div>
       )}
@@ -2401,9 +2401,9 @@ function DocSingleton({ mode, docType, label, placeholder, needsRestart, onResta
         placeholder={loading ? "加载中…" : placeholder}
         disabled={loading}
         style={{
-          width: "100%", minHeight, background: "var(--bg-input)",
-          border: "1px solid var(--border-input)", borderRadius: 6,
-          padding: "8px 10px", color: "var(--text-primary)", fontSize: 13,
+          width: "100%", minHeight, background: "transparent",
+          border: "none", borderBottom: "1px solid var(--border-input)", borderRadius: 0,
+          padding: "8px 0", color: "var(--text-primary)", fontSize: 13,
           outline: "none", fontFamily: "inherit", resize: "vertical", lineHeight: 1.5,
         }}/>
       <button className="cp-ps-btn" disabled={saving || loading} onClick={save}>
@@ -2436,10 +2436,11 @@ async function upsertDocSingleton(mode, docType, content) {
 
 const TEXTAREA_STYLE = {
   width: "100%",
-  background: "var(--bg-input)",
-  border: "1px solid var(--border-input)",
-  borderRadius: 6,
-  padding: "8px 10px",
+  background: "transparent",
+  border: "none",
+  borderBottom: "1px solid var(--border-input)",
+  borderRadius: 0,
+  padding: "8px 0",
   color: "var(--text-primary)",
   fontSize: 13,
   outline: "none",
@@ -2503,8 +2504,8 @@ function CCDocumentsTab({ onRestartCC, showToast }) {
     <>
       <div style={{
         fontSize: 11, color: "var(--text-tertiary)", marginBottom: 14,
-        padding: "8px 10px", background: "var(--bg-card)",
-        border: "1px solid var(--border-card)", borderRadius: 6,
+        padding: "8px 0", background: "transparent",
+        border: "none", borderBottom: "1px solid var(--border-card)", borderRadius: 0,
       }}>
         CC 文档：修改后需重启 CC 才生效，整段内容只在启动时读取一次
       </div>
@@ -2562,8 +2563,8 @@ function APIDocumentsTab({ showToast }) {
     <>
       <div style={{
         fontSize: 11, color: "var(--text-tertiary)", marginBottom: 14,
-        padding: "8px 10px", background: "var(--bg-card)",
-        border: "1px solid var(--border-card)", borderRadius: 6,
+        padding: "8px 0", background: "transparent",
+        border: "none", borderBottom: "1px solid var(--border-card)", borderRadius: 0,
       }}>
         API 文档：每轮对话都会自动注入
       </div>
@@ -2756,10 +2757,10 @@ function HistoryScreen({ onBack, showToast }) {
       <div className="cp-ps-section-title">日期范围</div>
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <input type="date" value={start} max={end || undefined} onChange={e => setStart(e.target.value)}
-          style={{ flex: 1, background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 6, padding: "7px 9px", color: "var(--text-primary)", fontSize: 12, outline: "none", fontFamily: "inherit" }}/>
+          style={{ flex: 1, background: "transparent", border: "none", borderBottom: "1px solid var(--border-input)", borderRadius: 0, padding: "7px 0", color: "var(--text-primary)", fontSize: 12, outline: "none", fontFamily: "inherit" }}/>
         <span style={{ alignSelf: "center", color: "var(--text-tertiary)", fontSize: 12 }}>至</span>
         <input type="date" value={end} min={start || undefined} onChange={e => setEnd(e.target.value)}
-          style={{ flex: 1, background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 6, padding: "7px 9px", color: "var(--text-primary)", fontSize: 12, outline: "none", fontFamily: "inherit" }}/>
+          style={{ flex: 1, background: "transparent", border: "none", borderBottom: "1px solid var(--border-input)", borderRadius: 0, padding: "7px 0", color: "var(--text-primary)", fontSize: 12, outline: "none", fontFamily: "inherit" }}/>
       </div>
 
       <div className="cp-ps-section-title">关键词</div>
@@ -2767,7 +2768,7 @@ function HistoryScreen({ onBack, showToast }) {
         <input type="text" value={keyword} onChange={e => setKeyword(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") search(); }}
           placeholder="搜索消息内容…"
-          style={{ flex: 1, background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 6, padding: "7px 10px", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "inherit" }}/>
+          style={{ flex: 1, background: "transparent", border: "none", borderBottom: "1px solid var(--border-input)", borderRadius: 0, padding: "7px 0", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "inherit" }}/>
         <button className="cp-ps-btn" style={{ width: 80, marginTop: 0 }} disabled={loading} onClick={search}>
           {loading ? "…" : "搜索"}
         </button>
@@ -2775,14 +2776,14 @@ function HistoryScreen({ onBack, showToast }) {
 
       <div className="cp-ps-section-title">结果 {!loading && results.length > 0 ? "(" + results.length + ")" : ""}</div>
       {error && (
-        <div style={{ fontSize: 12, color: "#c0392b", padding: "8px 10px", background: "var(--bg-card)", border: "1px solid var(--border-card)", borderRadius: 6, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: "#c0392b", padding: "8px 0", background: "transparent", border: "none", borderBottom: "1px solid var(--border-card)", borderRadius: 0, marginBottom: 8 }}>
           {error}
         </div>
       )}
       <div style={{
         maxHeight: 360, overflowY: "auto",
-        background: "var(--bg-card)", border: "1px solid var(--border-card)",
-        borderRadius: 6, padding: results.length === 0 ? 0 : "12px 14px",
+        background: "transparent", border: "none", borderBottom: "1px solid var(--border-card)",
+        borderRadius: 0, padding: results.length === 0 ? 0 : "12px 0",
       }}>
         {loading ? (
           <div style={{ textAlign: "center", color: "var(--text-tertiary)", padding: "24px 0" }}>加载中…</div>
@@ -2813,7 +2814,7 @@ function HistoryScreen({ onBack, showToast }) {
       <div className="cp-ps-section-title" style={{ marginTop: 18 }}>导出</div>
       <div style={{ display: "flex", gap: 8 }}>
         <select value={exportRange} onChange={e => setExportRange(e.target.value)}
-          style={{ flex: 1, background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 6, padding: "7px 9px", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "inherit" }}>
+          style={{ flex: 1, background: "transparent", border: "none", borderBottom: "1px solid var(--border-input)", borderRadius: 0, padding: "7px 0", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "inherit" }}>
           {EXPORT_RANGES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
         </select>
         <button className="cp-ps-btn" style={{ width: 110, marginTop: 0 }} disabled={exporting} onClick={doExport}>
@@ -2881,7 +2882,7 @@ function CharStatsScreen({ onBack, convId }) {
           加载中…
         </div>
       ) : error ? (
-        <div style={{ fontSize: 12, color: "#c0392b", padding: "10px 12px", background: "var(--bg-card)", border: "1px solid var(--border-card)", borderRadius: 6, marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: "#c0392b", padding: "10px 0", background: "transparent", border: "none", borderBottom: "1px solid var(--border-card)", borderRadius: 0, marginBottom: 12 }}>
           加载失败：{error}
         </div>
       ) : (
