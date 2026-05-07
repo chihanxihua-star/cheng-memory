@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import ChatPanel from "./ChatPanel";
 
 // ── 配置 ─────────────────────────────────────────────────
@@ -174,7 +175,7 @@ function ActionBtn({ children, onClick, accent = false, color = "#6b7fd4", disab
 }
 
 function Drawer({ title, onClose, children, footer }) {
-  return (
+  return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", justifyContent: "flex-end" }}>
       <div onClick={onClose} style={{ flex: 1, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}/>
       <div style={{ width: 380, maxWidth: "90vw", background: "var(--bg-card)", borderLeft: "1px solid var(--border)", display: "flex", flexDirection: "column", animation: "slideIn 0.22s ease" }}>
@@ -185,7 +186,8 @@ function Drawer({ title, onClose, children, footer }) {
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>{children}</div>
         {footer && <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", display: "flex", gap: 8 }}>{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
