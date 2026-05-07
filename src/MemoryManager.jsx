@@ -136,7 +136,7 @@ function EmotionDot({ valence = 0.5, arousal = 0.5, size = 44 }) {
       <rect x={0} y={0} width={size} height={size} rx={4} fill="var(--bg-card)" />
       <line x1={size/2} y1={2} x2={size/2} y2={size-2} stroke="var(--border)" strokeWidth={0.8}/>
       <line x1={2} y1={size/2} x2={size-2} y2={size/2} stroke="var(--border)" strokeWidth={0.8}/>
-      <circle cx={x} cy={y} r={2.5} fill="none" stroke="var(--text-secondary)" strokeWidth={1}/>
+      <circle cx={x} cy={y} r={2.5} fill="none" stroke="var(--text-tertiary)" strokeWidth={1}/>
     </svg>
   );
 }
