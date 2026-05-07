@@ -370,9 +370,9 @@ function MemoryPanel() {
         <div>
           {stats && <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {stats.total} 条 · 均强度 {stats.avgStr} · 📌{stats.pinned} ⚡{stats.flash}</p>}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <ActionBtn accent onClick={() => setDrawer({ mode: "create", memory: EMPTY_MEM })}>+ 写入</ActionBtn>
-          <ActionBtn onClick={reload}>{loading ? "…" : "刷新"}</ActionBtn>
+        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
+          <button onClick={() => setDrawer({ mode: "create", memory: EMPTY_MEM })} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 写入</button>
+          <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-secondary)" }}>{loading ? "…" : "刷新"}</button>
         </div>
       </div>
 
@@ -500,9 +500,9 @@ function DiaryPanel() {
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 篇</p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <ActionBtn accent onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 写日记</ActionBtn>
-            <ActionBtn onClick={reload}>{loading ? "…" : "刷新"}</ActionBtn>
+          <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
+            <button onClick={() => setDrawer({ mode: "create", entry: {} })} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 写日记</button>
+            <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-secondary)" }}>{loading ? "…" : "刷新"}</button>
           </div>
         </div>
         <input placeholder="搜索标题或内容…" value={search} onChange={e => { setSearch(e.target.value); clearTimeout(timer.current); timer.current = setTimeout(() => load(e.target.value), 400); }} style={{ ...inputStyle, borderRadius: 99, padding: "5px 14px", fontSize: 12, width: "100%" }}/>
@@ -600,9 +600,9 @@ function MilestonesPanel() {
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 个</p>
-        <div style={{ display: "flex", gap: 8 }}>
-          <ActionBtn accent color="#e8b86d" onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 添加</ActionBtn>
-          <ActionBtn onClick={load}>{loading ? "…" : "刷新"}</ActionBtn>
+        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
+          <button onClick={() => setDrawer({ mode: "create", entry: {} })} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 添加</button>
+          <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-secondary)" }}>{loading ? "…" : "刷新"}</button>
         </div>
       </div>
 
