@@ -834,28 +834,28 @@ export default function App() {
           overscrollBehavior: "contain",
           WebkitOverflowScrolling: "touch",
         }}>
-          {tab === "chat" ? (
-            <div style={{
-              flex: 1, minHeight: 0,
-              display: "flex", flexDirection: "column",
-              overflow: "hidden",
-            }}>
-              <ChatPanel onBack={() => setTab("memory")}/>
+          {/* 切 tab 时不卸载，避免 ChatPanel 的 WebSocket 断连 / 各板块重复拉数据 */}
+          <div style={{
+            flex: 1, minHeight: 0,
+            display: tab === "chat" ? "flex" : "none",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}>
+            <ChatPanel onBack={() => setTab("memory")}/>
+          </div>
+          <div style={{
+            flex: 1,
+            display: tab === "chat" ? "none" : "block",
+            paddingTop: "env(safe-area-inset-top)",
+            paddingBottom: "calc(60px + env(safe-area-inset-bottom))",
+          }}>
+            <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 16px 28px", width: "100%" }}>
+              <div style={{ display: tab === "memory" ? "block" : "none" }}><MemoryPanel/></div>
+              <div style={{ display: tab === "diary" ? "block" : "none" }}><DiaryPanel/></div>
+              <div style={{ display: tab === "milestones" ? "block" : "none" }}><MilestonesPanel/></div>
+              <div style={{ display: tab === "board" ? "block" : "none" }}><BoardPanel/></div>
             </div>
-          ) : (
-            <div style={{
-              flex: 1,
-              paddingTop: "env(safe-area-inset-top)",
-              paddingBottom: "calc(60px + env(safe-area-inset-bottom))",
-            }}>
-              <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 16px 28px", width: "100%" }}>
-                {tab === "memory" && <MemoryPanel/>}
-                {tab === "diary" && <DiaryPanel/>}
-                {tab === "milestones" && <MilestonesPanel/>}
-                {tab === "board" && <BoardPanel/>}
-              </div>
-            </div>
-          )}
+          </div>
         </main>
 
         {tab !== "chat" && <BottomTabBar tab={tab} setTab={setTab}/>}
