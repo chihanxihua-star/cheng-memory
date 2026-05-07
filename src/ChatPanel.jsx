@@ -218,8 +218,7 @@ const CSS = `
 /* TOP BAR */
 .cp-top {
   display: flex; align-items: center; justify-content: space-between;
-  padding: calc(8px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 8px calc(12px + env(safe-area-inset-left));
-  border-bottom: 1px solid var(--border-primary);
+  padding: calc(2px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 2px calc(12px + env(safe-area-inset-left));
   background: var(--bg-primary); flex-shrink: 0;
 }
 .cp-top .left, .cp-top .center, .cp-top .right {
