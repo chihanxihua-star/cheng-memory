@@ -855,11 +855,11 @@ function BoardPanel() {
 
       <div style={{
         position: "fixed", bottom: NAV_HEIGHT, left: 0, right: 0, zIndex: 49,
-        background: "var(--bg-page)",
+        background: "transparent",
         padding: "8px 16px 10px",
-        borderTop: "1px solid var(--border)",
+        pointerEvents: "none",
       }}>
-        <div style={{ maxWidth: 860, margin: "0 auto" }}>
+        <div style={{ maxWidth: 860, margin: "0 auto", pointerEvents: "auto" }}>
       <BoardCompose
         onOpenDrawer={() => setDrawer({ mode: "create", entry: {} })}
         onSend={async patch => {
