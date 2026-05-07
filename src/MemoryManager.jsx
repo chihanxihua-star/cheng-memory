@@ -291,14 +291,20 @@ function MemoryCard({ mem, onEdit, onDelete }) {
   const meta = LEVEL_META[mem.level] || LEVEL_META[1];
   const [cd, setCd] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const linkBtn = { background: "none", border: "none", color: "var(--text-secondary)", fontSize: 11, padding: 0, cursor: "pointer", fontFamily: "inherit" };
+  const tagPill = { fontSize: 10, color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: 99, padding: "1px 8px", letterSpacing: "0.04em" };
   return (
-    <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10, borderLeft: `2px solid ${meta.color}88`, transition: "background 0.15s" }}
-      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-card)"}
-      onMouseLeave={e => e.currentTarget.style.background = "var(--bg-card)"}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+    <div style={{
+      background: "var(--bg-card)",
+      border: "1px solid var(--border)",
+      borderRadius: 16,
+      padding: "18px 20px",
+      display: "flex", flexDirection: "column", gap: 14,
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         <EmotionDot valence={mem.valence} arousal={mem.arousal}/>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 13.5, color: "var(--text-primary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{mem.content}</p>
+          <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{mem.content}</p>
           {sheet && (
             <BottomSheet onClose={() => setSheet(false)}>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
@@ -312,23 +318,32 @@ function MemoryCard({ mem, onEdit, onDelete }) {
               <div>{mem.content}</div>
             </BottomSheet>
           )}
-          {mem.summary && <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.4 }}>{mem.summary}</p>}
+          {mem.summary && <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.5 }}>{mem.summary}</p>}
           <SensoryAnchors context={mem.context}/>
         </div>
       </div>
+
       <StrengthBar value={mem.strength ?? 0} color={meta.color}/>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
-        <Badge color={meta.color+"22"} text={meta.color}>{meta.label}</Badge>
-        <AuthorBadge author={mem.author}/>
-        {mem.pinned && <Badge color="#e8c47322" text="#e8c473">📌</Badge>}
-        {mem.flashbulb && <Badge color="#e87a5022" text="#e87a50">⚡</Badge>}
-        {mem.resolved === false && <Badge color="#ffffff11" text="var(--text-secondary)">未愈</Badge>}
-        {(mem.tags||[]).slice(0,3).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
-        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--text-secondary)" }}>{formatDate(mem.created_at)} · 引用 {mem.ref_count??0}</span>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 6, height: 6, borderRadius: 99, background: meta.color, display: "inline-block" }}/>
+          <span style={{ color: meta.color, letterSpacing: "0.05em" }}>{meta.label}</span>
+        </span>
+        <span style={{ color: "var(--text-tertiary)" }}>·</span>
+        <span style={{ color: "var(--text-tertiary)" }}>{mem.author}</span>
+        {mem.pinned && <span title="置顶">📌</span>}
+        {mem.flashbulb && <span title="闪光">⚡</span>}
+        {mem.resolved === false && <span style={{ color: "var(--text-secondary)" }}>未愈</span>}
+        {(mem.tags||[]).slice(0,3).map(t => <span key={t} style={tagPill}>{t}</span>)}
+        <span style={{ marginLeft: "auto", color: "var(--text-tertiary)" }}>{formatDate(mem.created_at)} · 引用 {mem.ref_count??0}</span>
       </div>
-      <div style={{ display: "flex", gap: 6, marginTop: -2 }}>
-        <ActionBtn onClick={() => onEdit(mem)}>编辑</ActionBtn>
-        {cd ? <ActionBtn accent color="#c0392b" onClick={() => { onDelete(mem.id); setCd(false); }}>确认删除</ActionBtn> : <ActionBtn onClick={() => setCd(true)}>删除</ActionBtn>}
+
+      <div style={{ display: "flex", gap: 16 }}>
+        <button onClick={() => onEdit(mem)} style={linkBtn}>编辑</button>
+        {cd
+          ? <button onClick={() => { onDelete(mem.id); setCd(false); }} style={{ ...linkBtn, color: "#c0392b" }}>确认删除</button>
+          : <button onClick={() => setCd(true)} style={linkBtn}>删除</button>}
       </div>
     </div>
   );
