@@ -737,7 +737,7 @@ function DiaryCard({ entry, onEdit, onDelete }) {
           <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{entry.content}</p>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-secondary)" }}>
-          <span style={{ color: "#9E6E7C", letterSpacing: "0.05em" }}>{entry.author}</span>
+          <span style={{ color: "var(--text-secondary)" }}>{entry.author}</span>
           {(entry.tags||[]).slice(0,3).map(t => <span key={t} style={tagPill}>{t}</span>)}
           <span style={{ marginLeft: "auto", color: "var(--text-secondary)" }}>{formatDateTime(entry.created_at)}</span>
         </div>
