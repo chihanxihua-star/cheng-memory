@@ -286,7 +286,7 @@ function MemoryDrawer({ memory, isNew, onSave, onClose }) {
   );
 }
 
-function MemoryCard({ mem, onEdit, onDelete }) {
+function MemoryCard({ mem, onEdit, onDelete, onMarkRead }) {
   const meta = LEVEL_META[mem.level] || LEVEL_META[1];
   const [cd, setCd] = useState(false);
   const [sheet, setSheet] = useState(false);
@@ -312,7 +312,7 @@ function MemoryCard({ mem, onEdit, onDelete }) {
         position: "absolute", right: 0, top: 0, bottom: 0, width: REVEAL,
         display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, paddingRight: 12,
       }}>
-        <button onClick={() => { onEdit(mem); setTx(0); }} style={actionBtn}>编辑</button>
+        <button onClick={() => { if (!mem.is_read && onMarkRead) onMarkRead(mem.id); onEdit(mem); setTx(0); }} style={actionBtn}>编辑</button>
         {cd
           ? <button onClick={() => { onDelete(mem.id); setCd(false); setTx(0); }} style={{ ...actionBtn, color: "#c0392b" }}>确认</button>
           : <button onClick={() => setCd(true)} style={{ ...actionBtn, color: "#c0392b" }}>删除</button>}
@@ -330,12 +330,21 @@ function MemoryCard({ mem, onEdit, onDelete }) {
           display: "flex", flexDirection: "column", gap: 14,
           transform: `translateX(${tx}px)`,
           transition: startX.current === null ? "transform 0.22s ease" : "none",
+          position: "relative",
         }}
       >
+      {!mem.is_read && (
+        <span style={{
+          position: "absolute", top: 10, right: 10,
+          width: 8, height: 8, borderRadius: "50%",
+          background: "#E07090",
+          boxShadow: "0 0 6px rgba(224,112,144,0.4)",
+        }} aria-label="未读"/>
+      )}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         <EmotionDot valence={mem.valence} arousal={mem.arousal}/>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{mem.summary || mem.content}</p>
+          <p onClick={() => { setSheet(true); if (!mem.is_read && onMarkRead) onMarkRead(mem.id); }} style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{mem.summary || mem.content}</p>
           {sheet && (
             <BottomSheet onClose={() => setSheet(false)}>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
@@ -374,7 +383,7 @@ function MemoryPanel() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [filters, setFilters] = useState({ level: "", pinned: false, flashbulb: false, unresolved: false, search: "" });
+  const [filters, setFilters] = useState({ level: "", pinned: false, flashbulb: false, unresolved: false, unread: false, search: "" });
   const [sort, setSort] = useState("created_at.desc");
   const [stats, setStats] = useState(null);
   const timer = useRef(null);
@@ -388,6 +397,7 @@ function MemoryPanel() {
       if (f.pinned) p += `&pinned=eq.true`;
       if (f.flashbulb) p += `&flashbulb=eq.true`;
       if (f.unresolved) p += `&resolved=eq.false`;
+      if (f.unread) p += `&is_read=eq.false`;
       if (f.search) p += `&content=ilike.*${encodeURIComponent(f.search)}*`;
       const d = await sbGet("memories_cheng", p);
       setItems(d);
@@ -487,6 +497,15 @@ function MemoryPanel() {
           borderBottom: filters.unresolved ? "2px solid var(--text-primary)" : "2px solid transparent",
           transition: "all 0.15s",
         }}>未愈</button>
+        <button onClick={() => filterChange("unread", !filters.unread)} style={{
+          background: "none", border: "none",
+          padding: "5px 0 7px", cursor: "pointer", fontFamily: "inherit",
+          fontSize: 13, letterSpacing: "0.15em",
+          color: filters.unread ? "var(--text-primary)" : "var(--text-tertiary)",
+          fontWeight: filters.unread ? 600 : 400,
+          borderBottom: filters.unread ? "2px solid var(--text-primary)" : "2px solid transparent",
+          transition: "all 0.15s",
+        }}>未读</button>
         <select value={sort} onChange={e => { setSort(e.target.value); load(filters, e.target.value); }} style={{
           background: "transparent", border: "none",
           padding: "5px 0", fontSize: 12, color: "var(--text-tertiary)",
@@ -503,7 +522,11 @@ function MemoryPanel() {
         {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>正在拉取…</div>
           : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>没有记忆</div>
           : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
-              {items.map(m => <div key={m.id} style={{ animation: "fadeUp 0.25s ease both" }}><MemoryCard mem={m} onEdit={mem => setEditor({ mode: "edit", entry: mem })} onDelete={async id => { try { await sbDelete("memories_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
+              {items.map(m => <div key={m.id} style={{ animation: "fadeUp 0.25s ease both" }}><MemoryCard mem={m} onEdit={mem => setEditor({ mode: "edit", entry: mem })} onDelete={async id => { try { await sbDelete("memories_cheng", id); reload(); } catch(e) { setError(e.message); } }} onMarkRead={async id => {
+                setItems(arr => arr.map(it => it.id === id ? { ...it, is_read: true } : it));
+                try { await sbPatch("memories_cheng", id, { is_read: true }); }
+                catch(e) { setError(e.message); reload(); }
+              }}/></div>)}
             </div>}
       </PullToCreate>
 
