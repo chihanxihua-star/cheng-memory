@@ -172,6 +172,7 @@ function ErrorBar({ error, onClose }) {
 }
 
 const inputStyle = { background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", padding: "8px 10px", fontSize: 13, width: "100%", fontFamily: "inherit", resize: "vertical", outline: "none", boxSizing: "border-box" };
+const underlineStyle = { background: "transparent", border: "none", borderBottom: "1px solid var(--border)", borderRadius: 0, color: "var(--text-primary)", padding: "8px 0", fontSize: 14, width: "100%", fontFamily: "Georgia, 'Noto Serif SC', serif", resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.55 };
 const labelStyle = { fontSize: 11, color: "var(--text-secondary)", letterSpacing: "0.06em", marginBottom: 4, display: "block" };
 
 function chipStyle(active, color = "#6b7fd4") {
@@ -545,8 +546,8 @@ function MemoryFullForm({ entry, isNew, onCancel, onSave }) {
             })}
           </div>
 
-          <div><label style={labelStyle}>摘要</label><textarea rows={2} style={inputStyle} value={f.summary} onChange={e => set("summary", e.target.value)} placeholder="一句话概括"/></div>
-          <div><label style={labelStyle}>正文</label><textarea autoFocus rows={6} style={inputStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="写点什么…"/></div>
+          <div><label style={labelStyle}>摘要</label><textarea rows={2} style={underlineStyle} value={f.summary} onChange={e => set("summary", e.target.value)} placeholder="一句话概括"/></div>
+          <div><label style={labelStyle}>正文</label><textarea autoFocus rows={6} style={underlineStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="写点什么…"/></div>
           <div><label style={labelStyle}>日期（可选 · 留空记今天）</label><input type="date" style={inputStyle} value={f.event_date} onChange={e => set("event_date", e.target.value)}/></div>
 
           <div>
@@ -577,8 +578,8 @@ function MemoryFullForm({ entry, isNew, onCancel, onSave }) {
             </div>
           )}
 
-          <div><label style={labelStyle}>标签（逗号分隔）</label><input style={inputStyle} value={f.tags} onChange={e => set("tags", e.target.value)} placeholder="起源, 调试"/></div>
-          <div><label style={labelStyle}>感官锚点（逗号分隔）</label><input style={inputStyle} value={f.senses} onChange={e => set("senses", e.target.value)} placeholder="窗外下雨, 咖啡的味道"/></div>
+          <div><label style={labelStyle}>标签（逗号分隔）</label><input style={underlineStyle} value={f.tags} onChange={e => set("tags", e.target.value)} placeholder="起源, 调试"/></div>
+          <div><label style={labelStyle}>感官锚点（逗号分隔）</label><input style={underlineStyle} value={f.senses} onChange={e => set("senses", e.target.value)} placeholder="窗外下雨, 咖啡的味道"/></div>
 
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", paddingTop: 4 }}>
             {[
