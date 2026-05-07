@@ -496,7 +496,6 @@ function DiaryPanel() {
         zIndex: 20,
         background: "var(--bg-page)",
         padding: "10px 16px",
-        borderBottom: "1px solid var(--border)",
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 篇</p>
@@ -596,7 +595,6 @@ function MilestonesPanel() {
         zIndex: 20,
         background: "var(--bg-page)",
         padding: "12px 16px",
-        borderBottom: "1px solid var(--border)",
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>共 {items.length} 个</p>
