@@ -1155,18 +1155,8 @@ function MoodCalendarPanel({ onTimeline }) {
 
   return (
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      {/* 顶部：图例 + 时间轴入口 */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <div style={{ display: "flex", gap: 14, fontSize: 10.5, letterSpacing: "0.18em", color: "var(--text-tertiary)" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span style={{ width: 9, height: 9, borderRadius: "50%", border: "1.2px solid var(--text-tertiary)" }}/>
-            小茉莉
-          </span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--text-tertiary)" }}/>
-            澄
-          </span>
-        </div>
+      {/* 顶部：时间轴入口 */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginBottom: 14 }}>
         <button onClick={onTimeline} style={{
           background: "none", border: "none", padding: 0, cursor: "pointer",
           fontSize: 11, letterSpacing: "0.2em", color: "var(--text-secondary)", fontFamily: "inherit",
