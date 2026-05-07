@@ -159,7 +159,7 @@ function SensoryAnchors({ context }) {
   if (!senses?.length) return null;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
-      {senses.map((s, i) => <span key={i} style={{ fontSize: 10.5, color: "var(--text-secondary)", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 4, padding: "1px 6px", fontStyle: "italic" }}>{s}</span>)}
+      {senses.map((s, i) => <span key={i} style={{ fontSize: 10.5, color: "var(--text-secondary)", background: "rgba(0,0,0,0.04)", borderRadius: 4, padding: "2px 8px", fontStyle: "italic" }}>{s}</span>)}
     </div>
   );
 }
@@ -294,7 +294,7 @@ function MemoryCard({ mem, onEdit, onDelete }) {
   const startX = useRef(null);
   const baseTx = useRef(0);
   const REVEAL = 130;
-  const tagPill = { fontSize: 10, color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: 99, padding: "1px 8px", letterSpacing: "0.04em" };
+  const tagPill = { fontSize: 10, color: "var(--text-tertiary)", background: "rgba(0,0,0,0.04)", border: "none", borderRadius: 99, padding: "2px 9px", letterSpacing: "0.04em" };
   const actionBtn = { background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 12, padding: "0 8px", cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em", height: "100%" };
   const onTouchStart = (e) => { startX.current = e.touches[0].clientX; baseTx.current = tx; };
   const onTouchMove = (e) => {
@@ -1176,7 +1176,7 @@ function TodoCard({ todo, onToggle, onEdit, onDelete }) {
   const startX = useRef(null);
   const baseTx = useRef(0);
   const REVEAL = 130;
-  const tagPill = { fontSize: 10, color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: 99, padding: "1px 8px", letterSpacing: "0.04em" };
+  const tagPill = { fontSize: 10, color: "var(--text-tertiary)", background: "rgba(0,0,0,0.04)", border: "none", borderRadius: 99, padding: "2px 9px", letterSpacing: "0.04em" };
   const actionBtn = { background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 12, padding: "0 8px", cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em", height: "100%" };
 
   const onTouchStart = (e) => { startX.current = e.touches[0].clientX; baseTx.current = tx; };
