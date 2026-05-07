@@ -184,7 +184,7 @@ function Drawer({ title, onClose, children, footer }) {
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
         </div>
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>{children}</div>
-        {footer && <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", display: "flex", gap: 8 }}>{footer}</div>}
+        {footer && <div style={{ padding: "12px 20px", paddingBottom: "calc(12px + env(safe-area-inset-bottom, 20px))", borderTop: "1px solid var(--border)", display: "flex", gap: 8 }}>{footer}</div>}
       </div>
     </div>,
     document.body
@@ -819,6 +819,7 @@ function BottomTabBar({ tab, setTab }) {
       zIndex: 10,
       display:"flex", justifyContent:"space-around", alignItems:"center",
       padding:"0px 4px 0",
+      paddingTop: 6,
       paddingBottom:"calc(2px + env(safe-area-inset-bottom, 20px))",
       background:"var(--bg-translucent)",
       backdropFilter:"blur(12px)",
@@ -832,7 +833,7 @@ function BottomTabBar({ tab, setTab }) {
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             display:"flex", flexDirection:"column", alignItems:"center", gap:0,
             background:"none", border:"none", cursor:"pointer",
-            padding:"4px 13px", opacity:a?1:0.4, transition:"opacity 0.2s",
+            padding:"2px 13px 0", opacity:a?1:0.4, transition:"opacity 0.2s",
             color: a ? "var(--accent)" : "var(--text-secondary)",
             fontFamily:"inherit",
           }}>
