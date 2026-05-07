@@ -128,17 +128,16 @@ function AuthorBadge({ author }) {
   return <Badge color={c + "22"} text={c}>{author}</Badge>;
 }
 
-function EmotionDot({ valence = 0.5, arousal = 0.5, size = 44 }) {
+function EmotionDot({ valence = 0.5, arousal = 0.5, level = 1, size = 44 }) {
   const x = valence * (size - 8) + 4;
   const y = (1 - arousal) * (size - 8) + 4;
-  const hue = Math.round(valence * 200 + 160);
-  const sat = 40 + arousal * 50;
+  const dotColor = LEVEL_META[level]?.color || "#FFEEEE";
   return (
     <svg width={size} height={size} style={{ flexShrink: 0 }}>
       <rect x={0} y={0} width={size} height={size} rx={4} fill="var(--bg-card)" />
-      <line x1={size/2} y1={2} x2={size/2} y2={size-2} stroke="var(--border)" strokeWidth={0.5}/>
-      <line x1={2} y1={size/2} x2={size-2} y2={size/2} stroke="var(--border)" strokeWidth={0.5}/>
-      <circle cx={x} cy={y} r={3.5} fill={`hsl(${hue},${sat}%,65%)`} opacity={0.9}/>
+      <line x1={size/2} y1={2} x2={size/2} y2={size-2} stroke="var(--text-tertiary)" strokeWidth={1}/>
+      <line x1={2} y1={size/2} x2={size-2} y2={size/2} stroke="var(--text-tertiary)" strokeWidth={1}/>
+      <circle cx={x} cy={y} r={4.5} fill={dotColor}/>
     </svg>
   );
 }
@@ -147,7 +146,7 @@ function StrengthBar({ value = 0 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
       <div style={{ flex: 1, height: 1, background: "var(--border)", borderRadius: 99 }}>
-        <div style={{ width: `${(value*100).toFixed(0)}%`, height: "100%", background: "var(--text-primary)", borderRadius: 99, transition: "width 0.4s" }}/>
+        <div style={{ width: `${(value*100).toFixed(0)}%`, height: "100%", background: "var(--text-tertiary)", borderRadius: 99, transition: "width 0.4s" }}/>
       </div>
       <span style={{ fontSize: 10, color: "var(--text-tertiary)", minWidth: 28, textAlign: "right" }}>{(value*100).toFixed(0)}%</span>
     </div>
@@ -335,7 +334,7 @@ function MemoryCard({ mem, onEdit, onDelete }) {
         }}
       >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-        <EmotionDot valence={mem.valence} arousal={mem.arousal}/>
+        <EmotionDot valence={mem.valence} arousal={mem.arousal} level={mem.level}/>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{mem.summary || mem.content}</p>
           {sheet && (
