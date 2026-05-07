@@ -951,40 +951,64 @@ function BoardPanel() {
 function TodoCard({ todo, onToggle, onEdit, onDelete }) {
   const statusColor = TODO_STATUS_COLORS[todo.status] || "#e8b86d";
   const isDone = todo.status === "完成";
-  const [cd, setCd] = useState(false);
-  const linkBtn = { background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 11, padding: 0, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em" };
+  const [tx, setTx] = useState(0);
+  const startX = useRef(null);
+  const baseTx = useRef(0);
+  const REVEAL = 130;
   const tagPill = { fontSize: 10, color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: 99, padding: "1px 8px", letterSpacing: "0.04em" };
+  const actionBtn = { background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, padding: "0 8px", cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em", height: "100%" };
+
+  const onTouchStart = (e) => { startX.current = e.touches[0].clientX; baseTx.current = tx; };
+  const onTouchMove = (e) => {
+    if (startX.current === null) return;
+    const dx = e.touches[0].clientX - startX.current;
+    let nx = baseTx.current + dx;
+    nx = Math.max(0, Math.min(REVEAL, nx));
+    setTx(nx);
+  };
+  const onTouchEnd = () => { setTx(tx > REVEAL / 2 ? REVEAL : 0); startX.current = null; };
+
   return (
-    <div style={{
-      padding: "16px 6px",
-      borderBottom: "1px solid var(--border)",
-      opacity: isDone ? 0.5 : 1,
-    }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-        <button onClick={() => onToggle(todo)} title="切换状态" style={{
-          width: 22, height: 22, borderRadius: 99, marginTop: 1,
-          border: `1.5px solid ${isDone ? statusColor : "#e8b86d"}`,
-          background: isDone ? statusColor : "transparent",
-          cursor: "pointer", flexShrink: 0, fontFamily: "inherit",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: isDone ? "white" : "transparent",
-          fontSize: 12, lineHeight: 1, padding: 0,
-        }}>{isDone ? "✓" : ""}</button>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.55, textDecoration: isDone ? "line-through" : "none" }}>{todo.title}</p>
-          {todo.description && <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5 }}>{todo.description}</p>}
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
-            {todo.due_date && <span>{todo.due_date}</span>}
-            {(todo.tags || []).map(t => <span key={t} style={tagPill}>{t}</span>)}
-            <span style={{ marginLeft: "auto" }}>{formatDate(todo.created_at)}</span>
-          </div>
-
-          <div style={{ display: "flex", gap: 18, marginTop: 8 }}>
-            <button onClick={() => onEdit(todo)} style={linkBtn}>编辑</button>
-            {cd
-              ? <button onClick={() => { onDelete(todo.id); setCd(false); }} style={{ ...linkBtn, color: "#c0392b" }}>确认删除</button>
-              : <button onClick={() => setCd(true)} style={linkBtn}>删除</button>}
+    <div style={{ position: "relative", overflow: "hidden", borderBottom: "1px solid var(--border)", opacity: isDone ? 0.5 : 1 }}>
+      {/* 右滑显示的操作（在左侧露出） */}
+      <div style={{
+        position: "absolute", left: 0, top: 0, bottom: 0, width: REVEAL,
+        display: "flex", alignItems: "center", gap: 4, paddingLeft: 6,
+      }}>
+        <button onClick={() => { onEdit(todo); setTx(0); }} style={actionBtn}>编辑</button>
+        <button onClick={() => { onDelete(todo.id); setTx(0); }} style={{ ...actionBtn, color: "#c0392b" }}>删除</button>
+      </div>
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+        style={{
+          padding: "14px 6px",
+          background: "var(--bg-page)",
+          transform: `translateX(${tx}px)`,
+          transition: startX.current === null ? "transform 0.22s ease" : "none",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <button onClick={() => onToggle(todo)} title="切换状态" style={{
+            width: 16, height: 16, borderRadius: 99, marginTop: 3,
+            border: `1px solid ${isDone ? statusColor : "rgba(0,0,0,0.5)"}`,
+            background: isDone ? statusColor : "transparent",
+            cursor: "pointer", flexShrink: 0, fontFamily: "inherit",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: isDone ? "white" : "transparent",
+            fontSize: 10, lineHeight: 1, padding: 0,
+          }}>{isDone ? "✓" : ""}</button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.55, textDecoration: isDone ? "line-through" : "none" }}>{todo.title}</p>
+            {todo.description && <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5 }}>{todo.description}</p>}
+            {(todo.due_date || (todo.tags && todo.tags.length)) && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
+                {todo.due_date && <span>{todo.due_date}</span>}
+                {(todo.tags || []).map(t => <span key={t} style={tagPill}>{t}</span>)}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -996,33 +1020,26 @@ function TodoDrawer({ entry, isNew, onSave, onClose }) {
   const [f, setF] = useState({
     title: entry.title || "",
     description: entry.description || "",
-    status: entry.status || "待办",
     due_date: entry.due_date || "",
     tags: Array.isArray(entry.tags) ? entry.tags.join(", ") : "",
-    author: entry.author || "小茉莉",
   });
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
   return (
     <Drawer title={isNew ? "新代办" : "编辑代办"} onClose={onClose} footer={<>
       <ActionBtn onClick={onClose}>取消</ActionBtn>
       <ActionBtn accent color="#a89fd8" disabled={!f.title.trim()} onClick={() => onSave({
-        title: f.title, description: f.description || null,
-        status: f.status,
+        title: f.title,
+        description: f.description || null,
+        status: entry.status || "待办",
         due_date: f.due_date || null,
         tags: f.tags.split(",").map(t => t.trim()).filter(Boolean),
-        author: f.author,
+        author: entry.author || "小茉莉",
       })} flex={2}>{isNew ? "添加" : "保存"}</ActionBtn>
     </>}>
-      <div><label style={labelStyle}>标题</label><input style={inputStyle} value={f.title} onChange={e => set("title", e.target.value)} placeholder="要做什么…"/></div>
-      <div><label style={labelStyle}>描述（可选）</label><textarea rows={3} style={inputStyle} value={f.description} onChange={e => set("description", e.target.value)}/></div>
-      <div><label style={labelStyle}>状态</label>
-        <select style={inputStyle} value={f.status} onChange={e => set("status", e.target.value)}>
-          {["待办","完成"].map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-      </div>
+      <div><input style={{ ...inputStyle, fontSize: 16, padding: "12px 14px" }} value={f.title} onChange={e => set("title", e.target.value)} placeholder="我想…" autoFocus={isNew}/></div>
       <div><label style={labelStyle}>截止日期</label><input type="date" style={inputStyle} value={f.due_date} onChange={e => set("due_date", e.target.value)}/></div>
       <div><label style={labelStyle}>标签（逗号分隔）</label><input style={inputStyle} value={f.tags} onChange={e => set("tags", e.target.value)} placeholder="工作, 学习"/></div>
-      <div><label style={labelStyle}>作者</label><input style={inputStyle} value={f.author} onChange={e => set("author", e.target.value)}/></div>
+      <div><label style={labelStyle}>描述（可选）</label><textarea rows={3} style={inputStyle} value={f.description} onChange={e => set("description", e.target.value)}/></div>
     </Drawer>
   );
 }
@@ -1064,37 +1081,56 @@ function TodoPanel() {
         <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-secondary)" }}>{loading ? "…" : "刷新"}</button>
       </div>
       <ErrorBar error={error} onClose={() => setError(null)}/>
-      {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
-        : filtered.length === 0 ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有代办</div>
-        : filtered.map(t => <TodoCard key={t.id} todo={t}
-            onToggle={toggleStatus}
-            onEdit={todo => setDrawer({ mode: "edit", entry: todo })}
-            onDelete={async id => { try { await sbDelete("todos_cheng", id); load(); } catch(e) { setError(e.message); } }}
-          />)}
-
-      {/* 右下角悬浮加号：粉色圆 + 透明（页面色挖洞）加号 */}
-      <button
-        onClick={() => setDrawer({ mode: "create", entry: {} })}
-        title="新建代办"
-        aria-label="新建代办"
-        style={{
-          position: "fixed",
-          right: 20,
-          bottom: "calc(70px + env(safe-area-inset-bottom, 0px))",
-          width: 56, height: 56, borderRadius: 99,
-          background: "var(--bg-user-bubble)",
-          border: "none",
-          boxShadow: "0 6px 16px rgba(0,0,0,0.12)",
-          cursor: "pointer",
-          fontFamily: "inherit",
-          color: "var(--bg-page)",
-          fontSize: 32, lineHeight: 1, fontWeight: 300,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          paddingBottom: 4,
-          zIndex: 30,
-        }}>+</button>
+      <PullToCreate onCreate={() => setDrawer({ mode: "create", entry: {} })}>
+        {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+          : filtered.length === 0 ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有代办</div>
+          : filtered.map(t => <TodoCard key={t.id} todo={t}
+              onToggle={toggleStatus}
+              onEdit={todo => setDrawer({ mode: "edit", entry: todo })}
+              onDelete={async id => { try { await sbDelete("todos_cheng", id); load(); } catch(e) { setError(e.message); } }}
+            />)}
+      </PullToCreate>
 
       {drawer && <TodoDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("todos_cheng", patch); else await sbPatch("todos_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
+    </div>
+  );
+}
+
+function PullToCreate({ onCreate, children }) {
+  const [pullY, setPullY] = useState(0);
+  const startY = useRef(null);
+  const TRIGGER = 60;
+  const MAX = 110;
+
+  const onTouchStart = (e) => {
+    // 只有滚动到 main 顶部时才触发下拉
+    const main = document.querySelector("main");
+    if (main && main.scrollTop > 0) return;
+    startY.current = e.touches[0].clientY;
+  };
+  const onTouchMove = (e) => {
+    if (startY.current === null) return;
+    const dy = e.touches[0].clientY - startY.current;
+    if (dy > 0) setPullY(Math.min(dy * 0.5, MAX));
+  };
+  const onTouchEnd = () => {
+    if (pullY >= TRIGGER) onCreate();
+    setPullY(0);
+    startY.current = null;
+  };
+
+  return (
+    <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}>
+      <div style={{
+        height: pullY,
+        overflow: "hidden",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: "var(--text-tertiary)", fontSize: 14, letterSpacing: "0.05em",
+        transition: startY.current === null ? "height 0.22s ease" : "none",
+      }}>
+        {pullY > 0 && (pullY >= TRIGGER ? "松开新建…" : "我想…")}
+      </div>
+      {children}
     </div>
   );
 }
