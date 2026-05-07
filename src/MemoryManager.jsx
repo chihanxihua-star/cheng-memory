@@ -72,9 +72,9 @@ const TODO_STATUSES = ["全部", "待办", "完成"];
 const TODO_STATUS_COLORS = { 待办: "#e8b86d", 完成: "#8aab9e" };
 
 const LEVEL_META = {
-  1: { label: "浮沫", color: "#EAC8CD" },
-  2: { label: "长潮", color: "#C99FA8" },
-  3: { label: "深海", color: "#9C7079" },
+  1: { label: "浮沫", color: "#FFEEEE" },
+  2: { label: "长潮", color: "#FAD9E6" },
+  3: { label: "深海", color: "#F9C5D5" },
 };
 
 const AUTHOR_COLORS = {
