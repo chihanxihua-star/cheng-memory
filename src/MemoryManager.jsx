@@ -956,24 +956,27 @@ function TodoCard({ todo, onToggle, onEdit, onDelete }) {
   const baseTx = useRef(0);
   const REVEAL = 130;
   const tagPill = { fontSize: 10, color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: 99, padding: "1px 8px", letterSpacing: "0.04em" };
-  const actionBtn = { background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, padding: "0 8px", cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em", height: "100%" };
+  const actionBtn = { background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 12, padding: "0 8px", cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em", height: "100%" };
 
   const onTouchStart = (e) => { startX.current = e.touches[0].clientX; baseTx.current = tx; };
   const onTouchMove = (e) => {
     if (startX.current === null) return;
     const dx = e.touches[0].clientX - startX.current;
+    // 左滑：dx < 0 → tx 越来越负
     let nx = baseTx.current + dx;
-    nx = Math.max(0, Math.min(REVEAL, nx));
+    nx = Math.min(0, Math.max(-REVEAL, nx));
     setTx(nx);
   };
-  const onTouchEnd = () => { setTx(tx > REVEAL / 2 ? REVEAL : 0); startX.current = null; };
+  const onTouchEnd = () => { setTx(tx < -REVEAL / 2 ? -REVEAL : 0); startX.current = null; };
+
+  const dateText = todo.due_date || formatDate(todo.created_at);
 
   return (
     <div style={{ position: "relative", overflow: "hidden", borderBottom: "1px solid var(--border)", opacity: isDone ? 0.5 : 1 }}>
-      {/* 右滑显示的操作（在左侧露出） */}
+      {/* 左滑显示的操作（在右侧露出） */}
       <div style={{
-        position: "absolute", left: 0, top: 0, bottom: 0, width: REVEAL,
-        display: "flex", alignItems: "center", gap: 4, paddingLeft: 6,
+        position: "absolute", right: 0, top: 0, bottom: 0, width: REVEAL,
+        display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, paddingRight: 6,
       }}>
         <button onClick={() => { onEdit(todo); setTx(0); }} style={actionBtn}>编辑</button>
         <button onClick={() => { onDelete(todo.id); setTx(0); }} style={{ ...actionBtn, color: "#c0392b" }}>删除</button>
@@ -1003,12 +1006,10 @@ function TodoCard({ todo, onToggle, onEdit, onDelete }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.55, textDecoration: isDone ? "line-through" : "none" }}>{todo.title}</p>
             {todo.description && <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5 }}>{todo.description}</p>}
-            {(todo.due_date || (todo.tags && todo.tags.length)) && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
-                {todo.due_date && <span>{todo.due_date}</span>}
-                {(todo.tags || []).map(t => <span key={t} style={tagPill}>{t}</span>)}
-              </div>
-            )}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
+              <span>{dateText}</span>
+              {(todo.tags || []).map(t => <span key={t} style={tagPill}>{t}</span>)}
+            </div>
           </div>
         </div>
       </div>
@@ -1069,21 +1070,50 @@ function TodoPanel() {
 
   const filterBtn = (active) => ({
     background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13,
-    color: active ? "var(--text-primary)" : "var(--text-secondary)",
+    color: active ? "var(--text-primary)" : "var(--text-tertiary)",
     fontWeight: active ? 600 : 400,
+    letterSpacing: "0.05em",
   });
+
+  const labelOf = s => s === "待办" ? "TO DO" : s === "完成" ? "DONE" : s;
+
+  const [creating, setCreating] = useState(false);
+  const createTodo = async (patch) => {
+    const tempId = "tmp-" + Date.now();
+    const tempTodo = { id: tempId, ...patch, created_at: new Date().toISOString() };
+    setItems(arr => [tempTodo, ...arr]);
+    setCreating(false);
+    try {
+      const saved = await sbPost("todos_cheng", patch);
+      const real = Array.isArray(saved) ? saved[0] : saved;
+      setItems(arr => arr.map(it => it.id === tempId ? (real || it) : it));
+    } catch(e) {
+      setError(e.message);
+      setItems(arr => arr.filter(it => it.id !== tempId));
+    }
+  };
 
   return (
     <div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 18, marginBottom: 16, alignItems: "center" }}>
-        {TODO_STATUSES.map(s => <button key={s} style={filterBtn(filter===s)} onClick={() => setFilter(s)}>{s}</button>)}
+        {TODO_STATUSES.map(s => <button key={s} style={filterBtn(filter===s)} onClick={() => setFilter(s)}>{labelOf(s)}</button>)}
         <span style={{ flex: 1 }}/>
-        <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-secondary)" }}>{loading ? "…" : "刷新"}</button>
+        <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
       </div>
       <ErrorBar error={error} onClose={() => setError(null)}/>
-      <PullToCreate onCreate={() => setDrawer({ mode: "create", entry: {} })}>
-        {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
-          : filtered.length === 0 ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有代办</div>
+
+      <PullToCreate onCreate={() => setCreating(true)}>
+        {/* 顶部内联展开新建表单 */}
+        <div style={{
+          maxHeight: creating ? 320 : 0,
+          overflow: "hidden",
+          transition: "max-height 0.3s ease",
+        }}>
+          {creating && <InlineTodoCreate onCancel={() => setCreating(false)} onSave={createTodo}/>}
+        </div>
+
+        {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-tertiary)", fontSize: 13 }}>正在拉取…</div>
+          : filtered.length === 0 && !creating ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-tertiary)", fontSize: 13 }}>没有代办</div>
           : filtered.map(t => <TodoCard key={t.id} todo={t}
               onToggle={toggleStatus}
               onEdit={todo => setDrawer({ mode: "edit", entry: todo })}
@@ -1092,6 +1122,58 @@ function TodoPanel() {
       </PullToCreate>
 
       {drawer && <TodoDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("todos_cheng", patch); else await sbPatch("todos_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
+    </div>
+  );
+}
+
+function InlineTodoCreate({ onCancel, onSave }) {
+  const [f, setF] = useState({ title: "", description: "", due_date: "", tags: "" });
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  const save = () => {
+    if (!f.title.trim()) return;
+    onSave({
+      title: f.title,
+      description: f.description || null,
+      status: "待办",
+      due_date: f.due_date || null,
+      tags: f.tags.split(",").map(t => t.trim()).filter(Boolean),
+      author: "小茉莉",
+    });
+  };
+  const fieldStyle = { background: "none", border: "none", outline: "none", fontFamily: "inherit", padding: 0, width: "100%", color: "var(--text-primary)" };
+  return (
+    <div style={{ borderBottom: "1px solid var(--border)", padding: "16px 6px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <input
+        autoFocus
+        value={f.title}
+        onChange={e => set("title", e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); } }}
+        placeholder="我想…"
+        style={{ ...fieldStyle, fontSize: 16 }}
+      />
+      <input
+        type="date"
+        value={f.due_date}
+        onChange={e => set("due_date", e.target.value)}
+        style={{ ...fieldStyle, fontSize: 12, color: "var(--text-tertiary)", colorScheme: "light" }}
+      />
+      <input
+        value={f.tags}
+        onChange={e => set("tags", e.target.value)}
+        placeholder="标签（逗号分隔）"
+        style={{ ...fieldStyle, fontSize: 12, color: "var(--text-tertiary)" }}
+      />
+      <textarea
+        rows={2}
+        value={f.description}
+        onChange={e => set("description", e.target.value)}
+        placeholder="描述（可选）"
+        style={{ ...fieldStyle, fontSize: 12, color: "var(--text-tertiary)", resize: "none" }}
+      />
+      <div style={{ display: "flex", gap: 18, alignItems: "center", marginTop: 4 }}>
+        <button onClick={onCancel} style={{ background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 12, padding: 0, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em" }}>取消</button>
+        <button onClick={save} disabled={!f.title.trim()} style={{ background: "none", border: "none", color: "var(--text-primary)", fontSize: 12, padding: 0, cursor: f.title.trim() ? "pointer" : "not-allowed", fontFamily: "inherit", fontWeight: 600, opacity: f.title.trim() ? 1 : 0.4, letterSpacing: "0.05em" }}>添加</button>
+      </div>
     </div>
   );
 }
@@ -1315,8 +1397,9 @@ function ConsolePanel() {
   ];
   const tabBtn = (active) => ({
     background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 14,
-    color: active ? "var(--text-primary)" : "var(--text-secondary)",
+    color: active ? "var(--text-primary)" : "var(--text-tertiary)",
     fontWeight: active ? 600 : 400,
+    letterSpacing: "0.05em",
   });
   return (
     <div style={{ paddingTop: 52 /* 给固定的 sub-tab 让位 */ }}>
