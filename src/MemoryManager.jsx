@@ -955,30 +955,47 @@ function TodoCard({ todo, onToggle, onEdit, onDelete }) {
   const statusColor = TODO_STATUS_COLORS[todo.status] || "#8aab9e";
   const isDone = todo.status === "完成";
   const [cd, setCd] = useState(false);
+  const linkBtn = { background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 11, padding: 0, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em" };
+  const tagPill = { fontSize: 10, color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: 99, padding: "1px 8px", letterSpacing: "0.04em" };
   return (
-    <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderLeft: `2px solid ${priColor}88`, borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8, marginBottom: 10, opacity: isDone ? 0.55 : 1 }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+    <div style={{
+      padding: "16px 6px",
+      borderBottom: "1px solid var(--border)",
+      opacity: isDone ? 0.5 : 1,
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
         <button onClick={() => onToggle(todo)} title="切换状态" style={{
-          width: 18, height: 18, borderRadius: 99, marginTop: 2,
-          border: `1.5px solid ${statusColor}`,
+          width: 22, height: 22, borderRadius: 99, marginTop: 1,
+          border: `1.5px solid ${isDone ? statusColor : "var(--border)"}`,
           background: isDone ? statusColor : "transparent",
           cursor: "pointer", flexShrink: 0, fontFamily: "inherit",
-        }}/>
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: isDone ? "white" : "transparent",
+          fontSize: 12, lineHeight: 1, padding: 0,
+        }}>{isDone ? "✓" : ""}</button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-primary)", lineHeight: 1.5, textDecoration: isDone ? "line-through" : "none" }}>{todo.title}</p>
-          {todo.description && <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>{todo.description}</p>}
+          <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.55, textDecoration: isDone ? "line-through" : "none" }}>{todo.title}</p>
+          {todo.description && <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5 }}>{todo.description}</p>}
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: 99, background: priColor, display: "inline-block" }}/>
+              <span style={{ color: priColor, letterSpacing: "0.05em" }}>{todo.priority}</span>
+            </span>
+            <span>·</span>
+            <span style={{ color: statusColor }}>{todo.status}</span>
+            {todo.due_date && <><span>·</span><span>{todo.due_date}</span></>}
+            {(todo.tags || []).map(t => <span key={t} style={tagPill}>{t}</span>)}
+            <span style={{ marginLeft: "auto" }}>{formatDate(todo.created_at)}</span>
+          </div>
+
+          <div style={{ display: "flex", gap: 18, marginTop: 8 }}>
+            <button onClick={() => onEdit(todo)} style={linkBtn}>编辑</button>
+            {cd
+              ? <button onClick={() => { onDelete(todo.id); setCd(false); }} style={{ ...linkBtn, color: "#c0392b" }}>确认删除</button>
+              : <button onClick={() => setCd(true)} style={linkBtn}>删除</button>}
+          </div>
         </div>
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
-        <Badge color={statusColor + "22"} text={statusColor}>{todo.status}</Badge>
-        <Badge color={priColor + "22"} text={priColor}>{todo.priority}</Badge>
-        {todo.due_date && <span style={{ fontSize: 10.5, color: "var(--text-secondary)" }}>📅 {todo.due_date}</span>}
-        {(todo.tags || []).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
-        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--text-secondary)" }}>{formatDate(todo.created_at)}</span>
-      </div>
-      <div style={{ display: "flex", gap: 6 }}>
-        <ActionBtn onClick={() => onEdit(todo)}>编辑</ActionBtn>
-        {cd ? <ActionBtn accent color="#c0392b" onClick={() => { onDelete(todo.id); setCd(false); }}>确认删除</ActionBtn> : <ActionBtn onClick={() => setCd(true)}>删除</ActionBtn>}
       </div>
     </div>
   );
