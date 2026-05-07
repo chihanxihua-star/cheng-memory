@@ -428,38 +428,41 @@ function MemoryPanel() {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16, alignItems: "center" }}>
         {[1,2,3].map(l => {
           const a = filters.level === l;
+          const bg = LEVEL_META[l].color;
           return (
             <button key={l} onClick={() => filterChange("level", a ? "" : l)} style={{
               padding: "5px 14px", borderRadius: 6,
               fontSize: 12, letterSpacing: "0.08em",
               fontFamily: "inherit", cursor: "pointer",
-              background: a ? "var(--text-primary)" : "transparent",
-              color: a ? "var(--bg-page)" : "var(--text-tertiary)",
-              border: `1px solid ${a ? "var(--text-primary)" : "var(--border)"}`,
+              background: a ? bg : "transparent",
+              color: a ? "#5C3A3F" : "var(--text-tertiary)",
+              border: `1px solid ${a ? bg : "var(--border)"}`,
             }}>{"★".repeat(l)}</button>
           );
         })}
         <button onClick={() => filterChange("pinned", !filters.pinned)} style={{
           padding: "5px 14px", borderRadius: 6,
-          fontSize: 12, fontFamily: "inherit", cursor: "pointer",
-          background: filters.pinned ? "var(--text-primary)" : "transparent",
-          color: filters.pinned ? "var(--bg-page)" : "var(--text-tertiary)",
-          border: `1px solid ${filters.pinned ? "var(--text-primary)" : "var(--border)"}`,
-        }}>📌</button>
+          fontSize: 12, letterSpacing: "0.08em",
+          fontFamily: "inherit", cursor: "pointer",
+          background: filters.pinned ? "#F2E2C9" : "transparent",
+          color: filters.pinned ? "#8A6432" : "var(--text-tertiary)",
+          border: `1px solid ${filters.pinned ? "#F2E2C9" : "var(--border)"}`,
+        }}>锚</button>
         <button onClick={() => filterChange("flashbulb", !filters.flashbulb)} style={{
           padding: "5px 14px", borderRadius: 6,
-          fontSize: 12, fontFamily: "inherit", cursor: "pointer",
-          background: filters.flashbulb ? "var(--text-primary)" : "transparent",
-          color: filters.flashbulb ? "var(--bg-page)" : "var(--text-tertiary)",
-          border: `1px solid ${filters.flashbulb ? "var(--text-primary)" : "var(--border)"}`,
-        }}>⚡</button>
+          fontSize: 12, letterSpacing: "0.08em",
+          fontFamily: "inherit", cursor: "pointer",
+          background: filters.flashbulb ? "#E8DCEC" : "transparent",
+          color: filters.flashbulb ? "#5C4263" : "var(--text-tertiary)",
+          border: `1px solid ${filters.flashbulb ? "#E8DCEC" : "var(--border)"}`,
+        }}>沉鸣</button>
         <button onClick={() => filterChange("unresolved", !filters.unresolved)} style={{
           padding: "5px 14px", borderRadius: 6,
           fontSize: 11, letterSpacing: "0.1em",
           fontFamily: "inherit", cursor: "pointer",
-          background: filters.unresolved ? "var(--text-primary)" : "transparent",
-          color: filters.unresolved ? "var(--bg-page)" : "var(--text-tertiary)",
-          border: `1px solid ${filters.unresolved ? "var(--text-primary)" : "var(--border)"}`,
+          background: filters.unresolved ? "#E0E8DC" : "transparent",
+          color: filters.unresolved ? "#4F624A" : "var(--text-tertiary)",
+          border: `1px solid ${filters.unresolved ? "#E0E8DC" : "var(--border)"}`,
         }}>未愈</button>
         <span style={{ marginLeft: "auto" }}/>
         <select value={sort} onChange={e => { setSort(e.target.value); load(filters, e.target.value); }} style={{
