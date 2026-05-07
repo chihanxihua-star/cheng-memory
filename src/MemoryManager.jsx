@@ -2699,7 +2699,11 @@ function HomePanel({ onPick }) {
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "calc(28px + env(safe-area-inset-top, 0px)) 16px 28px" }}>
       <div style={{ maxWidth: 860, margin: "0 auto" }}>
-        <div style={{ marginBottom: 28, fontSize: 14, color: "var(--text-tertiary)", letterSpacing: "0.3em", textAlign: "center", fontWeight: 500 }}>澄</div>
+        <div style={{
+          marginBottom: 28, textAlign: "center",
+          fontSize: 13, color: "var(--text-tertiary)",
+          fontStyle: "italic", letterSpacing: "0.18em",
+        }}>Sun &amp; Jasmin</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           {cards.map(c => (
             <button key={c.key} onClick={() => onPick(c.key)} style={{
