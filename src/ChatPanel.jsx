@@ -442,12 +442,16 @@ const CSS = `
 .cp-tool-pending { font-size: 11.5px; color: var(--text-tertiary); padding: 4px 0; }
 @keyframes cp-spin { to { transform: rotate(360deg); } }
 
-/* TYPING */
-.cp-typing-bubble { padding: 0 !important; }
-.cp-typing { display: flex; gap: 4px; padding: 12px 16px; align-items: center; }
-.cp-typing span { width: 6px; height: 6px; border-radius: 50%; background: #999; animation: cp-bounce 1.4s infinite; }
-.cp-typing span:nth-child(2) { animation-delay: 0.2s; }
-.cp-typing span:nth-child(3) { animation-delay: 0.4s; }
+/* TYPING — 用 shimmering "思绪" 代替三点跳动 */
+.cp-thinking-shimmer {
+  font-size: 11px; padding: 2px 4px 2px 0; display: inline-block;
+  background: linear-gradient(90deg, var(--text-tertiary) 25%, var(--text-primary) 50%, var(--text-tertiary) 75%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: cp-shimmer 1.8s linear infinite;
+}
 
 /* INPUT */
 .cp-input-container {
@@ -700,7 +704,6 @@ const CSS = `
 @keyframes cp-slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes cp-slideRight { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 @keyframes cp-msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes cp-bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
 @keyframes cp-toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 `;
 
@@ -1437,9 +1440,7 @@ export default function ChatPanel({ onBack }) {
               {profile.botImg ? <img src={profile.botImg} alt=""/> : profile.botEmoji}
             </div>
             <div className="cp-msg-body">
-              <div className="cp-msg-bubble assistant cp-typing-bubble">
-                <div className="cp-typing"><span/><span/><span/></div>
-              </div>
+              <div className="cp-thinking-shimmer">思绪</div>
             </div>
           </div>
         )}
@@ -1803,9 +1804,7 @@ function StreamingBubble({ snap, profile, showTyping }) {
             </div>
           ) : (
             !hasInner && showTyping && (
-              <div className="cp-msg-bubble assistant cp-typing-bubble">
-                <div className="cp-typing"><span/><span/><span/></div>
-              </div>
+              <div className="cp-thinking-shimmer">思绪</div>
             )
           )}
         </div>
