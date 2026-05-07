@@ -727,8 +727,8 @@ export default function App() {
       {stylesEl}
 
       <div style={{
+        height: "100dvh",
         display: "flex", flexDirection: "column",
-        flex: 1, minHeight: 0,
         background: "var(--bg-page)", color: "var(--text-primary)",
         overflow: "hidden",
       }}>
