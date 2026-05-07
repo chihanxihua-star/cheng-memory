@@ -29,3 +29,28 @@
 :root[data-theme="light"] { --bg-translucent: rgba(251, 250, 246, 0.72); }
 :root[data-theme="dark"]  { --bg-translucent: rgba(42, 42, 44, 0.72); }
 
+/* 回音板气泡 — 复用花信风的视觉调性 */
+.bd-bubble {
+  max-width: 82%;
+  padding: 9px 13px;
+  font-size: 13px;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  word-break: break-word;
+}
+.bd-bubble.me {
+  background: rgba(242, 220, 224, 0.78);
+  border-radius: 12px 12px 4px 12px;
+  color: #2A2A2C;
+}
+.bd-bubble.them {
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid var(--border);
+  border-radius: 12px 12px 12px 4px;
+  color: var(--text-primary);
+}
+:root[data-theme="dark"] .bd-bubble.me   { background: rgba(248, 245, 240, 0.82); color: #333; }
+:root[data-theme="dark"] .bd-bubble.them { background: rgba(58, 58, 60, 0.72); color: #E8E4E0; }
+

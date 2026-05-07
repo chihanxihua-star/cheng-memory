@@ -582,14 +582,7 @@ function BoardMessage({ msg, onEdit, onDelete, onToggleRead, onToggleResolved, o
       alignItems: isMe ? "flex-end" : "flex-start",
       marginBottom: 14, opacity: msg.is_resolved ? 0.55 : 1,
     }}>
-      <div style={{
-        maxWidth: "82%",
-        background: isMe ? authorColor + "1f" : "var(--bg-card)",
-        border: `1px solid ${authorColor}33`,
-        borderRadius: 14,
-        padding: "8px 12px 10px",
-        display: "flex", flexDirection: "column", gap: 5,
-      }}>
+      <div className={"bd-bubble " + (isMe ? "me" : "them")}>
         <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end", fontSize: 10, color: "var(--text-secondary)" }}>
           <span style={{ color: authorColor, fontWeight: 500 }}>{msg.author}</span>
           <Badge color={catColor + "22"} text={catColor}>{msg.category}</Badge>
