@@ -776,7 +776,7 @@ function BottomTabBar({ tab, setTab }) {
       display:"flex", justifyContent:"space-around", alignItems:"center",
       padding:"6px 4px 0",
       paddingBottom:"calc(8px + env(safe-area-inset-bottom, 20px))",
-      background:"var(--bg-page)",
+      background:"hotpink",
       borderTop:"1px solid var(--border)",
       transition:"background 0.35s ease",
     }}>
