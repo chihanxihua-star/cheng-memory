@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
 
 /* ════════════════════════════════════════════════════════════
@@ -286,7 +287,7 @@ const CSS = `
   font-size: 17px; margin-top: 1px; overflow: hidden;
 }
 .cp-avatar.u { background: var(--bg-bubble-user); }
-.cp-avatar.b { background: var(--bg-bubble-bot); border: 1px solid var(--border-bubble); }
+.cp-avatar.b { background: var(--bg-bubble-bot); border: 1px solid var(--border-bubble); cursor: pointer; }
 .cp-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
 .cp-msg-body { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; flex: 1; }
@@ -764,6 +765,7 @@ export default function ChatPanel({ onBack }) {
 
   // UI 开关
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
   const [psScreen, setPsScreen] = useState("main");
   const [showSettings, setShowSettings] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -1390,7 +1392,7 @@ export default function ChatPanel({ onBack }) {
       </div>
 
       {/* MESSAGES */}
-      <div className="cp-messages" ref={messagesScrollRef}>
+      <div className="cp-messages" ref={messagesScrollRef} onClick={(e) => { if (e.target.closest(".cp-avatar.b")) setTerminalOpen(true); }}>
         {renderItems.length === 0 && !streamSnap && !showTyping && (
           <div className="cp-empty">开始一段新对话</div>
         )}
@@ -1464,6 +1466,9 @@ export default function ChatPanel({ onBack }) {
           </div>
         </div>
       </div>
+
+      {/* TERMINAL placeholder */}
+      {terminalOpen && <TerminalPlaceholder onClose={() => setTerminalOpen(false)} />}
 
       {/* SIDEBAR */}
       {sidebarOpen && (
@@ -1664,6 +1669,45 @@ function MessageBubble({ item, profile, onCopy, onOpenImage, onEdit, onRegen }) 
 
 // 思绪展开状态按 text 持久化：StreamingBubble unmount 后历史块重新挂载也能保留 open
 const thinkingOpenStore = new Map();
+function TerminalPlaceholder({ onClose }) {
+  return createPortal(
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 70,
+      background: "rgba(0, 0, 0, 0.72)",
+      backdropFilter: "blur(8px)",
+      WebkitBackdropFilter: "blur(8px)",
+      display: "flex", flexDirection: "column",
+      paddingTop: "env(safe-area-inset-top, 0px)",
+      paddingBottom: "env(safe-area-inset-bottom, 0px)",
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center",
+        padding: "14px 20px",
+        color: "rgba(255,255,255,0.7)", fontSize: 13, letterSpacing: "0.1em",
+      }}>
+        <span>终端</span>
+        <button onClick={onClose} style={{
+          marginLeft: "auto", background: "none", border: "none",
+          color: "rgba(255,255,255,0.7)", fontSize: 22, lineHeight: 1, cursor: "pointer",
+        }}>×</button>
+      </div>
+      <div style={{
+        flex: 1, margin: "0 20px 20px",
+        background: "#0d0d0d",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 8,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: "#888",
+        fontFamily: "Menlo, Monaco, 'Courier New', monospace", fontSize: 13,
+        textAlign: "center", padding: "0 20px",
+      }}>
+        终端（xterm.js 待接入）
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function ThinkingBlock({ text, isThinking }) {
   const [open, setOpen] = useState(() => thinkingOpenStore.get(text) === true);
   useEffect(() => { thinkingOpenStore.set(text, open); }, [text, open]);
