@@ -442,16 +442,6 @@ const CSS = `
 .cp-tool-pending { font-size: 11.5px; color: var(--text-tertiary); padding: 4px 0; }
 @keyframes cp-spin { to { transform: rotate(360deg); } }
 
-/* TYPING — 用 shimmering "思绪" 代替三点跳动 */
-.cp-thinking-shimmer {
-  font-size: 11px; padding: 2px 4px 2px 0; display: inline-block;
-  background: linear-gradient(90deg, var(--text-tertiary) 25%, var(--text-primary) 50%, var(--text-tertiary) 75%);
-  background-size: 200% auto;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: cp-shimmer 1.8s linear infinite;
-}
 
 /* INPUT */
 .cp-input-container {
@@ -1435,7 +1425,7 @@ export default function ChatPanel({ onBack }) {
               {profile.botImg ? <img src={profile.botImg} alt=""/> : profile.botEmoji}
             </div>
             <div className="cp-msg-body">
-              <div className="cp-thinking-shimmer">思绪</div>
+              <ThinkingBlock text="" isThinking={true} />
             </div>
           </div>
         )}
@@ -1673,14 +1663,17 @@ function MessageBubble({ item, profile, onCopy, onOpenImage, onEdit, onRegen }) 
   );
 }
 
+// 思绪展开状态按 text 持久化：StreamingBubble unmount 后历史块重新挂载也能保留 open
+const thinkingOpenStore = new Map();
 function ThinkingBlock({ text, isThinking }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => thinkingOpenStore.get(text) === true);
+  useEffect(() => { thinkingOpenStore.set(text, open); }, [text, open]);
   return (
     <div className={"cp-thinking-block" + (open ? " open" : "")}>
       <button className={"cp-thinking-toggle" + (isThinking ? " thinking" : "")} onClick={() => setOpen(o => !o)}>
         思绪
       </button>
-      <div className="cp-thinking-content">{text}</div>
+      {text && <div className="cp-thinking-content">{text}</div>}
     </div>
   );
 }
@@ -1791,16 +1784,12 @@ function StreamingBubble({ snap, profile, showTyping }) {
           {profile.botImg ? <img src={profile.botImg} alt="" /> : profile.botEmoji}
         </div>
         <div className="cp-msg-body">
-          {snap.thinking && <ThinkingBlock text={snap.thinking} isThinking={true} />}
+          <ThinkingBlock text={snap.thinking || ""} isThinking={true} />
           {snap.tools && snap.tools.length > 0 && <ToolCallsBlock calls={snap.tools} />}
-          {bubbles.length > 0 ? (
+          {bubbles.length > 0 && (
             <div className="cp-msg-bubble assistant">
               <div className="cp-md" dangerouslySetInnerHTML={{ __html: md(bubbles[0]) }} />
             </div>
-          ) : (
-            !hasInner && showTyping && (
-              <div className="cp-thinking-shimmer">思绪</div>
-            )
           )}
         </div>
       </div>
