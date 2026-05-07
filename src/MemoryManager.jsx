@@ -2291,77 +2291,64 @@ const AUTH_API_BASE = "https://chat.jessaminee.top";
 const AUTH_TOKEN_KEY = "memhome-auth-token";
 function getAuthToken() { return localStorage.getItem(AUTH_TOKEN_KEY) || ""; }
 
-// 旧版本本地 hash 兼容用：保留 hash 函数 + key，不再被 PasswordGate 使用
-async function pwdHash(text) {
-  const buf = new TextEncoder().encode(text || "");
-  const hash = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-const PWD_KEY = "cheng-pwd-hash";
-
 function SecurityPanel() {
-  const [hasPwd, setHasPwd] = useState(!!localStorage.getItem(PWD_KEY));
   const [oldPwd, setOldPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
   const [confirm, setConfirm] = useState("");
   const [msg, setMsg] = useState(null);
-  const [confirmRemove, setConfirmRemove] = useState(false);
-
-  const refresh = () => setHasPwd(!!localStorage.getItem(PWD_KEY));
+  const [busy, setBusy] = useState(false);
 
   const submit = async () => {
     setMsg(null);
-    if (hasPwd) {
-      const stored = localStorage.getItem(PWD_KEY);
-      const oh = await pwdHash(oldPwd);
-      if (oh !== stored) { setMsg({ type: "err", text: "旧密码不对" }); return; }
-    }
+    if (!oldPwd) { setMsg({ type: "err", text: "请输入当前密码" }); return; }
     if (newPwd.length < 4) { setMsg({ type: "err", text: "新密码至少 4 位" }); return; }
     if (newPwd !== confirm) { setMsg({ type: "err", text: "两次输入不一致" }); return; }
-    const nh = await pwdHash(newPwd);
-    localStorage.setItem(PWD_KEY, nh);
-    setOldPwd(""); setNewPwd(""); setConfirm("");
-    refresh();
-    setMsg({ type: "ok", text: hasPwd ? "密码已更新" : "密码已设置" });
-  };
-
-  const remove = async () => {
-    setMsg(null);
-    const stored = localStorage.getItem(PWD_KEY);
-    const oh = await pwdHash(oldPwd);
-    if (oh !== stored) { setMsg({ type: "err", text: "密码不对" }); return; }
-    localStorage.removeItem(PWD_KEY);
-    setOldPwd(""); setConfirmRemove(false);
-    refresh();
-    setMsg({ type: "ok", text: "已移除密码保护" });
+    if (newPwd === oldPwd) { setMsg({ type: "err", text: "新密码不能跟旧密码一样" }); return; }
+    setBusy(true);
+    try {
+      const r = await fetch(AUTH_API_BASE + "/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + getAuthToken(),
+        },
+        body: JSON.stringify({ current_password: oldPwd, new_password: newPwd }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ("HTTP " + r.status));
+      // 改完立刻清 token，让 PasswordGate 用新密码重弹
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      setOldPwd(""); setNewPwd(""); setConfirm("");
+      setMsg({ type: "ok", text: "密码已更新，请用新密码重新登录" });
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("auth-expired"));
+      }, 700);
+    } catch (e) {
+      setMsg({ type: "err", text: e.message || "更新失败" });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "16px 18px" }}>
-        <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)" }}>密码保护</p>
+        <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)" }}>修改密码</p>
         <p style={{ margin: "4px 0 12px", fontSize: 12, color: "var(--text-secondary)" }}>
-          状态：{hasPwd ? "已开启 — 打开网页时会要求输入密码" : "未设置"}
+          通过后端 <code style={{ fontFamily: "ui-monospace,SFMono-Regular,Menlo,monospace", fontSize: 11 }}>/api/auth/change-password</code> 校验当前密码，写回服务器 .env。
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {hasPwd && (
-            <div><label style={labelStyle}>旧密码</label>
-              <input type="password" style={inputStyle} value={oldPwd} onChange={e => setOldPwd(e.target.value)}/>
-            </div>
-          )}
-          <div><label style={labelStyle}>{hasPwd ? "新密码" : "设置密码"}</label>
-            <input type="password" style={inputStyle} value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder="至少 4 位"/>
+          <div><label style={labelStyle}>当前密码</label>
+            <input type="password" style={inputStyle} value={oldPwd} onChange={e => { setOldPwd(e.target.value); setMsg(null); }}/>
+          </div>
+          <div><label style={labelStyle}>新密码</label>
+            <input type="password" style={inputStyle} value={newPwd} onChange={e => { setNewPwd(e.target.value); setMsg(null); }} placeholder="至少 4 位"/>
           </div>
           <div><label style={labelStyle}>再次输入</label>
-            <input type="password" style={inputStyle} value={confirm} onChange={e => setConfirm(e.target.value)}/>
+            <input type="password" style={inputStyle} value={confirm} onChange={e => { setConfirm(e.target.value); setMsg(null); }}/>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <ActionBtn accent color="#a89fd8" onClick={submit}>{hasPwd ? "更新密码" : "设置密码"}</ActionBtn>
-            {hasPwd && (
-              confirmRemove
-                ? <ActionBtn accent color="#c0392b" onClick={remove}>确认移除</ActionBtn>
-                : <ActionBtn onClick={() => setConfirmRemove(true)}>移除密码</ActionBtn>
-            )}
+            <ActionBtn accent color="#a89fd8" disabled={busy} onClick={submit}>{busy ? "保存中…" : "保存"}</ActionBtn>
           </div>
           {msg && (
             <p style={{ margin: 0, fontSize: 11.5, color: msg.type === "err" ? "#c0392b" : "#5e9e8a" }}>{msg.text}</p>
@@ -2369,7 +2356,7 @@ function SecurityPanel() {
         </div>
       </div>
       <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)", textAlign: "center" }}>
-        提示：密码 hash 仅存在本机 localStorage，不上传服务端。后续可加 IP 白名单 / TOTP。
+        改完密码后会强制登出，需用新密码重新登录。
       </p>
     </div>
   );
