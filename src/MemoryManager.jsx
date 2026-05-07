@@ -412,16 +412,9 @@ function MemoryPanel() {
         <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
       </div>
 
-      {stats && <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 16 }}>
-        {[1,2,3].map(l => <div key={l} style={{ background: LEVEL_META[l].color+"0d", border: `1px solid ${LEVEL_META[l].color}33`, borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
-          <div style={{ fontSize: 18, fontWeight: 300, color: LEVEL_META[l].color }}>{stats[`l${l}`]}</div>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>{LEVEL_META[l].label}</div>
-        </div>)}
-      </div>}
-
-      {/* 搜索条 */}
-      <div style={{ marginBottom: 12 }}>
-        <input placeholder="搜索…" value={filters.search} onChange={e => filterChange("search", e.target.value)} style={{ ...inputStyle, borderRadius: 99, padding: "8px 16px", fontSize: 12, width: "100%", maxWidth: 320 }}/>
+      {/* 搜索条：横线 */}
+      <div style={{ marginBottom: 14 }}>
+        <input placeholder="搜索…" value={filters.search} onChange={e => filterChange("search", e.target.value)} style={{ ...underlineStyle, fontSize: 13, padding: "6px 0" }}/>
       </div>
 
       {/* 标签栏 — 无边框，仅文字 + 下划线（active） */}
