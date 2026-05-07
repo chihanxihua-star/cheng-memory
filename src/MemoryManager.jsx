@@ -2559,7 +2559,7 @@ function SecurityPanel() {
 }
 
 // ── 简报设置：briefing_config_cheng ───────────────────────────
-const BRIEFING_SECTIONS = ["铁则", "深海", "长潮", "浮沫", "未愈", "回响"];
+const BRIEFING_SECTIONS = ["锚", "深海", "长潮", "浮沫", "未愈", "回响"];
 const BRIEFING_TARGETS = ["cc", "app", "api"];
 
 function BriefingConfigPanel() {
@@ -2637,12 +2637,11 @@ function BriefingRuleRow({ row, saving, onUpdate }) {
     if (n === row.max_items) return;
     onUpdate(row, { max_items: n });
   };
-  const targetColor = row.target === "cc" ? "#a89fd8" : row.target === "app" ? "#8aab9e" : "#e8b86d";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <span style={{
-        fontSize: 10, letterSpacing: "0.18em", padding: "2px 8px", borderRadius: 99,
-        background: targetColor + "22", color: targetColor, minWidth: 38, textAlign: "center", textTransform: "uppercase",
+        fontSize: 10, letterSpacing: "0.18em", color: "var(--text-tertiary)",
+        minWidth: 38, textTransform: "uppercase",
       }}>{row.target}</span>
       <span style={{ flex: 1, fontSize: 12, color: "var(--text-secondary)" }}>推送条数</span>
       <input type="number" min="0"
@@ -2662,9 +2661,9 @@ function BriefingRuleRow({ row, saving, onUpdate }) {
         title={row.enabled ? "已启用 · 点击关闭" : "已关闭 · 点击启用"}
         style={{
           background: row.enabled ? "var(--text-primary)" : "transparent",
-          border: `1px solid ${row.enabled ? "var(--text-primary)" : "var(--border)"}`,
+          border: "none", borderRadius: 0,
           color: row.enabled ? "var(--bg-page)" : "var(--text-tertiary)",
-          padding: "4px 14px", borderRadius: 99, cursor: "pointer",
+          padding: "4px 14px", cursor: "pointer",
           fontSize: 10, letterSpacing: "0.18em", fontFamily: "inherit",
         }}>{row.enabled ? "ON" : "OFF"}</button>
       {saving && <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>…</span>}
@@ -2928,8 +2927,8 @@ function ConsolePanel() {
   const subTabs = [
     { key: "todos", label: "待办" },
     { key: "fantasy", label: "幻想" },
-    { key: "briefing", label: "简报设置" },
-    { key: "injection", label: "注入记录" },
+    { key: "briefing", label: "简报" },
+    { key: "injection", label: "回忆记录" },
     { key: "usage", label: "使用数据" },
     { key: "theme", label: "外观" },
     { key: "security", label: "安全设置" },
