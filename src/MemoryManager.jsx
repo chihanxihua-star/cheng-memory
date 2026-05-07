@@ -763,7 +763,7 @@ function DiaryPanel() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [drawer, setDrawer] = useState(null);
+  const [editor, setEditor] = useState(null);
   const [search, setSearch] = useState("");
   const timer = useRef(null);
 
@@ -779,14 +779,31 @@ function DiaryPanel() {
   useEffect(() => { load(""); }, [load]);
   const reload = () => load(search);
 
+  const submitDiary = async (patch) => {
+    if (editor?.mode === "create") {
+      const tempId = "tmp-" + Date.now();
+      const tempEntry = { id: tempId, ...patch, created_at: new Date().toISOString() };
+      setItems(arr => [tempEntry, ...arr]);
+      setEditor(null);
+      try {
+        const saved = await sbPost("diary_cheng", patch);
+        const real = Array.isArray(saved) ? saved[0] : saved;
+        setItems(arr => arr.map(it => it.id === tempId ? (real || it) : it));
+      } catch(e) { setError(e.message); setItems(arr => arr.filter(it => it.id !== tempId)); }
+    } else if (editor?.mode === "edit") {
+      const id = editor.entry.id;
+      setItems(arr => arr.map(it => it.id === id ? { ...it, ...patch } : it));
+      setEditor(null);
+      try { await sbPatch("diary_cheng", id, patch); }
+      catch(e) { setError(e.message); reload(); }
+    }
+  };
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {items.length} 篇</p>
-        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
-          <button onClick={() => setDrawer({ mode: "create", entry: {} })} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 写日记</button>
-          <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
-        </div>
+        <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
       </div>
       <div style={{ marginBottom: 14, position: "relative" }}>
         <input placeholder="搜索…" value={search} onChange={e => { setSearch(e.target.value); clearTimeout(timer.current); timer.current = setTimeout(() => load(e.target.value), 400); }} style={{ ...underlineStyle, fontSize: 13, padding: "6px 24px 6px 0" }}/>
@@ -801,14 +818,95 @@ function DiaryPanel() {
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
-        : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有日记</div>
-        : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {items.map(e => <div key={e.id} style={{ animation: "fadeUp 0.25s ease both" }}><DiaryCard entry={e} onEdit={ent => setDrawer({ mode: "edit", entry: ent })} onDelete={async id => { try { await sbDelete("diary_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
-          </div>}
+      <PullToCreate onCreate={() => setEditor({ mode: "create", entry: null })}>
+        {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+          : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有日记</div>
+          : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {items.map(e => <div key={e.id} style={{ animation: "fadeUp 0.25s ease both" }}><DiaryCard entry={e} onEdit={ent => setEditor({ mode: "edit", entry: ent })} onDelete={async id => { try { await sbDelete("diary_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
+            </div>}
+      </PullToCreate>
 
-      {drawer && <DiaryDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("diary_cheng", patch); else await sbPatch("diary_cheng", drawer.entry.id, patch); setDrawer(null); reload(); } catch(e) { setError(e.message); } }}/>}
+      {editor && (
+        <DiaryFullForm
+          entry={editor.entry}
+          isNew={editor.mode === "create"}
+          onCancel={() => setEditor(null)}
+          onSave={submitDiary}
+        />
+      )}
     </div>
+  );
+}
+
+function DiaryFullForm({ entry, isNew, onCancel, onSave }) {
+  const [f, setF] = useState({
+    author: entry?.author || "小茉莉",
+    title: entry?.title || "",
+    event_date: "",
+    tags: Array.isArray(entry?.tags) ? entry.tags.join(", ") : "",
+    content: entry?.content || "",
+  });
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  const can = !!f.content.trim();
+  const save = () => {
+    if (!can) return;
+    onSave({
+      title: f.title || null,
+      content: f.content,
+      tags: f.tags.split(",").map(t => t.trim()).filter(Boolean),
+      author: f.author,
+    });
+  };
+  return createPortal(
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "var(--bg-page)",
+      display: "flex", flexDirection: "column",
+      animation: "slideDown 0.28s ease",
+    }}>
+      <div style={{
+        flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        <button onClick={onCancel} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>CANCEL</button>
+        <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.22em" }}>{isNew ? "新日记" : "编辑日记"}</span>
+        <button onClick={save} disabled={!can} style={{
+          background: can ? "var(--text-primary)" : "transparent",
+          color: can ? "var(--bg-page)" : "var(--text-tertiary)",
+          border: can ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+          padding: "8px 18px", borderRadius: 4,
+          fontSize: 12, letterSpacing: "0.18em",
+          cursor: can ? "pointer" : "not-allowed", fontFamily: "inherit",
+        }}>{isNew ? "SEND ✓" : "SAVE ✓"}</button>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 16px calc(28px + env(safe-area-inset-bottom, 0px))" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
+          <div style={{ display: "flex", gap: 10 }}>
+            {["澄", "小茉莉"].map(a => {
+              const active = f.author === a;
+              return (
+                <button key={a} onClick={() => set("author", a)} style={{
+                  background: active ? "var(--text-primary)" : "transparent",
+                  color: active ? "var(--bg-page)" : "var(--text-tertiary)",
+                  border: active ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+                  padding: "6px 18px", borderRadius: 4,
+                  fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
+                }}>{a}</button>
+              );
+            })}
+          </div>
+
+          <div><label style={labelStyle}>标题</label><input style={underlineStyle} value={f.title} onChange={e => set("title", e.target.value)} placeholder="可选"/></div>
+          <div><label style={labelStyle}>日期（可选 · 留空记今天）</label><input type="date" style={underlineStyle} value={f.event_date} onChange={e => set("event_date", e.target.value)}/></div>
+          <div><label style={labelStyle}>标签（逗号分隔）</label><input style={underlineStyle} value={f.tags} onChange={e => set("tags", e.target.value)} placeholder="日常, 心情"/></div>
+          <div><label style={labelStyle}>正文</label><textarea autoFocus rows={8} style={underlineStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="写点什么…"/></div>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
