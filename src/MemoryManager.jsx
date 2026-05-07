@@ -72,9 +72,9 @@ const TODO_STATUSES = ["全部", "待办", "完成"];
 const TODO_STATUS_COLORS = { 待办: "#e8b86d", 完成: "#8aab9e" };
 
 const LEVEL_META = {
-  1: { label: "浮沫", color: "#7fb3c8" },
-  2: { label: "长潮", color: "#5e9e8a" },
-  3: { label: "深海", color: "#6b7fd4" },
+  1: { label: "浮沫", color: "#EAC8CD" },
+  2: { label: "长潮", color: "#C99FA8" },
+  3: { label: "深海", color: "#9C7079" },
 };
 
 const AUTHOR_COLORS = {
@@ -143,13 +143,13 @@ function EmotionDot({ valence = 0.5, arousal = 0.5, size = 44 }) {
   );
 }
 
-function StrengthBar({ value = 0, color }) {
+function StrengthBar({ value = 0 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <div style={{ flex: 1, height: 3, background: "var(--border)", borderRadius: 99 }}>
-        <div style={{ width: `${(value*100).toFixed(0)}%`, height: "100%", background: color, borderRadius: 99, boxShadow: `0 0 6px ${color}88`, transition: "width 0.4s" }}/>
+      <div style={{ flex: 1, height: 1, background: "var(--border)", borderRadius: 99 }}>
+        <div style={{ width: `${(value*100).toFixed(0)}%`, height: "100%", background: "var(--text-primary)", borderRadius: 99, transition: "width 0.4s" }}/>
       </div>
-      <span style={{ fontSize: 10, color: "var(--text-secondary)", minWidth: 28, textAlign: "right" }}>{(value*100).toFixed(0)}%</span>
+      <span style={{ fontSize: 10, color: "var(--text-tertiary)", minWidth: 28, textAlign: "right" }}>{(value*100).toFixed(0)}%</span>
     </div>
   );
 }
@@ -324,7 +324,7 @@ function MemoryCard({ mem, onEdit, onDelete }) {
         </div>
       </div>
 
-      <StrengthBar value={mem.strength ?? 0} color={meta.color}/>
+      <StrengthBar value={mem.strength ?? 0}/>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)" }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
