@@ -1064,8 +1064,8 @@ function MoodInlineForm({ date, initialAuthor, existing, onClose, onSaved }) {
         <button onClick={save} disabled={saving} style={{
           flex: 2, padding: "5px 0", fontFamily: "inherit", fontSize: 11.5,
           cursor: saving ? "not-allowed" : "pointer", borderRadius: 5,
-          background: "#F2DCE0", border: "1px solid #F2DCE0",
-          color: saving ? "rgba(90,74,82,0.5)" : "#5a4a52",
+          background: "var(--text-primary)", border: "1px solid var(--text-primary)",
+          color: saving ? "rgba(255,255,255,0.5)" : "var(--bg-page)",
           transition: "all 0.15s",
         }}>{cur ? "保存" : "添加"}</button>
       </div>
@@ -1081,6 +1081,10 @@ function MoodCalendarPanel({ onTimeline }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [drawer, setDrawer] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerYear, setPickerYear] = useState(viewYear);
+
+  useEffect(() => { setPickerYear(viewYear); }, [viewYear, pickerOpen]);
 
   const startDate = ymdLocal(new Date(viewYear, viewMonth, 1));
   const endDate = ymdLocal(new Date(viewYear, viewMonth + 1, 0));
@@ -1170,13 +1174,35 @@ function MoodCalendarPanel({ onTimeline }) {
 
       {/* 月份导航 */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <button onClick={prev} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 18, padding: "4px 14px", cursor: "pointer", fontFamily: "inherit" }}>‹</button>
-        <span style={{ fontSize: 13, letterSpacing: "0.22em", color: "var(--text-primary)" }}>
-          {viewYear} 年 {String(viewMonth+1).padStart(2,'0')} 月
-        </span>
-        <button onClick={next} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 18, padding: "4px 14px", cursor: "pointer", fontFamily: "inherit" }}>›</button>
+        <button onClick={pickerOpen ? () => setPickerYear(y => y - 1) : prev} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 18, padding: "4px 14px", cursor: "pointer", fontFamily: "inherit" }}>‹</button>
+        <button onClick={() => setPickerOpen(o => !o)} style={{
+          background: "none", border: "none", padding: "4px 8px", cursor: "pointer", fontFamily: "inherit",
+          fontSize: 13, letterSpacing: "0.22em", color: "var(--text-primary)",
+        }}>
+          {pickerOpen ? `${pickerYear} 年` : `${viewYear} 年 ${String(viewMonth+1).padStart(2,'0')} 月`}
+        </button>
+        <button onClick={pickerOpen ? () => setPickerYear(y => y + 1) : next} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 18, padding: "4px 14px", cursor: "pointer", fontFamily: "inherit" }}>›</button>
       </div>
 
+      {pickerOpen ? (
+        /* 年-月选择器 */
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, animation: "fadeUp 0.18s ease both" }}>
+          {Array.from({ length: 12 }, (_, m) => {
+            const isCurrent = pickerYear === viewYear && m === viewMonth;
+            return (
+              <button key={m} onClick={() => { setViewYear(pickerYear); setViewMonth(m); setPickerOpen(false); }} style={{
+                padding: "16px 0",
+                background: isCurrent ? "var(--text-primary)" : "var(--bg-card)",
+                color: isCurrent ? "var(--bg-page)" : "var(--text-primary)",
+                border: `1px ${isCurrent ? "solid" : "dashed"} var(--border)`,
+                borderRadius: 4, fontSize: 13, letterSpacing: "0.15em",
+                cursor: "pointer", fontFamily: "inherit",
+              }}>{String(m+1).padStart(2,'0')} 月</button>
+            );
+          })}
+        </div>
+      ) : (
+        <>
       {/* 星期表头 */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 6 }}>
         {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d => (
@@ -1201,6 +1227,8 @@ function MoodCalendarPanel({ onTimeline }) {
           );
         })}
       </div>
+        </>
+      )}
 
       {/* 添加 / 编辑表单（点格子后内联出现） */}
       {drawer && (
