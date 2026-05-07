@@ -853,13 +853,15 @@ function BoardPanel() {
   });
 
   return (
-    <div style={{ paddingBottom: 64 /* 给 sticky 输入栏让位 */ }}>
+    <div style={{ paddingTop: 52, paddingBottom: 70 /* 给固定的顶部筛选 + 底部输入栏让位 */ }}>
       <div style={{
-        position: "sticky", top: 0, zIndex: 5,
+        position: "fixed",
+        top: "env(safe-area-inset-top, 0px)", left: 0, right: 0,
+        zIndex: 20,
         background: "var(--bg-page)",
         display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center",
-        padding: "10px 0 12px",
-        margin: "-20px 0 0",
+        padding: "12px 16px",
+        borderBottom: "1px solid var(--border)",
       }}>
         {BOARD_CATS.map(c => <button key={c} style={filterBtn(catFilter===c)} onClick={() => setCatFilter(c)}>{c}</button>)}
         <button style={filterBtn(onlyUnread)} onClick={() => setOnlyUnread(!onlyUnread)}>仅未读</button>
@@ -881,12 +883,15 @@ function BoardPanel() {
           ))}
 
       <div style={{
-        position: "sticky", bottom: 0, zIndex: 5,
-        background: "var(--bg-page)",
-        padding: "8px 0 10px",
-        margin: "0 0 -28px",
+        position: "fixed",
+        bottom: "calc(50px + env(safe-area-inset-bottom, 20px))",
+        left: 0, right: 0,
+        zIndex: 20,
+        background: "transparent",
+        padding: "8px 16px",
+        pointerEvents: "none",
       }}>
-        <div style={{ maxWidth: 380, margin: "0 auto" }}>
+        <div style={{ maxWidth: 380, margin: "0 auto", pointerEvents: "auto" }}>
           <BoardCompose
             onSend={async patch => {
               const tempId = "tmp-" + Date.now();
