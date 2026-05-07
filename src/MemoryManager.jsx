@@ -461,7 +461,7 @@ function MemoryFullForm({ entry, isNew, onCancel, onSave }) {
     } catch { return ""; }
   })();
   const [f, setF] = useState({
-    author: entry?.author || "澄",
+    author: entry?.author || "小茉莉",
     summary: entry?.summary || "",
     content: entry?.content || "",
     event_date: "",
@@ -547,12 +547,12 @@ function MemoryFullForm({ entry, isNew, onCancel, onSave }) {
           </div>
 
           <div><label style={labelStyle}>摘要</label><textarea rows={2} style={underlineStyle} value={f.summary} onChange={e => set("summary", e.target.value)} placeholder="一句话概括"/></div>
-          <div><label style={labelStyle}>正文</label><textarea autoFocus rows={6} style={underlineStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="写点什么…"/></div>
-          <div><label style={labelStyle}>日期（可选 · 留空记今天）</label><input type="date" style={inputStyle} value={f.event_date} onChange={e => set("event_date", e.target.value)}/></div>
+
+          <div><label style={labelStyle}>日期（可选 · 留空记今天）</label><input type="date" style={underlineStyle} value={f.event_date} onChange={e => set("event_date", e.target.value)}/></div>
 
           <div>
             <label style={labelStyle}>层级</label>
-            <select style={inputStyle} value={f.level} onChange={e => set("level", e.target.value)}>
+            <select style={underlineStyle} value={f.level} onChange={e => set("level", e.target.value)}>
               <option value={1}>1 · 浮沫</option>
               <option value={2}>2 · 长潮</option>
               <option value={3}>3 · 深海</option>
@@ -583,9 +583,9 @@ function MemoryFullForm({ entry, isNew, onCancel, onSave }) {
 
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", paddingTop: 4 }}>
             {[
-              ["pinned", "📌 锚"],
-              ["flashbulb", "⚡ 沉鸣"],
-              ["resolved", "✓ 已解决"],
+              ["pinned", "锚"],
+              ["flashbulb", "沉鸣"],
+              ["resolved", "已解决"],
             ].map(([k, label]) => (
               <label key={k} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: f[k] ? "var(--text-primary)" : "var(--text-tertiary)" }}>
                 <input type="checkbox" checked={f[k]} onChange={e => set(k, e.target.checked)}/>
@@ -593,6 +593,8 @@ function MemoryFullForm({ entry, isNew, onCancel, onSave }) {
               </label>
             ))}
           </div>
+
+          <div><label style={labelStyle}>正文</label><textarea autoFocus rows={6} style={underlineStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="写点什么…"/></div>
         </div>
       </div>
     </div>,
