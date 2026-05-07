@@ -932,22 +932,17 @@ function ymdLocal(d) {
   return d.getFullYear() + "-" + z(d.getMonth()+1) + "-" + z(d.getDate());
 }
 
-function MoodSlot({ entry, author, onTap }) {
-  const letter = MOOD_AUTHOR_LETTER[author];
+function MoodSlot({ entry, onTap }) {
   const color = entry ? MOOD_COLOR[entry.mood] || entry.color : null;
   return (
     <button onClick={onTap} style={{
-      flex: 1, minHeight: 0,
+      width: "100%", aspectRatio: "1 / 1",
       background: color || "transparent",
       border: color ? "none" : "1px dashed var(--border)",
       borderRadius: 3, cursor: "pointer", padding: 0,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      color: color ? "rgba(60,60,60,0.6)" : "transparent",
-      fontSize: 10, fontFamily: "inherit",
+      display: "block",
       transition: "background 0.18s",
-    }}>
-      {color ? letter : ""}
-    </button>
+    }}/>
   );
 }
 
@@ -960,13 +955,12 @@ function MoodDayCell({ day, isToday, top, bottom, onTapTop, onTapBottom }) {
       borderRadius: 4,
       padding: "5px 4px 6px",
       display: "flex", flexDirection: "column", gap: 4,
-      minHeight: 90,
       position: "relative",
     }}>
       <div style={{ fontSize: 11, color: "var(--text-secondary)", textAlign: "center", lineHeight: 1 }}>{day}</div>
-      <MoodSlot entry={top} author="小茉莉" onTap={onTapTop}/>
+      <MoodSlot entry={top} onTap={onTapTop}/>
       <div style={{ height: 1, background: "var(--border)", opacity: 0.5 }}/>
-      <MoodSlot entry={bottom} author="澄" onTap={onTapBottom}/>
+      <MoodSlot entry={bottom} onTap={onTapBottom}/>
       {hasEntry && (
         <div style={{ position: "absolute", left: 5, right: 5, bottom: 1, height: 2, background: "#9DAFC2", borderRadius: 1, opacity: 0.7 }}/>
       )}
@@ -974,7 +968,7 @@ function MoodDayCell({ day, isToday, top, bottom, onTapTop, onTapBottom }) {
   );
 }
 
-function MoodDrawer({ date, initialAuthor, existing, onClose, onSaved }) {
+function MoodInlineForm({ date, initialAuthor, existing, onClose, onSaved }) {
   const [author, setAuthor] = useState(initialAuthor || "小茉莉");
   const cur = existing[author];
   const [mood, setMood] = useState(cur?.mood || MOODS[0].key);
@@ -1006,11 +1000,18 @@ function MoodDrawer({ date, initialAuthor, existing, onClose, onSaved }) {
   };
 
   return (
-    <Drawer title={date} onClose={onClose} footer={<>
-      {cur && <ActionBtn onClick={remove} color="#c0392b">删除</ActionBtn>}
-      <ActionBtn onClick={onClose}>取消</ActionBtn>
-      <ActionBtn accent color="#8aab9e" disabled={saving} onClick={save} flex={2}>{cur ? "保存" : "添加"}</ActionBtn>
-    </>}>
+    <div style={{
+      marginTop: 16,
+      background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8,
+      padding: "14px 16px",
+      display: "flex", flexDirection: "column", gap: 14,
+      animation: "fadeUp 0.22s ease both",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 12, color: "var(--text-secondary)", letterSpacing: "0.12em" }}>{date}</span>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
+      </div>
+
       <div>
         <label style={labelStyle}>作者</label>
         <div style={{ display: "flex", gap: 6 }}>
@@ -1031,7 +1032,7 @@ function MoodDrawer({ date, initialAuthor, existing, onClose, onSaved }) {
 
       <div>
         <label style={labelStyle}>心情</label>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
           {MOODS.map(m => {
             const active = mood === m.key;
             return (
@@ -1040,9 +1041,9 @@ function MoodDrawer({ date, initialAuthor, existing, onClose, onSaved }) {
                 border: `1px solid ${active ? "var(--text-primary)" : "var(--border)"}`,
                 borderRadius: 4, background: "transparent",
                 display: "flex", flexDirection: "column", gap: 5, alignItems: "center",
-                padding: "6px 2px",
+                padding: "5px 4px",
               }}>
-                <div style={{ width: "100%", height: 24, background: m.color, borderRadius: 3 }}/>
+                <div style={{ width: "100%", aspectRatio: "1 / 1", background: m.color, borderRadius: 3 }}/>
                 <span style={{ fontSize: 10, color: active ? "var(--text-primary)" : "var(--text-tertiary)" }}>{m.key}</span>
               </button>
             );
@@ -1052,11 +1053,17 @@ function MoodDrawer({ date, initialAuthor, existing, onClose, onSaved }) {
 
       <div>
         <label style={labelStyle}>说点什么（可选）</label>
-        <textarea rows={4} style={inputStyle} value={note} onChange={e => setNote(e.target.value)} placeholder="今天怎么样…"/>
+        <textarea rows={3} style={underlineStyle} value={note} onChange={e => setNote(e.target.value)} placeholder="今天怎么样…"/>
       </div>
 
       {error && <div style={{ fontSize: 12, color: "#c0392b" }}>{error}</div>}
-    </Drawer>
+
+      <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
+        {cur && <ActionBtn onClick={remove} color="#c0392b">删除</ActionBtn>}
+        <ActionBtn onClick={onClose}>取消</ActionBtn>
+        <ActionBtn accent color="#8aab9e" disabled={saving} onClick={save} flex={2}>{cur ? "保存" : "添加"}</ActionBtn>
+      </div>
+    </div>
   );
 }
 
@@ -1189,6 +1196,18 @@ function MoodCalendarPanel({ onTimeline }) {
         })}
       </div>
 
+      {/* 添加 / 编辑表单（点格子后内联出现） */}
+      {drawer && (
+        <MoodInlineForm
+          key={drawer.date + ":" + drawer.author}
+          date={drawer.date}
+          initialAuthor={drawer.author}
+          existing={byDate[drawer.date] || {}}
+          onClose={() => setDrawer(null)}
+          onSaved={() => { setDrawer(null); load(); }}
+        />
+      )}
+
       {/* 本月统计 */}
       <div style={{
         marginTop: 18, padding: "12px 14px",
@@ -1199,16 +1218,6 @@ function MoodCalendarPanel({ onTimeline }) {
           <>本月记录 {stats.dayCount} 天{stats.topMood && `，最多感受：${stats.topMood}（${stats.topCount} 次）`}</>
         )}
       </div>
-
-      {drawer && (
-        <MoodDrawer
-          date={drawer.date}
-          initialAuthor={drawer.author}
-          existing={byDate[drawer.date] || {}}
-          onClose={() => setDrawer(null)}
-          onSaved={() => { setDrawer(null); load(); }}
-        />
-      )}
     </div>
   );
 }
