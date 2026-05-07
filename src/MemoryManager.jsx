@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import ChatPanel from "./ChatPanel";
 
 // ── 配置 ─────────────────────────────────────────────────
@@ -772,16 +773,17 @@ export default function App() {
 }
 
 function BottomTabBar({ tab, setTab }) {
-  // 直接复用 memory-home/App.jsx 旧版底部导航的 CSS 写法（lines 710–739）
-  return (
+  return createPortal(
     <div style={{
       position:"fixed", bottom:0, left:0, right:0,
       maxWidth:430, margin:"0 auto",
       display:"flex", justifyContent:"space-around", alignItems:"center",
-      padding:"6px 4px 34px",
+      padding:"6px 4px 0",
+      paddingBottom:"calc(8px + env(safe-area-inset-bottom, 20px))",
       background:"var(--bg-page)",
       borderTop:"1px solid var(--border)",
       transition:"background 0.35s ease",
+      zIndex: 999,
     }}>
       {TABS.map(t => {
         const a = tab === t.key;
@@ -798,6 +800,7 @@ function BottomTabBar({ tab, setTab }) {
           </button>
         );
       })}
-    </div>
+    </div>,
+    document.body
   );
 }
