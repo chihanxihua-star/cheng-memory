@@ -859,7 +859,7 @@ function BoardPanel() {
         padding: "8px 16px 10px",
         pointerEvents: "none",
       }}>
-        <div style={{ maxWidth: 860, margin: "0 auto", pointerEvents: "auto" }}>
+        <div style={{ maxWidth: 480, margin: "0 auto", pointerEvents: "auto" }}>
       <BoardCompose
         onOpenDrawer={() => setDrawer({ mode: "create", entry: {} })}
         onSend={async patch => {
