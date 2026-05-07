@@ -424,52 +424,57 @@ function MemoryPanel() {
         <input placeholder="搜索…" value={filters.search} onChange={e => filterChange("search", e.target.value)} style={{ ...inputStyle, borderRadius: 99, padding: "8px 16px", fontSize: 12, width: "100%", maxWidth: 320 }}/>
       </div>
 
-      {/* 星级 + 标志 chip + 排序 */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16, alignItems: "center" }}>
+      {/* 标签栏 — 无边框，仅文字 + 下划线（active） */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 22, marginBottom: 16, alignItems: "center" }}>
         {[1,2,3].map(l => {
           const a = filters.level === l;
-          const bg = LEVEL_META[l].color;
+          const colors = { 1: "#C99FA8", 2: "#A66975", 3: "#7E4853" };
+          const c = colors[l];
           return (
             <button key={l} onClick={() => filterChange("level", a ? "" : l)} style={{
-              padding: "5px 14px", borderRadius: 6,
-              fontSize: 12, letterSpacing: "0.08em",
-              fontFamily: "inherit", cursor: "pointer",
-              background: a ? bg : "transparent",
-              color: a ? "#5C3A3F" : "var(--text-tertiary)",
-              border: `1px solid ${a ? bg : "var(--border)"}`,
+              background: "none", border: "none",
+              padding: "5px 0 7px", cursor: "pointer", fontFamily: "inherit",
+              fontSize: 13, letterSpacing: "0.15em",
+              color: a ? c : "var(--text-tertiary)",
+              fontWeight: a ? 600 : 400,
+              borderBottom: a ? `2px solid ${c}` : "2px solid transparent",
+              transition: "all 0.15s",
             }}>{"★".repeat(l)}</button>
           );
         })}
         <button onClick={() => filterChange("pinned", !filters.pinned)} style={{
-          padding: "5px 14px", borderRadius: 6,
-          fontSize: 12, letterSpacing: "0.08em",
-          fontFamily: "inherit", cursor: "pointer",
-          background: filters.pinned ? "#F2E2C9" : "transparent",
+          background: "none", border: "none",
+          padding: "5px 0 7px", cursor: "pointer", fontFamily: "inherit",
+          fontSize: 13, letterSpacing: "0.15em",
           color: filters.pinned ? "#8A6432" : "var(--text-tertiary)",
-          border: `1px solid ${filters.pinned ? "#F2E2C9" : "var(--border)"}`,
+          fontWeight: filters.pinned ? 600 : 400,
+          borderBottom: filters.pinned ? "2px solid #8A6432" : "2px solid transparent",
+          transition: "all 0.15s",
         }}>锚</button>
         <button onClick={() => filterChange("flashbulb", !filters.flashbulb)} style={{
-          padding: "5px 14px", borderRadius: 6,
-          fontSize: 12, letterSpacing: "0.08em",
-          fontFamily: "inherit", cursor: "pointer",
-          background: filters.flashbulb ? "#E8DCEC" : "transparent",
+          background: "none", border: "none",
+          padding: "5px 0 7px", cursor: "pointer", fontFamily: "inherit",
+          fontSize: 13, letterSpacing: "0.15em",
           color: filters.flashbulb ? "#5C4263" : "var(--text-tertiary)",
-          border: `1px solid ${filters.flashbulb ? "#E8DCEC" : "var(--border)"}`,
+          fontWeight: filters.flashbulb ? 600 : 400,
+          borderBottom: filters.flashbulb ? "2px solid #5C4263" : "2px solid transparent",
+          transition: "all 0.15s",
         }}>沉鸣</button>
         <button onClick={() => filterChange("unresolved", !filters.unresolved)} style={{
-          padding: "5px 14px", borderRadius: 6,
-          fontSize: 11, letterSpacing: "0.1em",
-          fontFamily: "inherit", cursor: "pointer",
-          background: filters.unresolved ? "#E0E8DC" : "transparent",
+          background: "none", border: "none",
+          padding: "5px 0 7px", cursor: "pointer", fontFamily: "inherit",
+          fontSize: 13, letterSpacing: "0.15em",
           color: filters.unresolved ? "#4F624A" : "var(--text-tertiary)",
-          border: `1px solid ${filters.unresolved ? "#E0E8DC" : "var(--border)"}`,
+          fontWeight: filters.unresolved ? 600 : 400,
+          borderBottom: filters.unresolved ? "2px solid #4F624A" : "2px solid transparent",
+          transition: "all 0.15s",
         }}>未愈</button>
         <span style={{ marginLeft: "auto" }}/>
         <select value={sort} onChange={e => { setSort(e.target.value); load(filters, e.target.value); }} style={{
-          background: "transparent", border: "1px solid var(--border)",
-          borderRadius: 6, padding: "5px 10px",
-          fontSize: 11, color: "var(--text-tertiary)",
+          background: "transparent", border: "none",
+          padding: "5px 0", fontSize: 12, color: "var(--text-tertiary)",
           fontFamily: "inherit", cursor: "pointer", outline: "none",
+          letterSpacing: "0.08em",
         }}>
           {MEM_SORTS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
         </select>
