@@ -734,7 +734,7 @@ function DiaryCard({ entry, onEdit, onDelete }) {
       >
         <div onClick={() => setSheet(true)} style={{ cursor: "pointer" }}>
           {entry.title && <p style={{ margin: "0 0 6px", fontSize: 14.5, color: "var(--text-primary)", fontWeight: 500, lineHeight: 1.5 }}>{entry.title}</p>}
-          <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{entry.content}</p>
+          <p style={{ margin: 0, fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{entry.content}</p>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-secondary)" }}>
           <span style={{ color: "var(--text-secondary)" }}>{entry.author}</span>
