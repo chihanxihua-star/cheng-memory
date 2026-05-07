@@ -829,9 +829,14 @@ export default function ChatPanel({ onBack }) {
 
   /* ─────── 滚动 ─────── */
   const scrollToBottom = useCallback(() => {
+    // double rAF：长内容 markdown 渲染要两帧才把 scrollHeight 算稳
     requestAnimationFrame(() => {
       const el = messagesScrollRef.current;
       if (el) el.scrollTop = el.scrollHeight;
+      requestAnimationFrame(() => {
+        const el2 = messagesScrollRef.current;
+        if (el2) el2.scrollTop = el2.scrollHeight;
+      });
     });
   }, []);
   const isNearBottom = useCallback(() => {
@@ -932,7 +937,9 @@ export default function ChatPanel({ onBack }) {
       case "delta": {
         const s = streamRef.current; if (!s) break;
         s.delta += (msg.text || "");
-        // 流式过程中不渲染主气泡，避免 ---bubble--- 切分时闪烁
+        // 流式过程中不渲染主气泡（避免 ---bubble--- 切分闪烁）
+        // 但仍然滚到底部 —— thinking / tool 输出可能正在生长，长消息要跟着滚
+        scrollToBottom();
         break;
       }
       case "clear": {
@@ -987,6 +994,7 @@ export default function ChatPanel({ onBack }) {
             const newContent = partsSoFar.join("\n---bubble---\n");
             setTimeout(() => {
               setMessages(prev => prev.map(m => m.id === baseId ? { ...m, content: newContent } : m));
+              scrollToBottom();
             }, i * 1500);
           }
         }
