@@ -72,9 +72,9 @@ const TODO_STATUSES = ["全部", "待办", "完成"];
 const TODO_STATUS_COLORS = { 待办: "#e8b86d", 完成: "#8aab9e" };
 
 const LEVEL_META = {
-  1: { label: "浮沫", color: "#FFEEEE" },
-  2: { label: "长潮", color: "#FAD9E6" },
-  3: { label: "深海", color: "#F9C5D5" },
+  1: { label: "浮沫", color: "#FAD9E6" },
+  2: { label: "长潮", color: "#F9C5D5" },
+  3: { label: "深海", color: "#E8AABF" },
 };
 
 const AUTHOR_COLORS = {
@@ -358,7 +358,7 @@ function MemoryCard({ mem, onEdit, onDelete }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)" }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
           <span style={{ width: 6, height: 6, borderRadius: 99, background: meta.color, display: "inline-block" }}/>
-          <span style={{ color: AUTHOR_COLORS["小茉莉"], letterSpacing: "0.05em" }}>{meta.label}</span>
+          <span style={{ color: meta.color, letterSpacing: "0.05em" }}>{meta.label}</span>
         </span>
         <span style={{ color: "var(--text-tertiary)" }}>·</span>
         <span style={{ color: "var(--text-tertiary)" }}>{mem.author}</span>
