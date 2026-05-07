@@ -191,6 +191,29 @@ function Drawer({ title, onClose, children, footer }) {
   );
 }
 
+function BottomSheet({ title, onClose, children }) {
+  return createPortal(
+    <div style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+      <div onClick={onClose} style={{ flex: 1, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}/>
+      <div style={{
+        background: "var(--bg-card)",
+        borderRadius: "16px 16px 0 0",
+        maxHeight: "80vh",
+        display: "flex", flexDirection: "column",
+        animation: "slideUp 0.22s ease",
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}>
+        <div style={{ padding: "14px 20px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 13, color: "var(--text-secondary)", letterSpacing: "0.1em" }}>{title || ""}</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ overflow: "auto", padding: "8px 20px 24px", fontSize: 14, color: "var(--text-primary)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{children}</div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function formatDate(d) { return d ? new Date(d).toLocaleDateString("zh-CN", { month: "short", day: "numeric" }) : ""; }
 function formatDateTime(d) { return d ? new Date(d).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""; }
 
@@ -249,6 +272,7 @@ function MemoryDrawer({ memory, isNew, onSave, onClose }) {
 function MemoryCard({ mem, onEdit, onDelete }) {
   const meta = LEVEL_META[mem.level] || LEVEL_META[1];
   const [cd, setCd] = useState(false);
+  const [sheet, setSheet] = useState(false);
   return (
     <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10, borderLeft: `2px solid ${meta.color}88`, transition: "background 0.15s" }}
       onMouseEnter={e => e.currentTarget.style.background = "var(--bg-card)"}
@@ -256,7 +280,8 @@ function MemoryCard({ mem, onEdit, onDelete }) {
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
         <EmotionDot valence={mem.valence} arousal={mem.arousal}/>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-primary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{mem.content}</p>
+          <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 13.5, color: "var(--text-primary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{mem.content}</p>
+          {sheet && <BottomSheet title={mem.summary || "涟漪"} onClose={() => setSheet(false)}>{mem.content}</BottomSheet>}
           {mem.summary && <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.4 }}>{mem.summary}</p>}
           <SensoryAnchors context={mem.context}/>
         </div>
@@ -378,14 +403,16 @@ function DiaryDrawer({ entry, isNew, onSave, onClose }) {
 
 function DiaryCard({ entry, onEdit, onDelete }) {
   const [cd, setCd] = useState(false);
+  const [sheet, setSheet] = useState(false);
   return (
     <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {entry.title && <p style={{ margin: "0 0 4px", fontSize: 14, color: "var(--text-primary)", fontWeight: 400 }}>{entry.title}</p>}
-          <p style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{entry.content}</p>
+          {entry.title && <p onClick={() => setSheet(true)} style={{ margin: "0 0 4px", fontSize: 14, color: "var(--text-primary)", fontWeight: 400, cursor: "pointer" }}>{entry.title}</p>}
+          <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{entry.content}</p>
         </div>
       </div>
+      {sheet && <BottomSheet title={entry.title || "日记"} onClose={() => setSheet(false)}>{entry.content}</BottomSheet>}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
         <AuthorBadge author={entry.author}/>
         {(entry.tags||[]).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
@@ -758,6 +785,7 @@ export default function App() {
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
       @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+      @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
       @keyframes fadeUp { from { transform: translateY(6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       input[type=range] { height: 3px; }
       select option { background: var(--bg-card); }
