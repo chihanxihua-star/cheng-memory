@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { createPortal } from "react-dom";
 import ChatPanel from "./ChatPanel";
 
 // ── 配置 ─────────────────────────────────────────────────
@@ -773,17 +772,15 @@ export default function App() {
 }
 
 function BottomTabBar({ tab, setTab }) {
-  return createPortal(
+  return (
     <div style={{
-      position:"fixed", bottom:0, left:0, right:0,
-      maxWidth:430, margin:"0 auto",
+      flexShrink: 0,
       display:"flex", justifyContent:"space-around", alignItems:"center",
       padding:"6px 4px 0",
       paddingBottom:"calc(8px + env(safe-area-inset-bottom, 20px))",
       background:"var(--bg-page)",
       borderTop:"1px solid var(--border)",
       transition:"background 0.35s ease",
-      zIndex: 999,
     }}>
       {TABS.map(t => {
         const a = tab === t.key;
@@ -800,7 +797,6 @@ function BottomTabBar({ tab, setTab }) {
           </button>
         );
       })}
-    </div>,
-    document.body
+    </div>
   );
 }
