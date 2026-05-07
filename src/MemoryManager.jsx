@@ -2199,29 +2199,73 @@ function PullToCreate({ onCreate, children }) {
   );
 }
 
+// ── 幻想：用作 app 记忆库（沿用潮汐版式：搜索 + tab + swipe 卡片 + 全屏新建） ──
+const FANTASY_CATEGORIES = ["use style", "记忆", "其他"];
+
 function FantasyCard({ entry, onEdit, onDelete }) {
   const [cd, setCd] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [tx, setTx] = useState(0);
+  const startX = useRef(null);
+  const baseTx = useRef(0);
+  const REVEAL = 130;
+  const tagPill = { fontSize: 10, color: "var(--text-secondary)", background: "rgba(0,0,0,0.05)", border: "none", borderRadius: 99, padding: "2px 9px", letterSpacing: "0.04em" };
+  const actionBtn = { background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, padding: "0 8px", cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em", height: "100%" };
+  const onTouchStart = (e) => { startX.current = e.touches[0].clientX; baseTx.current = tx; };
+  const onTouchMove = (e) => {
+    if (startX.current === null) return;
+    const dx = e.touches[0].clientX - startX.current;
+    let nx = baseTx.current + dx;
+    nx = Math.min(0, Math.max(-REVEAL, nx));
+    setTx(nx);
+  };
+  const onTouchEnd = () => { setTx(tx < -REVEAL / 2 ? -REVEAL : 0); startX.current = null; };
   return (
-    <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-      <div onClick={() => setSheet(true)} style={{ cursor: "pointer" }}>
-        {entry.title && <p style={{ margin: "0 0 4px", fontSize: 14, color: "var(--text-primary)", fontWeight: 500 }}>{entry.title}</p>}
-        <p style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{entry.content}</p>
+    <div style={{ position: "relative", overflow: "hidden" }}>
+      <div style={{
+        position: "absolute", right: 0, top: 0, bottom: 0, width: REVEAL,
+        display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, paddingRight: 12,
+      }}>
+        <button onClick={() => { onEdit(entry); setTx(0); }} style={actionBtn}>编辑</button>
+        {cd
+          ? <button onClick={() => { onDelete(entry.id); setCd(false); setTx(0); }} style={{ ...actionBtn, color: "#c0392b" }}>确认</button>
+          : <button onClick={() => setCd(true)} style={{ ...actionBtn, color: "#c0392b" }}>删除</button>}
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
-        {(entry.tags || []).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
-        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--text-secondary)" }}>{formatDateTime(entry.created_at)}</span>
-      </div>
-      <div style={{ display: "flex", gap: 6 }}>
-        <ActionBtn onClick={() => onEdit(entry)}>编辑</ActionBtn>
-        {cd ? <ActionBtn accent color="#c0392b" onClick={() => { onDelete(entry.id); setCd(false); }}>确认删除</ActionBtn> : <ActionBtn onClick={() => setCd(true)}>删除</ActionBtn>}
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+        style={{
+          background: "var(--bg-card-solid)",
+          border: "1px solid var(--border)",
+          padding: "18px 20px",
+          display: "flex", flexDirection: "column", gap: 14,
+          transform: `translateX(${tx}px)`,
+          transition: startX.current === null ? "transform 0.22s ease" : "none",
+        }}
+      >
+        <div onClick={() => setSheet(true)} style={{ cursor: "pointer" }}>
+          {entry.title && <p style={{ margin: "0 0 6px", fontSize: 14.5, color: "var(--text-primary)", fontWeight: 500, lineHeight: 1.5 }}>{entry.title}</p>}
+          <p style={{ margin: 0, fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{entry.content}</p>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-secondary)" }}>
+          <span style={{ color: "var(--text-secondary)" }}>{entry.author}</span>
+          {entry.category && <span style={{ color: "#a89fd8", letterSpacing: "0.05em" }}>{entry.category}</span>}
+          {(entry.tags||[]).slice(0,3).map(t => <span key={t} style={tagPill}>{t}</span>)}
+          <span style={{ marginLeft: "auto", color: "var(--text-secondary)" }}>{formatDateTime(entry.created_at)}</span>
+        </div>
       </div>
       {sheet && (
         <BottomSheet onClose={() => setSheet(false)}>
-          {entry.title && <div style={{ fontSize: 16, color: "var(--text-primary)", fontWeight: 500, marginBottom: 10 }}>{entry.title}</div>}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14, alignItems: "center" }}>
-            {(entry.tags||[]).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
-            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-secondary)" }}>{formatDateTime(entry.created_at)}</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+            {entry.title && <div style={{ fontSize: 16, color: "var(--text-primary)", fontWeight: 500, lineHeight: 1.4 }}>{entry.title}</div>}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+              <AuthorBadge author={entry.author}/>
+              {entry.category && <Badge color="#a89fd822" text="#a89fd8">{entry.category}</Badge>}
+              {(entry.tags||[]).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
+              <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-secondary)" }}>{formatDateTime(entry.created_at)}</span>
+            </div>
           </div>
           <div>{entry.content}</div>
         </BottomSheet>
@@ -2230,28 +2274,93 @@ function FantasyCard({ entry, onEdit, onDelete }) {
   );
 }
 
-function FantasyDrawer({ entry, isNew, onSave, onClose }) {
+function FantasyFullForm({ entry, isNew, onCancel, onSave }) {
   const [f, setF] = useState({
-    title: entry.title || "",
-    content: entry.content || "",
-    tags: Array.isArray(entry.tags) ? entry.tags.join(", ") : "",
-    author: entry.author || "小茉莉",
+    author: entry?.author || "小茉莉",
+    category: entry?.category || FANTASY_CATEGORIES[0],
+    title: entry?.title || "",
+    tags: Array.isArray(entry?.tags) ? entry.tags.join(", ") : "",
+    content: entry?.content || "",
   });
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
-  return (
-    <Drawer title={isNew ? "新幻想" : "编辑幻想"} onClose={onClose} footer={<>
-      <ActionBtn onClick={onClose}>取消</ActionBtn>
-      <ActionBtn accent color="#a89fd8" disabled={!f.content.trim()} onClick={() => onSave({
-        title: f.title || null, content: f.content,
-        tags: f.tags.split(",").map(t => t.trim()).filter(Boolean),
-        author: f.author,
-      })} flex={2}>{isNew ? "写入" : "保存"}</ActionBtn>
-    </>}>
-      <div><label style={labelStyle}>标题（可选）</label><input style={inputStyle} value={f.title} onChange={e => set("title", e.target.value)}/></div>
-      <div><label style={labelStyle}>内容</label><textarea rows={8} style={inputStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="脑海里的画面…"/></div>
-      <div><label style={labelStyle}>标签（逗号分隔）</label><input style={inputStyle} value={f.tags} onChange={e => set("tags", e.target.value)}/></div>
-      <div><label style={labelStyle}>作者</label><input style={inputStyle} value={f.author} onChange={e => set("author", e.target.value)}/></div>
-    </Drawer>
+  const can = !!f.content.trim();
+  const save = () => {
+    if (!can) return;
+    onSave({
+      title: f.title || null,
+      content: f.content,
+      tags: f.tags.split(",").map(t => t.trim()).filter(Boolean),
+      author: f.author,
+      category: f.category,
+    });
+  };
+  return createPortal(
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "var(--bg-page)",
+      display: "flex", flexDirection: "column",
+      animation: "slideDown 0.28s ease",
+    }}>
+      <div style={{
+        flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        <button onClick={onCancel} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>CANCEL</button>
+        <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.22em" }}>{isNew ? "新条目" : "编辑条目"}</span>
+        <button onClick={save} disabled={!can} style={{
+          background: can ? "var(--text-primary)" : "transparent",
+          color: can ? "var(--bg-page)" : "var(--text-tertiary)",
+          border: can ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+          padding: "8px 18px", borderRadius: 4,
+          fontSize: 12, letterSpacing: "0.18em",
+          cursor: can ? "pointer" : "not-allowed", fontFamily: "inherit",
+        }}>{isNew ? "SEND ✓" : "SAVE ✓"}</button>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 16px calc(28px + env(safe-area-inset-bottom, 0px))" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
+          <div style={{ display: "flex", gap: 10 }}>
+            {["澄", "小茉莉"].map(a => {
+              const active = f.author === a;
+              return (
+                <button key={a} onClick={() => set("author", a)} style={{
+                  background: active ? "var(--text-primary)" : "transparent",
+                  color: active ? "var(--bg-page)" : "var(--text-tertiary)",
+                  border: active ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+                  padding: "6px 18px", borderRadius: 4,
+                  fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
+                }}>{a}</button>
+              );
+            })}
+          </div>
+
+          <div>
+            <label style={labelStyle}>分类</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {FANTASY_CATEGORIES.map(c => {
+                const active = f.category === c;
+                return (
+                  <button key={c} onClick={() => set("category", c)} style={{
+                    background: active ? "var(--text-primary)" : "transparent",
+                    color: active ? "var(--bg-page)" : "var(--text-tertiary)",
+                    border: active ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+                    padding: "6px 14px", borderRadius: 4,
+                    fontSize: 11, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit",
+                  }}>{c}</button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div><label style={labelStyle}>标题</label><input style={underlineStyle} value={f.title} onChange={e => set("title", e.target.value)} placeholder="可选"/></div>
+          <div><label style={labelStyle}>标签（逗号分隔）</label><input style={underlineStyle} value={f.tags} onChange={e => set("tags", e.target.value)} placeholder="可选"/></div>
+          <div><label style={labelStyle}>正文</label><textarea autoFocus rows={10} style={underlineStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="…"/></div>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -2259,29 +2368,98 @@ function FantasyPanel() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [drawer, setDrawer] = useState(null);
+  const [editor, setEditor] = useState(null);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");  // "" = 全部
+  const timer = useRef(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (q, cat) => {
     setLoading(true); setError(null);
-    try { setItems(await sbGet("fantasy_cheng", "&order=created_at.desc")); }
-    catch(e) { setError(e.message); } finally { setLoading(false); }
+    try {
+      let p = "&order=created_at.desc";
+      if (cat) p += `&category=eq.${encodeURIComponent(cat)}`;
+      if (q) p += `&or=(title.ilike.*${encodeURIComponent(q)}*,content.ilike.*${encodeURIComponent(q)}*)`;
+      setItems(await sbGet("fantasy_cheng", p));
+    } catch(e) { setError(e.message); } finally { setLoading(false); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => { load(search, category); }, [load, category]); // eslint-disable-line
+  const reload = () => load(search, category);
+
+  const submitFantasy = async (patch) => {
+    if (editor?.mode === "create") {
+      const tempId = "tmp-" + Date.now();
+      const tempEntry = { id: tempId, ...patch, created_at: new Date().toISOString() };
+      setItems(arr => [tempEntry, ...arr]);
+      setEditor(null);
+      try {
+        const saved = await sbPost("fantasy_cheng", patch);
+        const real = Array.isArray(saved) ? saved[0] : saved;
+        setItems(arr => arr.map(it => it.id === tempId ? (real || it) : it));
+      } catch(e) { setError(e.message); setItems(arr => arr.filter(it => it.id !== tempId)); }
+    } else if (editor?.mode === "edit") {
+      const id = editor.entry.id;
+      setItems(arr => arr.map(it => it.id === id ? { ...it, ...patch } : it));
+      setEditor(null);
+      try { await sbPatch("fantasy_cheng", id, patch); }
+      catch(e) { setError(e.message); reload(); }
+    }
+  };
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 14 }}>
-        <ActionBtn accent color="#a89fd8" onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 幻想</ActionBtn>
-        <ActionBtn onClick={load}>{loading ? "…" : "刷新"}</ActionBtn>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {items.length} 条</p>
+        <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
       </div>
+
+      <div style={{ marginBottom: 14, position: "relative" }}>
+        <input placeholder="搜索…" value={search} onChange={e => { setSearch(e.target.value); clearTimeout(timer.current); timer.current = setTimeout(() => load(e.target.value, category), 400); }} style={{ ...underlineStyle, fontSize: 13, padding: "6px 24px 6px 0" }}/>
+        {search && (
+          <button onClick={() => { setSearch(""); load("", category); }} aria-label="清空" style={{
+            position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)",
+            background: "none", border: "none", color: "var(--text-tertiary)",
+            fontSize: 18, lineHeight: 1, cursor: "pointer", padding: "4px 6px", fontFamily: "inherit",
+          }}>×</button>
+        )}
+      </div>
+
+      {/* 分类 tabs：仿涟漪/记忆的下划线 active 风格 */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 22, marginBottom: 16, alignItems: "center" }}>
+        {[{ k: "", l: "全部" }, ...FANTASY_CATEGORIES.map(c => ({ k: c, l: c }))].map(t => {
+          const a = category === t.k;
+          return (
+            <button key={t.k || "__all"} onClick={() => setCategory(t.k)} style={{
+              background: "none", border: "none",
+              padding: "5px 0 7px", cursor: "pointer", fontFamily: "inherit",
+              fontSize: 13, letterSpacing: "0.15em",
+              color: a ? "var(--text-primary)" : "var(--text-tertiary)",
+              fontWeight: a ? 600 : 400,
+              borderBottom: a ? "2px solid var(--text-primary)" : "2px solid transparent",
+              transition: "all 0.15s",
+            }}>{t.l}</button>
+          );
+        })}
+      </div>
+
       <ErrorBar error={error} onClose={() => setError(null)}/>
-      {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
-        : items.length === 0 ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有幻想</div>
-        : items.map(e => <FantasyCard key={e.id} entry={e}
-            onEdit={ent => setDrawer({ mode: "edit", entry: ent })}
-            onDelete={async id => { try { await sbDelete("fantasy_cheng", id); load(); } catch(e) { setError(e.message); } }}
-          />)}
-      {drawer && <FantasyDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("fantasy_cheng", patch); else await sbPatch("fantasy_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
+
+      <PullToCreate onCreate={() => setEditor({ mode: "create", entry: null })}>
+        {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+          : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有条目</div>
+          : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {items.map(e => <div key={e.id} style={{ animation: "fadeUp 0.25s ease both" }}><FantasyCard entry={e} onEdit={ent => setEditor({ mode: "edit", entry: ent })} onDelete={async id => { try { await sbDelete("fantasy_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
+            </div>}
+      </PullToCreate>
+
+      {editor && (
+        <FantasyFullForm
+          entry={editor.entry}
+          isNew={editor.mode === "create"}
+          onCancel={() => setEditor(null)}
+          onSave={submitFantasy}
+        />
+      )}
     </div>
   );
 }
@@ -2297,6 +2475,8 @@ function SecurityPanel() {
   const [confirm, setConfirm] = useState("");
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  const reset = () => { setOldPwd(""); setNewPwd(""); setConfirm(""); setMsg(null); };
 
   const submit = async () => {
     setMsg(null);
@@ -2316,13 +2496,10 @@ function SecurityPanel() {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || ("HTTP " + r.status));
-      // 改完立刻清 token，让 PasswordGate 用新密码重弹
       localStorage.removeItem(AUTH_TOKEN_KEY);
-      setOldPwd(""); setNewPwd(""); setConfirm("");
+      reset();
       setMsg({ type: "ok", text: "密码已更新，请用新密码重新登录" });
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent("auth-expired"));
-      }, 700);
+      setTimeout(() => { window.dispatchEvent(new CustomEvent("auth-expired")); }, 700);
     } catch (e) {
       setMsg({ type: "err", text: e.message || "更新失败" });
     } finally {
@@ -2330,34 +2507,53 @@ function SecurityPanel() {
     }
   };
 
+  // 整体卡片照搬 MoodInlineForm 的样式（逢春日历编辑）
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "16px 18px" }}>
-        <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)" }}>修改密码</p>
-        <p style={{ margin: "4px 0 12px", fontSize: 12, color: "var(--text-secondary)" }}>
-          通过后端 <code style={{ fontFamily: "ui-monospace,SFMono-Regular,Menlo,monospace", fontSize: 11 }}>/api/auth/change-password</code> 校验当前密码，写回服务器 .env。
-        </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div><label style={labelStyle}>当前密码</label>
-            <input type="password" style={inputStyle} value={oldPwd} onChange={e => { setOldPwd(e.target.value); setMsg(null); }}/>
-          </div>
-          <div><label style={labelStyle}>新密码</label>
-            <input type="password" style={inputStyle} value={newPwd} onChange={e => { setNewPwd(e.target.value); setMsg(null); }} placeholder="至少 4 位"/>
-          </div>
-          <div><label style={labelStyle}>再次输入</label>
-            <input type="password" style={inputStyle} value={confirm} onChange={e => { setConfirm(e.target.value); setMsg(null); }}/>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <ActionBtn accent color="#a89fd8" disabled={busy} onClick={submit}>{busy ? "保存中…" : "保存"}</ActionBtn>
-          </div>
-          {msg && (
-            <p style={{ margin: 0, fontSize: 11.5, color: msg.type === "err" ? "#c0392b" : "#5e9e8a" }}>{msg.text}</p>
-          )}
-        </div>
+    <div style={{
+      background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8,
+      padding: "14px 16px",
+      display: "flex", flexDirection: "column", gap: 14,
+      animation: "fadeUp 0.22s ease both",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 12, color: "var(--text-secondary)", letterSpacing: "0.12em" }}>修改密码</span>
+        <button onClick={reset} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
       </div>
-      <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)", textAlign: "center" }}>
-        改完密码后会强制登出，需用新密码重新登录。
-      </p>
+
+      <div>
+        <label style={labelStyle}>当前密码</label>
+        <input type="password" style={underlineStyle}
+          value={oldPwd} onChange={e => { setOldPwd(e.target.value); setMsg(null); }}/>
+      </div>
+
+      <div>
+        <label style={labelStyle}>新密码（至少 4 位）</label>
+        <input type="password" style={underlineStyle}
+          value={newPwd} onChange={e => { setNewPwd(e.target.value); setMsg(null); }}/>
+      </div>
+
+      <div>
+        <label style={labelStyle}>再次输入</label>
+        <input type="password" style={underlineStyle}
+          value={confirm} onChange={e => { setConfirm(e.target.value); setMsg(null); }}/>
+      </div>
+
+      {msg && (
+        <div style={{ fontSize: 12, color: msg.type === "err" ? "#c0392b" : "#5e9e8a" }}>
+          {msg.text}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
+        <ActionBtn onClick={reset}>清空</ActionBtn>
+        <button onClick={submit} disabled={busy} style={{
+          flex: 2, padding: "5px 0", fontFamily: "inherit", fontSize: 11.5,
+          cursor: busy ? "not-allowed" : "pointer", borderRadius: 5,
+          background: "var(--text-primary)", border: "1px solid var(--text-primary)",
+          color: busy ? "rgba(255,255,255,0.5)" : "var(--bg-page)",
+          transition: "all 0.15s",
+        }}>{busy ? "保存中…" : "保存"}</button>
+      </div>
     </div>
   );
 }
