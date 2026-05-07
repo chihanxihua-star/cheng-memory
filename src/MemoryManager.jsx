@@ -294,8 +294,8 @@ function MemoryCard({ mem, onEdit, onDelete }) {
   const startX = useRef(null);
   const baseTx = useRef(0);
   const REVEAL = 130;
-  const tagPill = { fontSize: 10, color: "var(--text-tertiary)", background: "rgba(0,0,0,0.04)", border: "none", borderRadius: 99, padding: "2px 9px", letterSpacing: "0.04em" };
-  const actionBtn = { background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 12, padding: "0 8px", cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em", height: "100%" };
+  const tagPill = { fontSize: 10, color: "var(--text-secondary)", background: "rgba(0,0,0,0.05)", border: "none", borderRadius: 99, padding: "2px 9px", letterSpacing: "0.04em" };
+  const actionBtn = { background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, padding: "0 8px", cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em", height: "100%" };
   const onTouchStart = (e) => { startX.current = e.touches[0].clientX; baseTx.current = tx; };
   const onTouchMove = (e) => {
     if (startX.current === null) return;
@@ -355,15 +355,15 @@ function MemoryCard({ mem, onEdit, onDelete }) {
 
       <StrengthBar value={mem.strength ?? 0} color={LEVEL_META[mem.level]?.color || "#FFEEEE"}/>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)" }}>
-        <span style={{ color: "#B98593", letterSpacing: "0.05em" }}>{meta.label}</span>
-        <span style={{ color: "var(--text-tertiary)" }}>·</span>
-        <span style={{ color: "var(--text-tertiary)" }}>{mem.author}</span>
-        {mem.pinned && <span style={{ color: "var(--text-tertiary)" }}>锚</span>}
-        {mem.flashbulb && <span style={{ color: "var(--text-tertiary)" }}>沉鸣</span>}
-        {mem.resolved === false && <span style={{ color: "var(--text-tertiary)" }}>未愈</span>}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-secondary)" }}>
+        <span style={{ color: "#9E6E7C", letterSpacing: "0.05em" }}>{meta.label}</span>
+        <span style={{ color: "var(--text-secondary)" }}>·</span>
+        <span style={{ color: "var(--text-secondary)" }}>{mem.author}</span>
+        {mem.pinned && <span style={{ color: "var(--text-secondary)" }}>锚</span>}
+        {mem.flashbulb && <span style={{ color: "var(--text-secondary)" }}>沉鸣</span>}
+        {mem.resolved === false && <span style={{ color: "var(--text-secondary)" }}>未愈</span>}
         {(mem.tags||[]).slice(0,3).map(t => <span key={t} style={tagPill}>{t}</span>)}
-        <span style={{ marginLeft: "auto", color: "var(--text-tertiary)" }}>{formatDate(mem.created_at)} · 引用 {mem.ref_count??0}</span>
+        <span style={{ marginLeft: "auto", color: "var(--text-secondary)" }}>{formatDate(mem.created_at)} · 引用 {mem.ref_count??0}</span>
       </div>
       </div>
     </div>
