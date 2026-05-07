@@ -2746,13 +2746,20 @@ function BriefingConfigPanel() {
                     <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
                       {visible.length === 0 ? (
                         <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", padding: "12px 0" }}>这个板块没有记忆候选</div>
-                      ) : visible.map(m => {
+                      ) : visible.map((m, idx) => {
                         const checked = pushedIds.has(m.id);
                         const isManual = pinnedSet.has(m.id) && !topIds.has(m.id);
+                        // 算法选中的（在 topN 里）按其在 topN 的位置算 push tier；
+                        // 手动 pinned 的去所有启用 target
+                        const inTopN = topIds.has(m.id);
+                        const targets = inTopN
+                          ? (checked ? pushTargetsFor(idx, false, rows) : [])
+                          : (checked ? pushTargetsFor(0, true, rows) : []);
                         return (
                           <BriefingMemRow key={m.id} mem={m}
                             checked={checked}
                             isManual={isManual}
+                            pushTargets={targets}
                             onToggle={() => toggleItem(m.id)}/>
                         );
                       })}
@@ -2769,12 +2776,18 @@ function BriefingConfigPanel() {
                         }}>{isMoreOpen ? `收起更多` : `更多 (${more.length} 条)`}</button>
                         {isMoreOpen && (
                           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {more.slice(0, 50).map(m => (
-                              <BriefingMemRow key={m.id} mem={m}
-                                checked={pinnedSet.has(m.id)}
-                                isManual={false}
-                                onToggle={() => toggleItem(m.id)}/>
-                            ))}
+                            {more.slice(0, 50).map(m => {
+                              const checked = pinnedSet.has(m.id);
+                              // 更多里的：未勾就是未推送；勾了 = 手动 pinned，去所有启用 target
+                              const targets = checked ? pushTargetsFor(0, true, rows) : [];
+                              return (
+                                <BriefingMemRow key={m.id} mem={m}
+                                  checked={checked}
+                                  isManual={false}
+                                  pushTargets={targets}
+                                  onToggle={() => toggleItem(m.id)}/>
+                              );
+                            })}
                             {more.length > 50 && (
                               <div style={{ fontSize: 10, color: "var(--text-tertiary)", textAlign: "center", padding: "4px 0" }}>仅显示前 50 条</div>
                             )}
@@ -2793,15 +2806,34 @@ function BriefingConfigPanel() {
   );
 }
 
-function BriefingMemRow({ mem, checked, isManual, onToggle }) {
+// 算这条记忆推到哪几个 target；isPinned=true 表示手动追加（去所有启用 target）
+function pushTargetsFor(index, isPinned, rows) {
+  const enabled = rows.filter(r => r.enabled !== false);
+  if (isPinned) return enabled.map(r => r.target);
+  return enabled.filter(r => index < (r.max_items || 0)).map(r => r.target);
+}
+function pushLabel(targets) {
+  if (!targets.length) return "未推送";
+  const up = targets.map(t => t.toUpperCase());
+  if (up.length === 1) return "仅 " + up[0];
+  return up.join(" · ");
+}
+
+function BriefingMemRow({ mem, checked, isManual, onToggle, pushTargets }) {
   const summary = mem.summary || mem.content || "";
   const short = summary.length > 60 ? summary.slice(0, 60) + "…" : summary;
   const dt = mem.created_at ? new Date(mem.created_at) : null;
   const dateStr = dt ? `${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}` : "—";
+  const isUnpushed = !pushTargets || pushTargets.length === 0;
+  const label = pushLabel(pushTargets || []);
+  // 标签颜色：多 target 主色，单 target 次色，未推送灰
+  const labelColor = isUnpushed ? "var(--text-tertiary)"
+    : (pushTargets.length === 1 ? "var(--text-secondary)" : "var(--text-primary)");
   return (
     <label style={{
       display: "flex", alignItems: "center", gap: 8,
       padding: "5px 0", cursor: "pointer",
+      opacity: isUnpushed ? 0.55 : 1,
     }}>
       <span style={{
         width: 14, height: 14, flexShrink: 0,
@@ -2822,7 +2854,11 @@ function BriefingMemRow({ mem, checked, isManual, onToggle }) {
         flex: 1, fontSize: 12, color: "var(--text-primary)",
         lineHeight: 1.4, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
       }}>{short}{isManual && <span style={{ marginLeft: 6, fontSize: 9, color: "#a89fd8", letterSpacing: "0.1em" }}>· 手动</span>}</span>
-      <span style={{ flexShrink: 0, fontSize: 10, color: "var(--text-tertiary)" }}>
+      <span style={{
+        flexShrink: 0, fontSize: 9, letterSpacing: "0.16em",
+        color: labelColor, minWidth: 56, textAlign: "right",
+      }}>{label}</span>
+      <span style={{ flexShrink: 0, fontSize: 10, color: "var(--text-tertiary)", minWidth: 76, textAlign: "right" }}>
         {(mem.strength != null) ? `str ${(+mem.strength).toFixed(2)}` : "—"} · {dateStr}
       </span>
     </label>
