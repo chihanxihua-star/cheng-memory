@@ -787,8 +787,8 @@ function BottomTabBar({ tab, setTab }) {
     <div style={{
       flexShrink: 0,
       display:"flex", justifyContent:"space-around", alignItems:"center",
-      padding:"2px 4px 0",
-      paddingBottom:"calc(4px + env(safe-area-inset-bottom, 20px))",
+      padding:"0px 4px 0",
+      paddingBottom:"calc(2px + env(safe-area-inset-bottom, 20px))",
       background:"var(--bg-page)",
       borderTop:"1px solid var(--border)",
       transition:"background 0.35s ease",
@@ -797,7 +797,7 @@ function BottomTabBar({ tab, setTab }) {
         const a = tab === t.key;
         return (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
-            display:"flex", flexDirection:"column", alignItems:"center", gap:1,
+            display:"flex", flexDirection:"column", alignItems:"center", gap:0,
             background:"none", border:"none", cursor:"pointer",
             padding:"4px 13px", opacity:a?1:0.4, transition:"opacity 0.2s",
             color: a ? "var(--accent)" : "var(--text-secondary)",
