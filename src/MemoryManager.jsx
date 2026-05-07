@@ -1373,9 +1373,9 @@ function MilestoneItem({ milestone, side, onEdit, onDelete, onMoveUp, onMoveDown
         transform: "translateX(-50%)",
       }}/>
 
-      {/* 内容（占一半宽，与中线留 18px 间距） */}
+      {/* 内容（占一半宽，与中线留 32px 间距） */}
       <div onClick={() => setOpen(o => !o)} style={{
-        width: "calc(50% - 18px)", textAlign,
+        width: "calc(50% - 32px)", textAlign,
         cursor: "pointer",
       }}>
         <div style={{
