@@ -2752,171 +2752,172 @@ function InjectionLogPanel() {
   );
 }
 
-// ── 手机使用数据：app_usage ────────────────────────────────────
+// ── 手机数据：app_usage（只看今天） ──────────────────────────
+function fmtUsageDur(ms) {
+  if (!ms || ms <= 0) return "0 分";
+  const min = Math.round(ms / 60000);
+  if (min < 60) return min + " 分";
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return h + " 时" + (m ? " " + m + " 分" : "");
+}
+
+function buildUsageSessions(rows, now) {
+  const out = [];
+  let cur = null;
+  for (const r of rows) {
+    const t = new Date(r.created_at);
+    if (r.action === "open" && r.app_name) {
+      if (cur) out.push({ app: cur.app, start: cur.start, end: t });
+      cur = { app: r.app_name, start: t };
+    } else if (r.action === "close") {
+      if (cur) { out.push({ app: cur.app, start: cur.start, end: t }); cur = null; }
+    }
+  }
+  if (cur) out.push({ app: cur.app, start: cur.start, end: now });
+  return out;
+}
+
+function intersectMs(s1, e1, s2, e2) {
+  const a = Math.max(s1.getTime(), s2.getTime());
+  const b = Math.min(e1.getTime(), e2.getTime());
+  return Math.max(0, b - a);
+}
+
 function UsagePanel() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [days, setDays] = useState(30);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const since = new Date(); since.setDate(since.getDate() - days + 1);
-      since.setHours(0, 0, 0, 0);
-      const params = `&created_at=gte.${encodeURIComponent(since.toISOString())}&order=created_at.asc&limit=10000`;
+      // 至少要昨天 00:00 起的数据，才能比"昨天此时"
+      const start = new Date(); start.setDate(start.getDate() - 1); start.setHours(0, 0, 0, 0);
+      const params = `&created_at=gte.${encodeURIComponent(start.toISOString())}&order=created_at.asc&limit=10000`;
       setRows(await sbGet("app_usage", params));
     } catch(e) { setError(e.message); } finally { setLoading(false); }
-  }, [days]);
+  }, []);
   useEffect(() => { load(); }, [load]);
 
-  // 分桶：按日期统计 count
-  const dayBuckets = (() => {
-    const m = {};
-    for (const r of rows) {
-      const d = new Date(r.created_at);
-      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-      m[key] = (m[key] || 0) + 1;
-    }
-    // 填充空缺日期
-    const out = [];
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(today); d.setDate(today.getDate() - i);
-      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-      out.push({ key, count: m[key] || 0 });
-    }
-    return out;
-  })();
+  const now = new Date();
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+  const yStart = new Date(todayStart); yStart.setDate(yStart.getDate() - 1);
+  const yNow = new Date(now); yNow.setDate(yNow.getDate() - 1);
 
-  // 按 app_name 统计
-  const byApp = {};
-  for (const r of rows) {
-    const k = r.app_name || "(unknown)";
-    byApp[k] = (byApp[k] || 0) + 1;
+  const sessions = buildUsageSessions(rows, now);
+
+  // 今日总使用时间
+  let todayTotal = 0;
+  for (const s of sessions) todayTotal += intersectMs(s.start, s.end, todayStart, now);
+
+  // 今天 vs 昨天此时 —— 按 app 拆
+  const tByApp = {};
+  const yByApp = {};
+  for (const s of sessions) {
+    const t = intersectMs(s.start, s.end, todayStart, now);
+    const y = intersectMs(s.start, s.end, yStart, yNow);
+    if (t > 0) tByApp[s.app] = (tByApp[s.app] || 0) + t;
+    if (y > 0) yByApp[s.app] = (yByApp[s.app] || 0) + y;
   }
-  const topApps = Object.entries(byApp).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const compareApps = Array.from(new Set([...Object.keys(tByApp), ...Object.keys(yByApp)]))
+    .map(a => ({ app: a, today: tByApp[a] || 0, y: yByApp[a] || 0 }))
+    .sort((a, b) => (b.today + b.y) - (a.today + a.y))
+    .slice(0, 6);
+  const compareMax = Math.max(1, ...compareApps.map(c => Math.max(c.today, c.y)));
 
-  // 按 action 统计
-  const byAction = {};
-  for (const r of rows) {
-    const k = r.action || "(none)";
-    byAction[k] = (byAction[k] || 0) + 1;
-  }
-  const topActions = Object.entries(byAction).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  // 板块 TOP（今日）
+  const topApps = Object.entries(tByApp).sort((a, b) => b[1] - a[1]).slice(0, 8);
 
-  const maxCount = Math.max(1, ...dayBuckets.map(b => b.count));
+  const z = n => String(n).padStart(2, "0");
+  const nowStr = z(now.getHours()) + ":" + z(now.getMinutes());
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 10 }}>
-        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-          {[7, 30, 90].map(n => (
-            <button key={n} onClick={() => setDays(n)} style={{
-              background: "none", border: "none", padding: "4px 0", cursor: "pointer", fontFamily: "inherit",
-              fontSize: 12, letterSpacing: "0.12em",
-              color: days === n ? "var(--text-primary)" : "var(--text-tertiary)",
-              borderBottom: days === n ? "2px solid var(--text-primary)" : "2px solid transparent",
-              fontWeight: days === n ? 600 : 400,
-            }}>{n}天</button>
-          ))}
-        </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>
+          {now.getFullYear()}-{z(now.getMonth()+1)}-{z(now.getDate())} · 现在 {nowStr}
+        </p>
         <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
       </div>
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      {/* Summary tile */}
+      {/* 第一栏：总使用时间 */}
       <div style={{
         background: "var(--bg-card)", border: "1px solid var(--border)",
-        borderRadius: 8, padding: "12px 14px",
-        display: "flex", justifyContent: "space-around", textAlign: "center",
-        marginBottom: 14,
+        borderRadius: 8, padding: "16px 16px",
+        marginBottom: 14, textAlign: "center",
       }}>
-        <div>
-          <div style={{ fontSize: 22, color: "var(--text-primary)", fontWeight: 500 }}>{rows.length}</div>
-          <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginTop: 2 }}>EVENTS</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 22, color: "var(--text-primary)", fontWeight: 500 }}>{dayBuckets.filter(b => b.count > 0).length}</div>
-          <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginTop: 2 }}>ACTIVE DAYS</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 22, color: "var(--text-primary)", fontWeight: 500 }}>{rows.length ? Math.round(rows.length / Math.max(1, dayBuckets.filter(b => b.count > 0).length)) : 0}</div>
-          <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginTop: 2 }}>AVG / DAY</div>
+        <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.22em", marginBottom: 8 }}>总使用时间</div>
+        <div style={{ fontSize: 28, color: "var(--text-primary)", fontWeight: 500, letterSpacing: "0.05em" }}>
+          {fmtUsageDur(todayTotal)}
         </div>
       </div>
 
-      {/* Daily bars */}
+      {/* 第二栏：今天 vs 昨天此时 */}
       <div style={{
         background: "var(--bg-card)", border: "1px solid var(--border)",
-        borderRadius: 8, padding: "14px 14px 10px",
+        borderRadius: 8, padding: "14px 14px 12px",
         marginBottom: 14,
       }}>
-        <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 10 }}>每日次数</div>
-        <div style={{
-          display: "flex", alignItems: "flex-end", gap: 2,
-          height: 90, paddingBottom: 4, borderBottom: "1px solid var(--border)",
-        }}>
-          {dayBuckets.map(b => {
-            const h = b.count > 0 ? Math.max(2, Math.round((b.count / maxCount) * 84)) : 0;
-            return (
-              <div key={b.key} title={`${b.key} · ${b.count} 次`} style={{
-                flex: 1, height: h,
-                background: b.count > 0 ? "var(--text-primary)" : "transparent",
-                borderRadius: "1px 1px 0 0",
-                opacity: b.count > 0 ? 0.65 : 1,
-              }}/>
-            );
-          })}
+        <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 4 }}>
+          今天 vs 昨天此时
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 9, color: "var(--text-tertiary)" }}>
-          <span>{dayBuckets[0]?.key.slice(5)}</span>
-          <span>{dayBuckets[dayBuckets.length - 1]?.key.slice(5)}</span>
+        <div style={{ fontSize: 9, color: "var(--text-tertiary)", letterSpacing: "0.12em", marginBottom: 12 }}>
+          0:00 — {nowStr}
         </div>
+        {compareApps.length === 0 ? (
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "20px 0", textAlign: "center" }}>—</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {compareApps.map(c => {
+              const tw = (c.today / compareMax) * 100;
+              const yw = (c.y / compareMax) * 100;
+              return (
+                <div key={c.app} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ fontSize: 12, color: "var(--text-primary)" }}>{c.app}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ flex: "0 0 32px", fontSize: 9, color: "var(--text-tertiary)", letterSpacing: "0.12em" }}>今天</span>
+                    <div style={{ flex: 1, height: 4, background: "var(--border)" }}>
+                      <div style={{ width: `${tw}%`, height: "100%", background: "var(--text-primary)", opacity: 0.7 }}/>
+                    </div>
+                    <span style={{ flex: "0 0 56px", fontSize: 11, color: "var(--text-secondary)", textAlign: "right" }}>{fmtUsageDur(c.today)}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ flex: "0 0 32px", fontSize: 9, color: "var(--text-tertiary)", letterSpacing: "0.12em" }}>昨天</span>
+                    <div style={{ flex: 1, height: 4, background: "var(--border)" }}>
+                      <div style={{ width: `${yw}%`, height: "100%", background: "var(--text-tertiary)", opacity: 0.5 }}/>
+                    </div>
+                    <span style={{ flex: "0 0 56px", fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>{fmtUsageDur(c.y)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Top apps */}
+      {/* 第三栏：板块 TOP（今日） */}
       <div style={{
         background: "var(--bg-card)", border: "1px solid var(--border)",
-        borderRadius: 8, padding: "14px 14px 12px", marginBottom: 14,
+        borderRadius: 8, padding: "14px 14px 12px",
       }}>
         <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 10 }}>板块 TOP</div>
         {topApps.length === 0 ? (
           <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>—</div>
-        ) : topApps.map(([name, cnt]) => {
-          const pct = cnt / topApps[0][1];
+        ) : topApps.map(([name, ms]) => {
+          const pct = ms / topApps[0][1];
           return (
             <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0" }}>
               <span style={{ flex: "0 0 70px", fontSize: 12, color: "var(--text-primary)" }}>{name}</span>
               <div style={{ flex: 1, height: 4, background: "var(--border)", borderRadius: 99 }}>
                 <div style={{ width: `${pct * 100}%`, height: "100%", background: "var(--text-primary)", opacity: 0.6, borderRadius: 99 }}/>
               </div>
-              <span style={{ flex: "0 0 32px", fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>{cnt}</span>
+              <span style={{ flex: "0 0 56px", fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>{fmtUsageDur(ms)}</span>
             </div>
           );
         })}
-      </div>
-
-      {/* Action breakdown */}
-      <div style={{
-        background: "var(--bg-card)", border: "1px solid var(--border)",
-        borderRadius: 8, padding: "14px 14px 12px",
-      }}>
-        <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 10 }}>动作分布</div>
-        {topActions.length === 0 ? (
-          <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>—</div>
-        ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {topActions.map(([name, cnt]) => (
-              <span key={name} style={{
-                fontSize: 11, color: "var(--text-secondary)",
-                background: "rgba(0,0,0,0.04)", borderRadius: 99,
-                padding: "3px 10px", letterSpacing: "0.04em",
-              }}>{name} · {cnt}</span>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -2929,7 +2930,7 @@ function ConsolePanel() {
     { key: "fantasy", label: "幻想" },
     { key: "briefing", label: "简报" },
     { key: "injection", label: "回忆记录" },
-    { key: "usage", label: "使用数据" },
+    { key: "usage", label: "手机数据" },
     { key: "theme", label: "外观" },
     { key: "security", label: "安全设置" },
   ];
