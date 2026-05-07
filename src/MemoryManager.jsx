@@ -2562,21 +2562,72 @@ function SecurityPanel() {
 const BRIEFING_SECTIONS = ["锚", "深海", "长潮", "浮沫", "未愈", "回响"];
 const BRIEFING_TARGETS = ["cc", "app", "api"];
 
+// 排序算法：返回该板块按规则排好的全量 memories 列表（不限 N）
+function sortMemoriesForSection(section, mems, randomMap) {
+  const arr = mems.slice();
+  switch (section) {
+    case "锚":
+      // 全选 pinned=true，按 created_at desc
+      return arr.filter(m => m.pinned === true)
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    case "深海":
+      return arr.filter(m => m.level === 3)
+                .sort((a, b) =>
+                  new Date(b.last_reinforced_at || b.created_at) -
+                  new Date(a.last_reinforced_at || a.created_at)
+                );
+    case "长潮": {
+      const score = m => (m.strength || 0) * (1 + (m.arousal || 0) * 0.5) * (m.resolved === false ? 1.3 : 1);
+      return arr.filter(m => m.level === 2).sort((a, b) => score(b) - score(a));
+    }
+    case "浮沫":
+      return arr.filter(m => m.level === 1)
+                .sort((a, b) => (b.strength || 0) - (a.strength || 0));
+    case "未愈":
+      return arr.filter(m => m.resolved === false)
+                .sort((a, b) => (b.arousal || 0) - (a.arousal || 0));
+    case "回响":
+      // 全量随机抽样：按 randomMap 里给每条预生成的随机分数排
+      return arr.slice().sort((a, b) => (randomMap.get(a.id) || 0) - (randomMap.get(b.id) || 0));
+    default:
+      return arr;
+  }
+}
+
 function BriefingConfigPanel() {
-  const [items, setItems] = useState([]);
+  const [configRows, setConfigRows] = useState([]);
+  const [memories, setMemories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [savingId, setSavingId] = useState(null);
+  const [openSection, setOpenSection] = useState(null);
+  const [moreOpen, setMoreOpen] = useState({}); // { section: bool }
+  const [reseed, setReseed] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setItems(await sbGet("briefing_config_cheng", "&order=section.asc,target.asc")); }
-    catch(e) { setError(e.message); } finally { setLoading(false); }
+    try {
+      const [c, m] = await Promise.all([
+        sbGet("briefing_config_cheng", "&order=section.asc,target.asc"),
+        sbGet("memories_cheng", "&order=created_at.desc&limit=500"),
+      ]);
+      setConfigRows(c);
+      setMemories(m);
+      setReseed(Date.now());
+    } catch(e) { setError(e.message); } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // 回响：在内存里给每条 memory 预先打个随机分，刷新一下重新洗牌
+  const randomMap = useMemo(() => {
+    const m = new Map();
+    for (const mem of memories) m.set(mem.id, Math.random());
+    return m;
+  }, [memories, reseed]); // eslint-disable-line
+
+  // 单条 (section, target) 的 max_items / enabled 更新
   const updateRow = async (row, patch) => {
-    setItems(arr => arr.map(it => it.id === row.id ? { ...it, ...patch } : it));
+    setConfigRows(arr => arr.map(it => it.id === row.id ? { ...it, ...patch } : it));
     setSavingId(row.id);
     try {
       await sbPatch("briefing_config_cheng", row.id, { ...patch, updated_at: new Date().toISOString() });
@@ -2584,47 +2635,197 @@ function BriefingConfigPanel() {
     finally { setSavingId(null); }
   };
 
-  // 用 section 分组渲染
-  const grouped = {};
-  for (const r of items) {
-    if (!grouped[r.section]) grouped[r.section] = [];
-    grouped[r.section].push(r);
-  }
-  const sections = Object.keys(grouped).sort((a, b) =>
-    BRIEFING_SECTIONS.indexOf(a) - BRIEFING_SECTIONS.indexOf(b)
-  );
+  // 整个 section 的 pinned/excluded 改写到所有 target 行（保持一致）
+  const updateSectionLists = async (section, newPinned, newExcluded) => {
+    const rows = configRows.filter(r => r.section === section);
+    setConfigRows(arr => arr.map(r =>
+      r.section === section ? { ...r, pinned_ids: newPinned, excluded_ids: newExcluded } : r
+    ));
+    try {
+      await Promise.all(rows.map(r => sbPatch("briefing_config_cheng", r.id, {
+        pinned_ids: newPinned,
+        excluded_ids: newExcluded,
+        updated_at: new Date().toISOString(),
+      })));
+    } catch (e) { setError(e.message); load(); }
+  };
+
+  const sections = BRIEFING_SECTIONS.filter(s => configRows.some(r => r.section === s));
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {items.length} 条规则</p>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {memories.length} 条记忆 · {configRows.length} 条规则</p>
         <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
       </div>
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      {loading && items.length === 0 ? (
+      {loading && configRows.length === 0 ? (
         <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>正在拉取…</div>
-      ) : items.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>没有规则</div>
+      ) : sections.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>没有板块配置</div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {sections.map(sec => (
-            <div key={sec} style={{
-              background: "var(--bg-card)", border: "1px solid var(--border)",
-              borderRadius: 8, padding: "12px 14px",
-            }}>
-              <div style={{ fontSize: 13, color: "var(--text-primary)", marginBottom: 10, letterSpacing: "0.08em", fontWeight: 500 }}>{sec}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {grouped[sec].map(r => (
-                  <BriefingRuleRow key={r.id} row={r} saving={savingId === r.id} onUpdate={updateRow}/>
-                ))}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {sections.map(sec => {
+            const rows = configRows.filter(r => r.section === sec);
+            const first = rows[0] || {};
+            const pinned = Array.isArray(first.pinned_ids) ? first.pinned_ids : [];
+            const excluded = Array.isArray(first.excluded_ids) ? first.excluded_ids : [];
+            const maxItems = Math.max(...rows.map(r => r.max_items || 0));
+
+            // 全量按算法排
+            const sorted = sortMemoriesForSection(sec, memories, randomMap);
+
+            // top-N 自动选中（除非在 excluded）
+            const topN = sorted.slice(0, sec === "锚" ? sorted.length : maxItems);
+            const topIds = new Set(topN.map(m => m.id));
+
+            // 实际推送 = 自动选中（topN \ excluded）∪ 手动 pinned
+            const pinnedSet = new Set(pinned);
+            const excludedSet = new Set(excluded);
+            const pushedIds = new Set();
+            for (const m of topN) if (!excludedSet.has(m.id)) pushedIds.add(m.id);
+            for (const id of pinned) pushedIds.add(id);
+
+            // "auto + pinned" 的可见列表（默认折叠的板块只显示这部分）
+            const pinnedExtras = sorted.filter(m => pinnedSet.has(m.id) && !topIds.has(m.id));
+            const visible = [...topN, ...pinnedExtras];
+            // "更多" 候选 = 剩下的 sorted（不在 visible 里）
+            const visibleIds = new Set(visible.map(m => m.id));
+            const more = sorted.filter(m => !visibleIds.has(m.id));
+
+            const isOpen = openSection === sec;
+            const isMoreOpen = !!moreOpen[sec];
+
+            const toggleItem = (memId) => {
+              // 如果在 topN：切 excluded
+              // 如果不在 topN：切 pinned
+              if (topIds.has(memId)) {
+                const newExc = excludedSet.has(memId)
+                  ? excluded.filter(x => x !== memId)
+                  : [...excluded, memId];
+                updateSectionLists(sec, pinned, newExc);
+              } else {
+                const newPin = pinnedSet.has(memId)
+                  ? pinned.filter(x => x !== memId)
+                  : [...pinned, memId];
+                updateSectionLists(sec, newPin, excluded);
+              }
+            };
+
+            return (
+              <div key={sec} style={{
+                background: "var(--bg-card)", border: "1px solid var(--border)",
+                borderRadius: 8,
+              }}>
+                {/* 板块头：点击折叠 */}
+                <button onClick={() => setOpenSection(isOpen ? null : sec)} style={{
+                  width: "100%", textAlign: "left",
+                  background: "none", border: "none", padding: "12px 14px",
+                  cursor: "pointer", fontFamily: "inherit",
+                  display: "flex", alignItems: "center", gap: 10,
+                }}>
+                  <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.08em", fontWeight: 500 }}>{sec}</span>
+                  <span style={{ flex: 1, fontSize: 11, color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
+                    已选 {pushedIds.size} / 上限 {maxItems === 999 ? "∞" : maxItems}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{isOpen ? "▾" : "▸"}</span>
+                </button>
+
+                {isOpen && (
+                  <div style={{ padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
+                    {/* 每个 target 的 max_items + ON/OFF 控件 */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4, borderTop: "1px solid var(--border)" }}>
+                      {rows.map(r => (
+                        <BriefingRuleRow key={r.id} row={r} saving={savingId === r.id} onUpdate={updateRow}/>
+                      ))}
+                    </div>
+
+                    {/* 自动选中 + 手动加的 pinned */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+                      {visible.length === 0 ? (
+                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", padding: "12px 0" }}>这个板块没有记忆候选</div>
+                      ) : visible.map(m => {
+                        const checked = pushedIds.has(m.id);
+                        const isManual = pinnedSet.has(m.id) && !topIds.has(m.id);
+                        return (
+                          <BriefingMemRow key={m.id} mem={m}
+                            checked={checked}
+                            isManual={isManual}
+                            onToggle={() => toggleItem(m.id)}/>
+                        );
+                      })}
+                    </div>
+
+                    {/* 更多按钮 */}
+                    {more.length > 0 && (
+                      <>
+                        <button onClick={() => setMoreOpen(s => ({ ...s, [sec]: !s[sec] }))} style={{
+                          background: "none", border: "1px dashed var(--border)",
+                          padding: "6px 0", borderRadius: 4, cursor: "pointer",
+                          fontSize: 11, color: "var(--text-tertiary)", letterSpacing: "0.18em",
+                          fontFamily: "inherit",
+                        }}>{isMoreOpen ? `收起更多` : `更多 (${more.length} 条)`}</button>
+                        {isMoreOpen && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {more.slice(0, 50).map(m => (
+                              <BriefingMemRow key={m.id} mem={m}
+                                checked={pinnedSet.has(m.id)}
+                                isManual={false}
+                                onToggle={() => toggleItem(m.id)}/>
+                            ))}
+                            {more.length > 50 && (
+                              <div style={{ fontSize: 10, color: "var(--text-tertiary)", textAlign: "center", padding: "4px 0" }}>仅显示前 50 条</div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
+  );
+}
+
+function BriefingMemRow({ mem, checked, isManual, onToggle }) {
+  const summary = mem.summary || mem.content || "";
+  const short = summary.length > 60 ? summary.slice(0, 60) + "…" : summary;
+  const dt = mem.created_at ? new Date(mem.created_at) : null;
+  const dateStr = dt ? `${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}` : "—";
+  return (
+    <label style={{
+      display: "flex", alignItems: "center", gap: 8,
+      padding: "5px 0", cursor: "pointer",
+    }}>
+      <span style={{
+        width: 14, height: 14, flexShrink: 0,
+        border: "1px solid var(--border)",
+        background: checked ? "var(--text-primary)" : "transparent",
+        position: "relative",
+      }}>
+        {checked && (
+          <span style={{
+            position: "absolute", inset: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "var(--bg-page)", fontSize: 10, lineHeight: 1,
+          }}>✓</span>
+        )}
+      </span>
+      <input type="checkbox" checked={checked} onChange={onToggle} style={{ display: "none" }}/>
+      <span onClick={onToggle} style={{
+        flex: 1, fontSize: 12, color: "var(--text-primary)",
+        lineHeight: 1.4, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+      }}>{short}{isManual && <span style={{ marginLeft: 6, fontSize: 9, color: "#a89fd8", letterSpacing: "0.1em" }}>· 手动</span>}</span>
+      <span style={{ flexShrink: 0, fontSize: 10, color: "var(--text-tertiary)" }}>
+        {(mem.strength != null) ? `str ${(+mem.strength).toFixed(2)}` : "—"} · {dateStr}
+      </span>
+    </label>
   );
 }
 
