@@ -353,7 +353,6 @@ function MemoryPanel() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [drawer, setDrawer] = useState(null);
   const [filters, setFilters] = useState({ level: "", pinned: false, flashbulb: false, unresolved: false, search: "" });
   const [sort, setSort] = useState("created_at.desc");
   const [stats, setStats] = useState(null);
@@ -379,19 +378,27 @@ function MemoryPanel() {
   const reload = () => load(filters, sort);
   const filterChange = (k, v) => { const n = { ...filters, [k]: v }; setFilters(n); if (k==="search") { clearTimeout(timer.current); timer.current = setTimeout(() => load(n,sort), 400); } else load(n,sort); };
 
-  const [creating, setCreating] = useState(false);
-  const createMemory = async (patch) => {
-    const tempId = "tmp-" + Date.now();
-    const tempMem = { id: tempId, ...patch, created_at: new Date().toISOString(), strength: 1, ref_count: 0 };
-    setItems(arr => [tempMem, ...arr]);
-    setCreating(false);
-    try {
-      const saved = await sbPost("memories_cheng", patch);
-      const real = Array.isArray(saved) ? saved[0] : saved;
-      setItems(arr => arr.map(it => it.id === tempId ? (real || it) : it));
-    } catch(e) {
-      setError(e.message);
-      setItems(arr => arr.filter(it => it.id !== tempId));
+  const [editor, setEditor] = useState(null); // null | { mode: "create" | "edit", entry }
+  const submitMemory = async (patch) => {
+    if (editor?.mode === "create") {
+      const tempId = "tmp-" + Date.now();
+      const tempMem = { id: tempId, ...patch, created_at: new Date().toISOString(), strength: 1, ref_count: 0 };
+      setItems(arr => [tempMem, ...arr]);
+      setEditor(null);
+      try {
+        const saved = await sbPost("memories_cheng", patch);
+        const real = Array.isArray(saved) ? saved[0] : saved;
+        setItems(arr => arr.map(it => it.id === tempId ? (real || it) : it));
+      } catch(e) {
+        setError(e.message);
+        setItems(arr => arr.filter(it => it.id !== tempId));
+      }
+    } else if (editor?.mode === "edit") {
+      const id = editor.entry.id;
+      setItems(arr => arr.map(it => it.id === id ? { ...it, ...patch } : it));
+      setEditor(null);
+      try { await sbPatch("memories_cheng", id, patch); }
+      catch(e) { setError(e.message); reload(); }
     }
   };
 
@@ -425,63 +432,90 @@ function MemoryPanel() {
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
-      <PullToCreate onCreate={() => setCreating(true)}>
-        <div style={{ maxHeight: creating ? 600 : 0, overflow: "hidden", transition: "max-height 0.3s ease" }}>
-          {creating && <InlineMemoryForm onCancel={() => setCreating(false)} onSave={createMemory}/>}
-        </div>
-
+      <PullToCreate onCreate={() => setEditor({ mode: "create", entry: null })}>
         {loading ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>正在拉取…</div>
-          : items.length === 0 && !creating ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>没有记忆</div>
+          : items.length === 0 ? <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>没有记忆</div>
           : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
-              {items.map(m => <div key={m.id} style={{ animation: "fadeUp 0.25s ease both" }}><MemoryCard mem={m} onEdit={mem => setDrawer({ mode: "edit", memory: mem })} onDelete={async id => { try { await sbDelete("memories_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
+              {items.map(m => <div key={m.id} style={{ animation: "fadeUp 0.25s ease both" }}><MemoryCard mem={m} onEdit={mem => setEditor({ mode: "edit", entry: mem })} onDelete={async id => { try { await sbDelete("memories_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
             </div>}
       </PullToCreate>
 
-      {drawer && <MemoryDrawer memory={drawer.memory} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("memories_cheng", patch); else await sbPatch("memories_cheng", drawer.memory.id, patch); setDrawer(null); reload(); } catch(e) { setError(e.message); } }}/>}
+      {editor && (
+        <MemoryFullForm
+          entry={editor.entry}
+          isNew={editor.mode === "create"}
+          onCancel={() => setEditor(null)}
+          onSave={submitMemory}
+        />
+      )}
     </div>
   );
 }
 
-function InlineMemoryForm({ onCancel, onSave }) {
-  const [f, setF] = useState({ author: "澄", summary: "", event_date: "", content: "" });
+function MemoryFullForm({ entry, isNew, onCancel, onSave }) {
+  const initialSenses = (() => {
+    try {
+      const c = typeof entry?.context === "string" ? JSON.parse(entry.context) : entry?.context;
+      return Array.isArray(c?.senses) ? c.senses.join(", ") : "";
+    } catch { return ""; }
+  })();
+  const [f, setF] = useState({
+    author: entry?.author || "澄",
+    summary: entry?.summary || "",
+    content: entry?.content || "",
+    event_date: "",
+    level: entry?.level ?? 1,
+    valence: entry?.valence ?? 0.5,
+    arousal: entry?.arousal ?? 0.5,
+    strength: entry?.strength ?? 1.0,
+    tags: Array.isArray(entry?.tags) ? entry.tags.join(", ") : "",
+    senses: initialSenses,
+    pinned: !!entry?.pinned,
+    flashbulb: !!entry?.flashbulb,
+    resolved: entry?.resolved !== false,
+  });
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
-  const contentRef = useRef(null);
-  useEffect(() => {
-    const el = contentRef.current;
-    if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
-  }, [f.content]);
+  const can = !!f.content.trim();
 
   const save = () => {
-    if (!f.content.trim()) return;
+    if (!can) return;
+    const senses = f.senses.split(",").map(s => s.trim()).filter(Boolean);
+    const ctx = (senses.length || f.event_date) ? {
+      ...(senses.length ? { senses } : {}),
+      ...(f.event_date ? { event_date: f.event_date } : {}),
+    } : null;
     onSave({
       content: f.content,
       summary: f.summary || null,
+      level: Number(f.level),
+      valence: Number(f.valence),
+      arousal: Number(f.arousal),
+      strength: Number(f.strength),
+      tags: f.tags.split(",").map(t => t.trim()).filter(Boolean),
       author: f.author,
-      level: 1,
-      valence: 0.5,
-      arousal: 0.5,
-      tags: [],
-      context: f.event_date ? { event_date: f.event_date } : null,
+      pinned: f.pinned,
+      flashbulb: f.flashbulb,
+      resolved: f.resolved,
+      context: ctx,
     });
   };
 
-  const labelSt = { fontSize: 11, color: "var(--text-tertiary)", letterSpacing: "0.22em", marginBottom: 8 };
-  const underline = {
-    background: "none", border: "none",
-    borderBottom: "1px solid var(--border)",
-    outline: "none", padding: "6px 0",
-    fontFamily: "Georgia, 'Noto Serif SC', serif",
-    fontSize: 14, color: "var(--text-primary)", width: "100%",
-    fontStyle: "italic",
-  };
-  const can = !!f.content.trim();
-
-  return (
-    <div style={{ borderBottom: "1px solid var(--border)", padding: "20px 4px 28px" }}>
+  return createPortal(
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "var(--bg-page)",
+      display: "flex", flexDirection: "column",
+      animation: "slideDown 0.28s ease",
+    }}>
       {/* 顶栏 */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 26 }}>
+      <div style={{
+        flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px",
+        borderBottom: "1px solid var(--border)",
+      }}>
         <button onClick={onCancel} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>CANCEL</button>
-        <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.22em" }}>新涟漪</span>
+        <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.22em" }}>{isNew ? "新涟漪" : "编辑涟漪"}</span>
         <button onClick={save} disabled={!can} style={{
           background: can ? "var(--text-primary)" : "transparent",
           color: can ? "var(--bg-page)" : "var(--text-tertiary)",
@@ -489,61 +523,79 @@ function InlineMemoryForm({ onCancel, onSave }) {
           padding: "8px 18px", borderRadius: 4,
           fontSize: 12, letterSpacing: "0.18em",
           cursor: can ? "pointer" : "not-allowed", fontFamily: "inherit",
-        }}>SEND ✓</button>
+        }}>{isNew ? "SEND ✓" : "SAVE ✓"}</button>
       </div>
 
-      {/* 作者 chip */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 28 }}>
-        {["澄", "小茉莉"].map(a => {
-          const active = f.author === a;
-          return (
-            <button key={a} onClick={() => set("author", a)} style={{
-              background: active ? "var(--text-primary)" : "transparent",
-              color: active ? "var(--bg-page)" : "var(--text-tertiary)",
-              border: active ? "1px solid var(--text-primary)" : "1px solid var(--border)",
-              padding: "6px 18px", borderRadius: 4,
-              fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
-            }}>{a}</button>
-          );
-        })}
-      </div>
+      {/* 表单滚动区 */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 16px calc(28px + env(safe-area-inset-bottom, 0px))" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
+          {/* 作者 chips */}
+          <div style={{ display: "flex", gap: 10 }}>
+            {["澄", "小茉莉"].map(a => {
+              const active = f.author === a;
+              return (
+                <button key={a} onClick={() => set("author", a)} style={{
+                  background: active ? "var(--text-primary)" : "transparent",
+                  color: active ? "var(--bg-page)" : "var(--text-tertiary)",
+                  border: active ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+                  padding: "6px 18px", borderRadius: 4,
+                  fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
+                }}>{a}</button>
+              );
+            })}
+          </div>
 
-      {/* TITLE */}
-      <div style={{ marginBottom: 22 }}>
-        <div style={labelSt}>TITLE</div>
-        <input
-          value={f.summary}
-          onChange={e => set("summary", e.target.value)}
-          placeholder="一句话摘要…"
-          style={underline}
-        />
-      </div>
+          <div><label style={labelStyle}>摘要</label><textarea rows={2} style={inputStyle} value={f.summary} onChange={e => set("summary", e.target.value)} placeholder="一句话概括"/></div>
+          <div><label style={labelStyle}>正文</label><textarea autoFocus rows={6} style={inputStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="写点什么…"/></div>
+          <div><label style={labelStyle}>日期（可选 · 留空记今天）</label><input type="date" style={inputStyle} value={f.event_date} onChange={e => set("event_date", e.target.value)}/></div>
 
-      {/* DATE */}
-      <div style={{ marginBottom: 22 }}>
-        <div style={labelSt}>DATE</div>
-        <input
-          type="date"
-          value={f.event_date}
-          onChange={e => set("event_date", e.target.value)}
-          style={{ ...underline, color: f.event_date ? "var(--text-primary)" : "var(--text-tertiary)", colorScheme: "light" }}
-        />
-      </div>
+          <div>
+            <label style={labelStyle}>层级</label>
+            <select style={inputStyle} value={f.level} onChange={e => set("level", e.target.value)}>
+              <option value={1}>1 · 浮沫</option>
+              <option value={2}>2 · 长潮</option>
+              <option value={3}>3 · 深海</option>
+            </select>
+          </div>
 
-      {/* CONTENT */}
-      <div>
-        <div style={labelSt}>CONTENT</div>
-        <textarea
-          ref={contentRef}
-          autoFocus
-          value={f.content}
-          onChange={e => set("content", e.target.value)}
-          placeholder="dear…"
-          rows={3}
-          style={{ ...underline, borderBottom: "none", resize: "none", overflow: "hidden", lineHeight: 1.6 }}
-        />
+          <div>
+            <label style={labelStyle}>情绪 — {Number(f.valence).toFixed(2)}</label>
+            <input type="range" min={0} max={1} step={0.01} style={{ width: "100%", accentColor: "var(--accent)" }} value={f.valence} onChange={e => set("valence", e.target.value)}/>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-tertiary)" }}><span>不嘻嘻</span><span>稳定</span><span>嘻嘻</span></div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>情绪浓度 — {Number(f.arousal).toFixed(2)}</label>
+            <input type="range" min={0} max={1} step={0.01} style={{ width: "100%", accentColor: "var(--accent)" }} value={f.arousal} onChange={e => set("arousal", e.target.value)}/>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-tertiary)" }}><span>淡淡的</span><span>一般</span><span>上头了</span></div>
+          </div>
+
+          {!isNew && (
+            <div>
+              <label style={labelStyle}>强度 — {Number(f.strength).toFixed(2)}</label>
+              <input type="range" min={0} max={1} step={0.01} style={{ width: "100%", accentColor: "var(--accent)" }} value={f.strength} onChange={e => set("strength", e.target.value)}/>
+            </div>
+          )}
+
+          <div><label style={labelStyle}>标签（逗号分隔）</label><input style={inputStyle} value={f.tags} onChange={e => set("tags", e.target.value)} placeholder="起源, 调试"/></div>
+          <div><label style={labelStyle}>感官锚点（逗号分隔）</label><input style={inputStyle} value={f.senses} onChange={e => set("senses", e.target.value)} placeholder="窗外下雨, 咖啡的味道"/></div>
+
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", paddingTop: 4 }}>
+            {[
+              ["pinned", "📌 锚"],
+              ["flashbulb", "⚡ 沉鸣"],
+              ["resolved", "✓ 已解决"],
+            ].map(([k, label]) => (
+              <label key={k} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: f[k] ? "var(--text-primary)" : "var(--text-tertiary)" }}>
+                <input type="checkbox" checked={f[k]} onChange={e => set(k, e.target.checked)}/>
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1703,6 +1755,7 @@ export default function App() {
       ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
       @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
       @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
       @keyframes fadeUp { from { transform: translateY(6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       input[type=range] { height: 3px; }
       select option { background: var(--bg-card); }
