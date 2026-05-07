@@ -1793,6 +1793,7 @@ function ConsolePanel() {
   const subTabs = [
     { key: "todos", label: "待办" },
     { key: "fantasy", label: "幻想" },
+    { key: "theme", label: "外观" },
     { key: "security", label: "安全设置" },
   ];
   const tabBtn = (active) => ({
@@ -1811,7 +1812,45 @@ function ConsolePanel() {
       </div>
       <div style={{ display: sub === "todos" ? "block" : "none" }}><TodoPanel/></div>
       <div style={{ display: sub === "fantasy" ? "block" : "none" }}><FantasyPanel/></div>
+      <div style={{ display: sub === "theme" ? "block" : "none" }}><ThemePanel/></div>
       <div style={{ display: sub === "security" ? "block" : "none" }}><SecurityPanel/></div>
+    </div>
+  );
+}
+
+function ThemePanel() {
+  const [theme, setThemeState] = useState(() => localStorage.getItem("chat-theme") || "light");
+  const apply = (t) => {
+    setThemeState(t);
+    localStorage.setItem("chat-theme", t);
+    let resolved = t;
+    if (t === "system") {
+      resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    document.documentElement.setAttribute("data-theme", resolved);
+  };
+  const opts = [
+    { v: "light", label: "浅色" },
+    { v: "dark", label: "深色" },
+    { v: "system", label: "跟随系统" },
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <p style={{ margin: 0, fontSize: 12, color: "var(--text-tertiary)" }}>选择应用的颜色模式</p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        {opts.map(o => {
+          const active = theme === o.v;
+          return (
+            <button key={o.v} onClick={() => apply(o.v)} style={{
+              background: active ? "var(--text-primary)" : "transparent",
+              color: active ? "var(--bg-page)" : "var(--text-secondary)",
+              border: active ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+              padding: "8px 18px", borderRadius: 4,
+              fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit",
+            }}>{o.label}</button>
+          );
+        })}
+      </div>
     </div>
   );
 }

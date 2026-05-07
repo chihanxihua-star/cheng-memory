@@ -702,21 +702,28 @@ const CSS = `
    ════════════════════════════════════════════════════════════ */
 function useTheme() {
   const get = () => localStorage.getItem("chat-theme") || "light";
+  const compute = (p) => p === "system"
+    ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    : p;
   const [pref, setPref] = useState(get);
-  const resolved = useMemo(() => {
-    if (pref === "system") {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-    return pref;
-  }, [pref]);
-  // 把 data-theme 写到 <html>，让 :root[data-theme="..."] 的全局变量生效
+  const [resolved, setResolved] = useState(() => compute(get()));
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", resolved);
-  }, [resolved]);
+    const r = compute(pref);
+    setResolved(r);
+    document.documentElement.setAttribute("data-theme", r);
+  }, [pref]);
+  useEffect(() => {
+    const obs = new MutationObserver(() => {
+      const t = document.documentElement.getAttribute("data-theme");
+      if (t === "light" || t === "dark") setResolved(t);
+    });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, []);
   useEffect(() => {
     if (pref !== "system") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => setPref("system"); // 触发重计算
+    const onChange = () => setResolved(compute("system"));
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, [pref]);
@@ -1863,7 +1870,6 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
         <div className="cp-ps-section-title">通用</div>
         <div className="cp-ps-list">
           <SidebarItem onClick={() => setScreen("window")}>窗口设置</SidebarItem>
-          <SidebarItem onClick={() => setScreen("theme")}>颜色模式</SidebarItem>
           <SidebarItem onClick={() => setScreen("voice")}>语音服务</SidebarItem>
         </div>
         <div className="cp-ps-section-title">管理</div>
@@ -1898,28 +1904,6 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
         <div className="cp-ps-list">
           <SidebarItem onClick={onNewChat}>新对话（清屏）</SidebarItem>
           <SidebarItem onClick={() => onRestartCC()}>重启 CC 进程</SidebarItem>
-        </div>
-      </>
-    );
-  }
-  if (screen === "theme") {
-    return (
-      <>
-        <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={() => setScreen("main")}>← 返回</button>颜色模式</div>
-        <div className="cp-ps-form">
-          <label>主题</label>
-          <select value={theme} onChange={e => setTheme(e.target.value)}>
-            <option value="light">浅色</option>
-            <option value="dark">深色</option>
-            <option value="system">跟随系统</option>
-          </select>
-        </div>
-        <div className="cp-ps-form">
-          <label style={{ marginBottom: 10 }}>预览</label>
-          <div style={{ display: "flex", gap: 10 }}>
-            <div style={{ flex: 1, padding: 12, background: "var(--bg-bubble-user)", color: "var(--text-bubble-user)", borderRadius: 8, fontSize: 12 }}>你好！</div>
-            <div style={{ flex: 1, padding: 12, background: "var(--bg-bubble-bot)", color: "var(--text-bubble-bot)", border: "1px solid var(--border-bubble)", borderRadius: 8, fontSize: 12 }}>Claude 回复</div>
-          </div>
         </div>
       </>
     );
