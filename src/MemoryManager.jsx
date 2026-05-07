@@ -645,6 +645,7 @@ function BoardMessage({ msg, onEdit, onDelete, onToggleRead, onToggleResolved, o
       display: "flex", flexDirection: "column",
       alignItems: isMe ? "flex-end" : "flex-start",
       marginBottom: 14, opacity: msg.is_resolved ? 0.55 : 1,
+      animation: "fadeUp 0.22s ease both",
     }}>
       <div style={{ fontSize: 10, color: authorColor, fontWeight: 500, marginBottom: 3, padding: "0 6px" }}>{msg.author}</div>
       <div className={"bd-bubble " + (isMe ? "me" : "them")} onClick={() => setActionsOpen(o => !o)}>
@@ -709,19 +710,27 @@ function BoardMessage({ msg, onEdit, onDelete, onToggleRead, onToggleResolved, o
         </div>
       )}
 
-      {/* 点击气泡才出现：时间 + 已读/处理/编辑/删除 */}
-      {actionsOpen && (
-        <div style={{ display: "flex", gap: 4, marginTop: 4, alignItems: "center" }} onClick={e => e.stopPropagation()}>
-          <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>{formatDateTime(msg.created_at)}</span>
-          {msg.is_resolved && <span style={{ fontSize: 10, color: "#8aab9e" }}>· ✓</span>}
-          <button onClick={() => onToggleRead(msg)} style={linkBtn}>{msg.is_read ? "未读" : "已读"}</button>
-          <button onClick={() => onToggleResolved(msg)} style={linkBtn}>{msg.is_resolved ? "重开" : "处理"}</button>
-          {isMe && <button onClick={() => onEdit(msg)} style={linkBtn}>编辑</button>}
-          {isMe && (cd
-            ? <button onClick={() => { onDelete(msg.id); setCd(false); }} style={{ ...linkBtn, color: "#c0392b" }}>确认</button>
-            : <button onClick={() => setCd(true)} style={linkBtn}>删除</button>)}
-        </div>
-      )}
+      {/* 点击气泡才出现：时间 + 已读/处理/编辑/删除 —— 用 max-height 过渡避免布局跳一下 */}
+      <div
+        style={{
+          display: "flex", gap: 4, alignItems: "center",
+          maxHeight: actionsOpen ? 30 : 0,
+          marginTop: actionsOpen ? 4 : 0,
+          opacity: actionsOpen ? 1 : 0,
+          overflow: "hidden",
+          transition: "max-height 0.18s ease, opacity 0.18s ease, margin-top 0.18s ease",
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>{formatDateTime(msg.created_at)}</span>
+        {msg.is_resolved && <span style={{ fontSize: 10, color: "#8aab9e" }}>· ✓</span>}
+        <button onClick={() => onToggleRead(msg)} style={linkBtn}>{msg.is_read ? "未读" : "已读"}</button>
+        <button onClick={() => onToggleResolved(msg)} style={linkBtn}>{msg.is_resolved ? "重开" : "处理"}</button>
+        {isMe && <button onClick={() => onEdit(msg)} style={linkBtn}>编辑</button>}
+        {isMe && (cd
+          ? <button onClick={() => { onDelete(msg.id); setCd(false); }} style={{ ...linkBtn, color: "#c0392b" }}>确认</button>
+          : <button onClick={() => setCd(true)} style={linkBtn}>删除</button>)}
+      </div>
     </div>
   );
 }
@@ -786,8 +795,10 @@ function BoardPanel() {
     const cur = Array.isArray(msg.reactions) ? msg.reactions : [];
     const idx = cur.findIndex(r => r && r.from === "小茉莉" && r.emoji === emoji);
     const next = idx >= 0 ? cur.filter((_, i) => i !== idx) : [...cur, { emoji, from: "小茉莉" }];
-    try { await sbPatch("board_cheng", msg.id, { reactions: next }); load(); }
-    catch(e) { setError(e.message); }
+    // 乐观更新：先改本地 state，UI 立刻反应
+    setItems(arr => arr.map(it => it.id === msg.id ? { ...it, reactions: next } : it));
+    try { await sbPatch("board_cheng", msg.id, { reactions: next }); }
+    catch(e) { setError(e.message); load(); /* 回滚 */ }
   };
 
   const filterBtn = (active) => ({
@@ -820,7 +831,24 @@ function BoardPanel() {
 
       <BoardCompose
         onOpenDrawer={() => setDrawer({ mode: "create", entry: {} })}
-        onSend={async patch => { try { await sbPost("board_cheng", patch); load(); } catch(e) { setError(e.message); } }}
+        onSend={async patch => {
+          // 乐观插入：先在本地 items 末尾追一条临时消息，UI 立即响应
+          const tempId = "tmp-" + Date.now();
+          const tempMsg = {
+            id: tempId, ...patch,
+            reactions: null, is_read: false, is_resolved: false,
+            created_at: new Date().toISOString(),
+          };
+          setItems(arr => [...arr, tempMsg]);
+          try {
+            const saved = await sbPost("board_cheng", patch);
+            const real = Array.isArray(saved) ? saved[0] : saved;
+            setItems(arr => arr.map(it => it.id === tempId ? (real || it) : it));
+          } catch(e) {
+            setError(e.message);
+            setItems(arr => arr.filter(it => it.id !== tempId));
+          }
+        }}
       />
 
       {drawer && <BoardDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("board_cheng", patch); else await sbPatch("board_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
