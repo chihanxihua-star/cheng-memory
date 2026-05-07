@@ -911,8 +911,309 @@ function DiaryFullForm({ entry, isNew, onCancel, onSave }) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  纪念日板块
+//  逢春板块：心情日历 + 纪念日时间轴
 // ════════════════════════════════════════════════════════════
+const MOODS = [
+  { key: "嘻嘻",   color: "#BDD8B8" }, // 浅绿
+  { key: "还行",   color: "#BCCDDB" }, // 浅蓝
+  { key: "不嘻嘻", color: "#E8C8CE" }, // 浅粉
+  { key: "上头了", color: "#D8A8A8" }, // 浅红
+  { key: "淡淡的", color: "#E5DAB0" }, // 浅黄
+];
+const MOOD_COLOR = Object.fromEntries(MOODS.map(m => [m.key, m.color]));
+const MOOD_AUTHORS = [
+  { key: "小茉莉", letter: "m" },
+  { key: "澄",     letter: "c" },
+];
+const MOOD_AUTHOR_LETTER = Object.fromEntries(MOOD_AUTHORS.map(a => [a.key, a.letter]));
+
+function ymdLocal(d) {
+  const z = n => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + z(d.getMonth()+1) + "-" + z(d.getDate());
+}
+
+function MoodSlot({ entry, author, onTap }) {
+  const letter = MOOD_AUTHOR_LETTER[author];
+  const color = entry ? MOOD_COLOR[entry.mood] || entry.color : null;
+  return (
+    <button onClick={onTap} style={{
+      flex: 1, minHeight: 0,
+      background: color || "transparent",
+      border: color ? "none" : "1px dashed var(--border)",
+      borderRadius: 3, cursor: "pointer", padding: 0,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      color: color ? "rgba(60,60,60,0.6)" : "transparent",
+      fontSize: 10, fontFamily: "inherit",
+      transition: "background 0.18s",
+    }}>
+      {color ? letter : ""}
+    </button>
+  );
+}
+
+function MoodDayCell({ day, isToday, top, bottom, onTapTop, onTapBottom }) {
+  const hasEntry = !!(top || bottom);
+  return (
+    <div style={{
+      background: "var(--bg-card)",
+      border: `1px ${isToday ? "solid" : "dashed"} var(--border)`,
+      borderRadius: 4,
+      padding: "5px 4px 6px",
+      display: "flex", flexDirection: "column", gap: 4,
+      minHeight: 90,
+      position: "relative",
+    }}>
+      <div style={{ fontSize: 11, color: "var(--text-secondary)", textAlign: "center", lineHeight: 1 }}>{day}</div>
+      <MoodSlot entry={top} author="小茉莉" onTap={onTapTop}/>
+      <div style={{ height: 1, background: "var(--border)", opacity: 0.5 }}/>
+      <MoodSlot entry={bottom} author="澄" onTap={onTapBottom}/>
+      {hasEntry && (
+        <div style={{ position: "absolute", left: 5, right: 5, bottom: 1, height: 2, background: "#9DAFC2", borderRadius: 1, opacity: 0.7 }}/>
+      )}
+    </div>
+  );
+}
+
+function MoodDrawer({ date, initialAuthor, existing, onClose, onSaved }) {
+  const [author, setAuthor] = useState(initialAuthor || "小茉莉");
+  const cur = existing[author];
+  const [mood, setMood] = useState(cur?.mood || MOODS[0].key);
+  const [note, setNote] = useState(cur?.note || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const c = existing[author];
+    setMood(c?.mood || MOODS[0].key);
+    setNote(c?.note || "");
+  }, [author, existing]);
+
+  const save = async () => {
+    setSaving(true); setError(null);
+    try {
+      const payload = { date, author, mood, color: MOOD_COLOR[mood], note: note || null };
+      if (cur) await sbPatch("mood_cheng", cur.id, { ...payload, updated_at: new Date().toISOString() });
+      else await sbPost("mood_cheng", payload);
+      onSaved();
+    } catch(e) { setError(e.message); setSaving(false); }
+  };
+
+  const remove = async () => {
+    if (!cur) return;
+    setSaving(true); setError(null);
+    try { await sbDelete("mood_cheng", cur.id); onSaved(); }
+    catch(e) { setError(e.message); setSaving(false); }
+  };
+
+  return (
+    <Drawer title={date} onClose={onClose} footer={<>
+      {cur && <ActionBtn onClick={remove} color="#c0392b">删除</ActionBtn>}
+      <ActionBtn onClick={onClose}>取消</ActionBtn>
+      <ActionBtn accent color="#8aab9e" disabled={saving} onClick={save} flex={2}>{cur ? "保存" : "添加"}</ActionBtn>
+    </>}>
+      <div>
+        <label style={labelStyle}>作者</label>
+        <div style={{ display: "flex", gap: 6 }}>
+          {MOOD_AUTHORS.map(a => {
+            const active = author === a.key;
+            return (
+              <button key={a.key} onClick={() => setAuthor(a.key)} style={{
+                flex: 1, padding: "8px 0",
+                background: active ? "var(--text-primary)" : "var(--bg-card)",
+                border: `1px solid ${active ? "var(--text-primary)" : "var(--border)"}`,
+                color: active ? "var(--bg-page)" : "var(--text-secondary)",
+                borderRadius: 4, fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+              }}>{a.key}{existing[a.key] ? " ·" : ""}</button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <label style={labelStyle}>心情</label>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
+          {MOODS.map(m => {
+            const active = mood === m.key;
+            return (
+              <button key={m.key} onClick={() => setMood(m.key)} style={{
+                cursor: "pointer", fontFamily: "inherit",
+                border: `1px solid ${active ? "var(--text-primary)" : "var(--border)"}`,
+                borderRadius: 4, background: "transparent",
+                display: "flex", flexDirection: "column", gap: 5, alignItems: "center",
+                padding: "6px 2px",
+              }}>
+                <div style={{ width: "100%", height: 24, background: m.color, borderRadius: 3 }}/>
+                <span style={{ fontSize: 10, color: active ? "var(--text-primary)" : "var(--text-tertiary)" }}>{m.key}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <label style={labelStyle}>说点什么（可选）</label>
+        <textarea rows={4} style={inputStyle} value={note} onChange={e => setNote(e.target.value)} placeholder="今天怎么样…"/>
+      </div>
+
+      {error && <div style={{ fontSize: 12, color: "#c0392b" }}>{error}</div>}
+    </Drawer>
+  );
+}
+
+function MoodCalendarPanel({ onTimeline }) {
+  const today = useState(() => new Date())[0];
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [drawer, setDrawer] = useState(null);
+
+  const startDate = ymdLocal(new Date(viewYear, viewMonth, 1));
+  const endDate = ymdLocal(new Date(viewYear, viewMonth + 1, 0));
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const rows = await sbGet("mood_cheng", `&date=gte.${startDate}&date=lte.${endDate}&order=date.asc`);
+      setItems(rows);
+    } catch(e) { setError(e.message); } finally { setLoading(false); }
+  }, [startDate, endDate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const byDate = {};
+  for (const r of items) {
+    if (!byDate[r.date]) byDate[r.date] = {};
+    byDate[r.date][r.author] = r;
+  }
+
+  const stats = (() => {
+    const days = new Set(items.map(r => r.date));
+    const counts = {};
+    for (const r of items) counts[r.mood] = (counts[r.mood] || 0) + 1;
+    let topMood = null, topCount = 0;
+    for (const k in counts) if (counts[k] > topCount) { topMood = k; topCount = counts[k]; }
+    return { dayCount: days.size, topMood, topCount };
+  })();
+
+  const cells = (() => {
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+    const lastDate = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const out = [];
+    for (let i = 0; i < firstDay; i++) out.push(null);
+    for (let d = 1; d <= lastDate; d++) out.push(d);
+    return out;
+  })();
+
+  const prev = () => {
+    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
+    else setViewMonth(m => m - 1);
+  };
+  const next = () => {
+    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
+    else setViewMonth(m => m + 1);
+  };
+
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const onTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+  const onTouchEnd = (e) => {
+    if (touchStartX.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx > 0) prev(); else next();
+    }
+  };
+
+  const todayStr = ymdLocal(new Date());
+
+  return (
+    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      {/* 顶部：图例 + 时间轴入口 */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 14, fontSize: 10.5, letterSpacing: "0.18em", color: "var(--text-tertiary)" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 9, height: 9, borderRadius: "50%", border: "1.2px solid var(--text-tertiary)" }}/>
+            小茉莉
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--text-tertiary)" }}/>
+            澄
+          </span>
+        </div>
+        <button onClick={onTimeline} style={{
+          background: "none", border: "none", padding: 0, cursor: "pointer",
+          fontSize: 11, letterSpacing: "0.2em", color: "var(--text-secondary)", fontFamily: "inherit",
+        }}>时间轴 →</button>
+      </div>
+
+      <ErrorBar error={error} onClose={() => setError(null)}/>
+
+      {/* 月份导航 */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <button onClick={prev} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 18, padding: "4px 14px", cursor: "pointer", fontFamily: "inherit" }}>‹</button>
+        <span style={{ fontSize: 13, letterSpacing: "0.22em", color: "var(--text-primary)" }}>
+          {viewYear} 年 {String(viewMonth+1).padStart(2,'0')} 月
+        </span>
+        <button onClick={next} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 18, padding: "4px 14px", cursor: "pointer", fontFamily: "inherit" }}>›</button>
+      </div>
+
+      {/* 星期表头 */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 6 }}>
+        {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d => (
+          <div key={d} style={{ textAlign: "center", fontSize: 9, color: "var(--text-tertiary)", letterSpacing: "0.13em" }}>{d}</div>
+        ))}
+      </div>
+
+      {/* 日期格 */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+        {cells.map((d, i) => {
+          if (d === null) return <div key={"e"+i}/>;
+          const date = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          const entries = byDate[date] || {};
+          return (
+            <MoodDayCell
+              key={d} day={d}
+              isToday={date === todayStr}
+              top={entries["小茉莉"]} bottom={entries["澄"]}
+              onTapTop={() => setDrawer({ date, author: "小茉莉" })}
+              onTapBottom={() => setDrawer({ date, author: "澄" })}
+            />
+          );
+        })}
+      </div>
+
+      {/* 本月统计 */}
+      <div style={{
+        marginTop: 18, padding: "12px 14px",
+        background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8,
+        fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6,
+      }}>
+        {loading ? "正在拉取…" : (
+          <>本月记录 {stats.dayCount} 天{stats.topMood && `，最多感受：${stats.topMood}（${stats.topCount} 次）`}</>
+        )}
+      </div>
+
+      {drawer && (
+        <MoodDrawer
+          date={drawer.date}
+          initialAuthor={drawer.author}
+          existing={byDate[drawer.date] || {}}
+          onClose={() => setDrawer(null)}
+          onSaved={() => { setDrawer(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── 时间轴：旧的纪念日板块 ─────────────────────────────
 function MilestoneDrawer({ entry, isNew, onSave, onClose }) {
   const [f, setF] = useState({
     title: entry.title || "", description: entry.description || "",
@@ -963,7 +1264,7 @@ function MilestoneCard({ milestone, onEdit, onDelete }) {
   );
 }
 
-function MilestonesPanel() {
+function MilestonesTimelinePanel({ onBack }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -980,12 +1281,17 @@ function MilestonesPanel() {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {items.length} 个</p>
+        <button onClick={onBack} style={{
+          background: "none", border: "none", padding: 0, cursor: "pointer",
+          fontSize: 11, letterSpacing: "0.2em", color: "var(--text-secondary)", fontFamily: "inherit",
+        }}>← 日历</button>
         <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
           <button onClick={() => setDrawer({ mode: "create", entry: {} })} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>+ 添加</button>
           <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
         </div>
       </div>
+
+      <p style={{ margin: "0 0 14px", fontSize: 11, color: "var(--text-tertiary)" }}>共 {items.length} 个纪念日</p>
 
       <ErrorBar error={error} onClose={() => setError(null)}/>
 
@@ -1001,6 +1307,12 @@ function MilestonesPanel() {
       {drawer && <MilestoneDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("milestones_cheng", patch); else await sbPatch("milestones_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
     </div>
   );
+}
+
+function MilestonesPanel() {
+  const [view, setView] = useState("calendar");
+  if (view === "timeline") return <MilestonesTimelinePanel onBack={() => setView("calendar")}/>;
+  return <MoodCalendarPanel onTimeline={() => setView("timeline")}/>;
 }
 
 // ════════════════════════════════════════════════════════════
