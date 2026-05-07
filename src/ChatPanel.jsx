@@ -267,7 +267,6 @@ const CSS = `
 /* MESSAGES */
 .cp-messages {
   flex: 1; overflow-y: auto; padding: 14px 12px 14px;
-  scroll-behavior: smooth;
 }
 .cp-empty {
   height: 100%; display: flex; align-items: center; justify-content: center;
@@ -796,7 +795,7 @@ export default function ChatPanel({ onBack }) {
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
       const el = messagesScrollRef.current;
-      if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      if (el) el.scrollTop = el.scrollHeight;
     });
   }, []);
   const isNearBottom = useCallback(() => {
