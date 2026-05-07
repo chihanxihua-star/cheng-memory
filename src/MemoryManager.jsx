@@ -2558,11 +2558,379 @@ function SecurityPanel() {
   );
 }
 
+// ── 简报设置：briefing_config_cheng ───────────────────────────
+const BRIEFING_SECTIONS = ["铁则", "深海", "长潮", "浮沫", "未愈", "回响"];
+const BRIEFING_TARGETS = ["cc", "app", "api"];
+
+function BriefingConfigPanel() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [savingId, setSavingId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try { setItems(await sbGet("briefing_config_cheng", "&order=section.asc,target.asc")); }
+    catch(e) { setError(e.message); } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const updateRow = async (row, patch) => {
+    setItems(arr => arr.map(it => it.id === row.id ? { ...it, ...patch } : it));
+    setSavingId(row.id);
+    try {
+      await sbPatch("briefing_config_cheng", row.id, { ...patch, updated_at: new Date().toISOString() });
+    } catch(e) { setError(e.message); load(); }
+    finally { setSavingId(null); }
+  };
+
+  // 用 section 分组渲染
+  const grouped = {};
+  for (const r of items) {
+    if (!grouped[r.section]) grouped[r.section] = [];
+    grouped[r.section].push(r);
+  }
+  const sections = Object.keys(grouped).sort((a, b) =>
+    BRIEFING_SECTIONS.indexOf(a) - BRIEFING_SECTIONS.indexOf(b)
+  );
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {items.length} 条规则</p>
+        <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
+      </div>
+
+      <ErrorBar error={error} onClose={() => setError(null)}/>
+
+      {loading && items.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>正在拉取…</div>
+      ) : items.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>没有规则</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {sections.map(sec => (
+            <div key={sec} style={{
+              background: "var(--bg-card)", border: "1px solid var(--border)",
+              borderRadius: 8, padding: "12px 14px",
+            }}>
+              <div style={{ fontSize: 13, color: "var(--text-primary)", marginBottom: 10, letterSpacing: "0.08em", fontWeight: 500 }}>{sec}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {grouped[sec].map(r => (
+                  <BriefingRuleRow key={r.id} row={r} saving={savingId === r.id} onUpdate={updateRow}/>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BriefingRuleRow({ row, saving, onUpdate }) {
+  const [val, setVal] = useState(String(row.max_items ?? 0));
+  useEffect(() => { setVal(String(row.max_items ?? 0)); }, [row.max_items]);
+  const flush = () => {
+    const n = parseInt(val, 10);
+    if (!Number.isFinite(n) || n < 0) { setVal(String(row.max_items ?? 0)); return; }
+    if (n === row.max_items) return;
+    onUpdate(row, { max_items: n });
+  };
+  const targetColor = row.target === "cc" ? "#a89fd8" : row.target === "app" ? "#8aab9e" : "#e8b86d";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <span style={{
+        fontSize: 10, letterSpacing: "0.18em", padding: "2px 8px", borderRadius: 99,
+        background: targetColor + "22", color: targetColor, minWidth: 38, textAlign: "center", textTransform: "uppercase",
+      }}>{row.target}</span>
+      <span style={{ flex: 1, fontSize: 12, color: "var(--text-secondary)" }}>推送条数</span>
+      <input type="number" min="0"
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onBlur={flush}
+        onKeyDown={e => { if (e.key === "Enter") { e.target.blur(); } }}
+        style={{
+          width: 64, textAlign: "center",
+          background: "transparent", border: "none",
+          borderBottom: "1px solid var(--border)",
+          padding: "4px 6px", fontSize: 13, color: "var(--text-primary)",
+          fontFamily: "inherit", outline: "none",
+        }}
+      />
+      <button onClick={() => onUpdate(row, { enabled: !row.enabled })}
+        title={row.enabled ? "已启用 · 点击关闭" : "已关闭 · 点击启用"}
+        style={{
+          background: row.enabled ? "var(--text-primary)" : "transparent",
+          border: `1px solid ${row.enabled ? "var(--text-primary)" : "var(--border)"}`,
+          color: row.enabled ? "var(--bg-page)" : "var(--text-tertiary)",
+          padding: "4px 14px", borderRadius: 99, cursor: "pointer",
+          fontSize: 10, letterSpacing: "0.18em", fontFamily: "inherit",
+        }}>{row.enabled ? "ON" : "OFF"}</button>
+      {saving && <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>…</span>}
+    </div>
+  );
+}
+
+// ── 注入记忆可视化：briefing_injection_log_cheng ───────────────
+function InjectionLogPanel() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [openId, setOpenId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try { setItems(await sbGet("briefing_injection_log_cheng", "&order=created_at.desc&limit=50")); }
+    catch(e) { setError(e.message); } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>最近 {items.length} 次注入</p>
+        <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
+      </div>
+
+      <ErrorBar error={error} onClose={() => setError(null)}/>
+
+      {loading && items.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>正在拉取…</div>
+      ) : items.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13, fontStyle: "italic" }}>
+          还没有注入记录 — 后端在向 CC 推 briefing 时往 briefing_injection_log_cheng insert 一行就会显示在这里
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {items.map(r => {
+            const arr = Array.isArray(r.items) ? r.items : [];
+            const open = openId === r.id;
+            const targetColor = r.target === "cc" ? "#a89fd8" : r.target === "app" ? "#8aab9e" : "#e8b86d";
+            return (
+              <div key={r.id} style={{
+                background: "var(--bg-card)", border: "1px solid var(--border)",
+                borderRadius: 8, padding: "12px 14px",
+              }}>
+                <div onClick={() => setOpenId(open ? null : r.id)} style={{
+                  display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
+                }}>
+                  <span style={{
+                    fontSize: 10, letterSpacing: "0.18em", padding: "2px 8px", borderRadius: 99,
+                    background: targetColor + "22", color: targetColor, textTransform: "uppercase",
+                  }}>{r.target || "?"}</span>
+                  <span style={{ flex: 1, fontSize: 12, color: "var(--text-secondary)" }}>
+                    {arr.length} 条 · {Array.from(new Set(arr.map(x => x?.section).filter(Boolean))).join(" / ") || "—"}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{formatDateTime(r.created_at)}</span>
+                </div>
+                {open && (
+                  <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {arr.length === 0 ? (
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>(空)</div>
+                    ) : arr.map((it, i) => (
+                      <div key={i} style={{
+                        fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.5,
+                        paddingLeft: 10, borderLeft: "2px solid var(--border)",
+                      }}>
+                        <span style={{ color: targetColor, marginRight: 6 }}>{it?.section || "—"}</span>
+                        {it?.summary || it?.content || it?.memory_id || JSON.stringify(it)}
+                      </div>
+                    ))}
+                    {r.metadata && Object.keys(r.metadata).length > 0 && (
+                      <div style={{ marginTop: 6, fontSize: 10, color: "var(--text-tertiary)", fontFamily: "ui-monospace,SFMono-Regular,Menlo,monospace" }}>
+                        {JSON.stringify(r.metadata)}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 手机使用数据：app_usage ────────────────────────────────────
+function UsagePanel() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [days, setDays] = useState(30);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const since = new Date(); since.setDate(since.getDate() - days + 1);
+      since.setHours(0, 0, 0, 0);
+      const params = `&created_at=gte.${encodeURIComponent(since.toISOString())}&order=created_at.asc&limit=10000`;
+      setRows(await sbGet("app_usage", params));
+    } catch(e) { setError(e.message); } finally { setLoading(false); }
+  }, [days]);
+  useEffect(() => { load(); }, [load]);
+
+  // 分桶：按日期统计 count
+  const dayBuckets = (() => {
+    const m = {};
+    for (const r of rows) {
+      const d = new Date(r.created_at);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      m[key] = (m[key] || 0) + 1;
+    }
+    // 填充空缺日期
+    const out = [];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      out.push({ key, count: m[key] || 0 });
+    }
+    return out;
+  })();
+
+  // 按 app_name 统计
+  const byApp = {};
+  for (const r of rows) {
+    const k = r.app_name || "(unknown)";
+    byApp[k] = (byApp[k] || 0) + 1;
+  }
+  const topApps = Object.entries(byApp).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+  // 按 action 统计
+  const byAction = {};
+  for (const r of rows) {
+    const k = r.action || "(none)";
+    byAction[k] = (byAction[k] || 0) + 1;
+  }
+  const topActions = Object.entries(byAction).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+  const maxCount = Math.max(1, ...dayBuckets.map(b => b.count));
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 10 }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          {[7, 30, 90].map(n => (
+            <button key={n} onClick={() => setDays(n)} style={{
+              background: "none", border: "none", padding: "4px 0", cursor: "pointer", fontFamily: "inherit",
+              fontSize: 12, letterSpacing: "0.12em",
+              color: days === n ? "var(--text-primary)" : "var(--text-tertiary)",
+              borderBottom: days === n ? "2px solid var(--text-primary)" : "2px solid transparent",
+              fontWeight: days === n ? 600 : 400,
+            }}>{n}天</button>
+          ))}
+        </div>
+        <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
+      </div>
+
+      <ErrorBar error={error} onClose={() => setError(null)}/>
+
+      {/* Summary tile */}
+      <div style={{
+        background: "var(--bg-card)", border: "1px solid var(--border)",
+        borderRadius: 8, padding: "12px 14px",
+        display: "flex", justifyContent: "space-around", textAlign: "center",
+        marginBottom: 14,
+      }}>
+        <div>
+          <div style={{ fontSize: 22, color: "var(--text-primary)", fontWeight: 500 }}>{rows.length}</div>
+          <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginTop: 2 }}>EVENTS</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 22, color: "var(--text-primary)", fontWeight: 500 }}>{dayBuckets.filter(b => b.count > 0).length}</div>
+          <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginTop: 2 }}>ACTIVE DAYS</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 22, color: "var(--text-primary)", fontWeight: 500 }}>{rows.length ? Math.round(rows.length / Math.max(1, dayBuckets.filter(b => b.count > 0).length)) : 0}</div>
+          <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginTop: 2 }}>AVG / DAY</div>
+        </div>
+      </div>
+
+      {/* Daily bars */}
+      <div style={{
+        background: "var(--bg-card)", border: "1px solid var(--border)",
+        borderRadius: 8, padding: "14px 14px 10px",
+        marginBottom: 14,
+      }}>
+        <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 10 }}>每日次数</div>
+        <div style={{
+          display: "flex", alignItems: "flex-end", gap: 2,
+          height: 90, paddingBottom: 4, borderBottom: "1px solid var(--border)",
+        }}>
+          {dayBuckets.map(b => {
+            const h = b.count > 0 ? Math.max(2, Math.round((b.count / maxCount) * 84)) : 0;
+            return (
+              <div key={b.key} title={`${b.key} · ${b.count} 次`} style={{
+                flex: 1, height: h,
+                background: b.count > 0 ? "var(--text-primary)" : "transparent",
+                borderRadius: "1px 1px 0 0",
+                opacity: b.count > 0 ? 0.65 : 1,
+              }}/>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 9, color: "var(--text-tertiary)" }}>
+          <span>{dayBuckets[0]?.key.slice(5)}</span>
+          <span>{dayBuckets[dayBuckets.length - 1]?.key.slice(5)}</span>
+        </div>
+      </div>
+
+      {/* Top apps */}
+      <div style={{
+        background: "var(--bg-card)", border: "1px solid var(--border)",
+        borderRadius: 8, padding: "14px 14px 12px", marginBottom: 14,
+      }}>
+        <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 10 }}>板块 TOP</div>
+        {topApps.length === 0 ? (
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>—</div>
+        ) : topApps.map(([name, cnt]) => {
+          const pct = cnt / topApps[0][1];
+          return (
+            <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0" }}>
+              <span style={{ flex: "0 0 70px", fontSize: 12, color: "var(--text-primary)" }}>{name}</span>
+              <div style={{ flex: 1, height: 4, background: "var(--border)", borderRadius: 99 }}>
+                <div style={{ width: `${pct * 100}%`, height: "100%", background: "var(--text-primary)", opacity: 0.6, borderRadius: 99 }}/>
+              </div>
+              <span style={{ flex: "0 0 32px", fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>{cnt}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Action breakdown */}
+      <div style={{
+        background: "var(--bg-card)", border: "1px solid var(--border)",
+        borderRadius: 8, padding: "14px 14px 12px",
+      }}>
+        <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 10 }}>动作分布</div>
+        {topActions.length === 0 ? (
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>—</div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {topActions.map(([name, cnt]) => (
+              <span key={name} style={{
+                fontSize: 11, color: "var(--text-secondary)",
+                background: "rgba(0,0,0,0.04)", borderRadius: 99,
+                padding: "3px 10px", letterSpacing: "0.04em",
+              }}>{name} · {cnt}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ConsolePanel() {
   const [sub, setSub] = useState("todos");
   const subTabs = [
     { key: "todos", label: "待办" },
     { key: "fantasy", label: "幻想" },
+    { key: "briefing", label: "简报设置" },
+    { key: "injection", label: "注入记录" },
+    { key: "usage", label: "使用数据" },
     { key: "theme", label: "外观" },
     { key: "security", label: "安全设置" },
   ];
@@ -2582,6 +2950,9 @@ function ConsolePanel() {
       </div>
       <div style={{ display: sub === "todos" ? "block" : "none" }}><TodoPanel/></div>
       <div style={{ display: sub === "fantasy" ? "block" : "none" }}><FantasyPanel/></div>
+      <div style={{ display: sub === "briefing" ? "block" : "none" }}><BriefingConfigPanel/></div>
+      <div style={{ display: sub === "injection" ? "block" : "none" }}><InjectionLogPanel/></div>
+      <div style={{ display: sub === "usage" ? "block" : "none" }}><UsagePanel/></div>
       <div style={{ display: sub === "theme" ? "block" : "none" }}><ThemePanel/></div>
       <div style={{ display: sub === "security" ? "block" : "none" }}><SecurityPanel/></div>
     </div>
