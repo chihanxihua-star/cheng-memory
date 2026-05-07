@@ -1374,18 +1374,17 @@ export default function App() {
         background: "var(--bg-page)", color: "var(--text-primary)",
         overflow: "hidden",
       }}>
-        {/* chat 用 flex column 让 ChatPanel flex:1 填满；非 chat 用 block 让内容自然 overflow 再由 main 滚动 */}
+        {/* main 用 relative 锚定 chat 容器；非 chat 时 block + overflow auto 让内容滚 */}
         <main style={{
+          position: "relative",
           flex: 1, minHeight: 0,
-          display: tab === "chat" ? "flex" : "block",
-          flexDirection: "column",
           overflowY: tab === "chat" ? "hidden" : "auto",
           overscrollBehavior: "contain",
           WebkitOverflowScrolling: "touch",
         }}>
-          {/* chat：flex 1 填满 main，自带内部 cp-messages 滚动 */}
+          {/* chat：absolute 填满 main，hide/show 不依赖 flex 重算 */}
           <div style={{
-            flex: 1, minHeight: 0,
+            position: "absolute", inset: 0,
             display: tab === "chat" ? "flex" : "none",
             flexDirection: "column",
           }}>
