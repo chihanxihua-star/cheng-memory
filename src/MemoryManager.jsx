@@ -381,38 +381,53 @@ function MemoryPanel() {
 // ════════════════════════════════════════════════════════════
 //  日记板块
 // ════════════════════════════════════════════════════════════
-function DiaryDrawer({ entry, isNew, onSave, onClose }) {
+function DiarySheet({ entry, isNew, onSave, onClose }) {
   const [f, setF] = useState({
     title: entry.title || "", content: entry.content || "",
     tags: Array.isArray(entry.tags) ? entry.tags.join(", ") : "",
     author: entry.author || "澄",
   });
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
-  return (
-    <Drawer title={isNew ? "写日记" : "编辑日记"} onClose={onClose} footer={<>
-      <ActionBtn onClick={onClose}>取消</ActionBtn>
-      <ActionBtn accent disabled={!f.content.trim()} onClick={() => onSave({ title: f.title || null, content: f.content, tags: f.tags.split(",").map(t=>t.trim()).filter(Boolean), author: f.author })} flex={2}>{isNew ? "写入" : "保存"}</ActionBtn>
-    </>}>
-      <div><label style={labelStyle}>标题</label><input style={inputStyle} value={f.title} onChange={e => set("title", e.target.value)} placeholder="可选"/></div>
-      <div><label style={labelStyle}>正文</label><textarea rows={8} style={inputStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="写点什么…"/></div>
-      <div><label style={labelStyle}>关键词（逗号分隔）</label><input style={inputStyle} value={f.tags} onChange={e => set("tags", e.target.value)} placeholder="日常, 心情"/></div>
-      <div><label style={labelStyle}>作者</label><input style={inputStyle} value={f.author} onChange={e => set("author", e.target.value)}/></div>
-    </Drawer>
+  return createPortal(
+    <div style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+      <div onClick={onClose} style={{ flex: 1, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}/>
+      <div style={{
+        background: "var(--bg-card)",
+        borderRadius: "16px 16px 0 0",
+        maxHeight: "88vh",
+        display: "flex", flexDirection: "column",
+        animation: "slideUp 0.22s ease",
+      }}>
+        <div style={{ padding: "14px 20px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 13, color: "var(--text-secondary)", letterSpacing: "0.1em" }}>{isNew ? "写日记" : "编辑日记"}</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ overflow: "auto", padding: "8px 20px 16px", display: "flex", flexDirection: "column", gap: 14, flex: 1, minHeight: 0 }}>
+          <div><label style={labelStyle}>标题</label><input style={inputStyle} value={f.title} onChange={e => set("title", e.target.value)} placeholder="可选"/></div>
+          <div><label style={labelStyle}>正文</label><textarea rows={10} style={inputStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="写点什么…"/></div>
+          <div><label style={labelStyle}>关键词（逗号分隔）</label><input style={inputStyle} value={f.tags} onChange={e => set("tags", e.target.value)} placeholder="日常, 心情"/></div>
+          <div><label style={labelStyle}>作者</label><input style={inputStyle} value={f.author} onChange={e => set("author", e.target.value)}/></div>
+        </div>
+        <div style={{ padding: "calc(12px + env(safe-area-inset-bottom, 20px)) 20px", display: "flex", gap: 8 }}>
+          <ActionBtn onClick={onClose}>取消</ActionBtn>
+          <ActionBtn accent disabled={!f.content.trim()} onClick={() => onSave({ title: f.title || null, content: f.content, tags: f.tags.split(",").map(t=>t.trim()).filter(Boolean), author: f.author })} flex={2}>{isNew ? "写入" : "保存"}</ActionBtn>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
 function DiaryCard({ entry, onEdit, onDelete }) {
   const [cd, setCd] = useState(false);
-  const [sheet, setSheet] = useState(false);
   return (
     <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {entry.title && <p onClick={() => setSheet(true)} style={{ margin: "0 0 4px", fontSize: 14, color: "var(--text-primary)", fontWeight: 400, cursor: "pointer" }}>{entry.title}</p>}
-          <p onClick={() => setSheet(true)} style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{entry.content}</p>
+          {entry.title && <p onClick={() => onEdit(entry)} style={{ margin: "0 0 4px", fontSize: 14, color: "var(--text-primary)", fontWeight: 400, cursor: "pointer" }}>{entry.title}</p>}
+          <p onClick={() => onEdit(entry)} style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" }}>{entry.content}</p>
         </div>
       </div>
-      {sheet && <BottomSheet title={entry.title || "日记"} onClose={() => setSheet(false)}>{entry.content}</BottomSheet>}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
         <AuthorBadge author={entry.author}/>
         {(entry.tags||[]).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
@@ -468,7 +483,7 @@ function DiaryPanel() {
             {items.map(e => <div key={e.id} style={{ animation: "fadeUp 0.25s ease both" }}><DiaryCard entry={e} onEdit={ent => setDrawer({ mode: "edit", entry: ent })} onDelete={async id => { try { await sbDelete("diary_cheng", id); reload(); } catch(e) { setError(e.message); } }}/></div>)}
           </div>}
 
-      {drawer && <DiaryDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("diary_cheng", patch); else await sbPatch("diary_cheng", drawer.entry.id, patch); setDrawer(null); reload(); } catch(e) { setError(e.message); } }}/>}
+      {drawer && <DiarySheet entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("diary_cheng", patch); else await sbPatch("diary_cheng", drawer.entry.id, patch); setDrawer(null); reload(); } catch(e) { setError(e.message); } }}/>}
     </div>
   );
 }
