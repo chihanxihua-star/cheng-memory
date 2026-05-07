@@ -758,7 +758,7 @@ export default function App() {
               display: "flex", flexDirection: "column",
               overflow: "hidden",
             }}>
-              <ChatPanel/>
+              <ChatPanel onBack={() => setTab("memory")}/>
             </div>
           ) : (
             <div style={{
@@ -776,7 +776,7 @@ export default function App() {
           )}
         </main>
 
-        <BottomTabBar tab={tab} setTab={setTab}/>
+        {tab !== "chat" && <BottomTabBar tab={tab} setTab={setTab}/>}
       </div>
     </>
   );

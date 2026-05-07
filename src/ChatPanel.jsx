@@ -1363,7 +1363,6 @@ export default function ChatPanel({ onBack }) {
               <line x1="3" y1="18" x2="13" y2="18"/>
             </svg>
           </button>
-          <span className={"cp-conn-dot " + statusColor} title={ccStatus} />
         </div>
         <div className="center">
           <span className="cp-claude-name" onClick={() => setShowSettings(true)} title="点击编辑">
@@ -1427,7 +1426,6 @@ export default function ChatPanel({ onBack }) {
               {profile.botImg ? <img src={profile.botImg} alt=""/> : profile.botEmoji}
             </div>
             <div className="cp-msg-body">
-              <div className="cp-msg-nick">{profile.botNick}</div>
               <div className="cp-msg-bubble assistant cp-typing-bubble">
                 <div className="cp-typing"><span/><span/><span/></div>
               </div>
@@ -1478,7 +1476,10 @@ export default function ChatPanel({ onBack }) {
           <div className="cp-sidebar">
             <div className="cp-sidebar-header">
               <div className="cp-sidebar-title">设置</div>
-              <button className="cp-sidebar-close" onClick={() => setSidebarOpen(false)}>✕</button>
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                {onBack && <button onClick={() => { setSidebarOpen(false); onBack(); }} style={{ background:"none", border:"none", color:"var(--text-secondary)", cursor:"pointer", fontSize:13, padding:"2px 8px" }}>← 返回</button>}
+                <button className="cp-sidebar-close" onClick={() => setSidebarOpen(false)}>✕</button>
+              </div>
             </div>
             <div className="cp-sidebar-scroll">
               <SidebarScreens
@@ -1600,9 +1601,6 @@ function MessageBubble({ item, profile, onCopy, onOpenImage, onEdit, onRegen }) 
         </div>
       )}
       <div className="cp-msg-body">
-        {!continuation && (
-          <div className="cp-msg-nick">{isUser ? profile.userNick : profile.botNick}</div>
-        )}
         {/* thinking 块（仅 head 显示） */}
         {isHead && msg.thinking && <ThinkingBlock text={msg.thinking} />}
         {/* tool calls 块 */}
@@ -1673,7 +1671,7 @@ function ThinkingBlock({ text }) {
   return (
     <div className={"cp-thinking-block" + (open ? " open" : "")}>
       <button className="cp-thinking-toggle" onClick={() => setOpen(o => !o)}>
-        思考过程
+        思绪
       </button>
       <div className="cp-thinking-content">{text}</div>
     </div>
@@ -1786,7 +1784,6 @@ function StreamingBubble({ snap, profile, showTyping }) {
           {profile.botImg ? <img src={profile.botImg} alt="" /> : profile.botEmoji}
         </div>
         <div className="cp-msg-body">
-          <div className="cp-msg-nick">{profile.botNick}</div>
           {snap.thinking && <ThinkingBlock text={snap.thinking} />}
           {snap.tools && snap.tools.length > 0 && <ToolCallsBlock calls={snap.tools} />}
           {bubbles.length > 0 ? (
