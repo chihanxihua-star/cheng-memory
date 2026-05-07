@@ -46,6 +46,15 @@ const ICONS = {
       <path d="M3 11h8"/>
     </svg>
   ),
+  console: (
+    // 控制台：仪表板（2x2 方格）
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+      <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+      <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+      <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+    </svg>
+  ),
 };
 
 const TABS = [
@@ -54,7 +63,13 @@ const TABS = [
   { key: "milestones", label: "逢春" },
   { key: "board", label: "回音" },
   { key: "chat", label: "花信风" },
+  { key: "console", label: "控制台" },
 ];
+
+const TODO_STATUSES = ["全部", "待办", "进行中", "完成"];
+const TODO_PRIORITIES = ["紧急", "一般", "不急"];
+const TODO_PRIORITY_COLORS = { 紧急: "#e07070", 一般: "#7fb3c8", 不急: "#8aab9e" };
+const TODO_STATUS_COLORS = { 待办: "#e8b86d", 进行中: "#6b7fd4", 完成: "#8aab9e" };
 
 const LEVEL_META = {
   1: { label: "浮沫", color: "#7fb3c8" },
@@ -875,6 +890,376 @@ function BoardPanel() {
 }
 
 // ════════════════════════════════════════════════════════════
+//  控制台板块：代办 / 幻想 / 安全设置
+// ════════════════════════════════════════════════════════════
+
+function TodoCard({ todo, onToggle, onEdit, onDelete }) {
+  const priColor = TODO_PRIORITY_COLORS[todo.priority] || "#8aab9e";
+  const statusColor = TODO_STATUS_COLORS[todo.status] || "#8aab9e";
+  const isDone = todo.status === "完成";
+  const [cd, setCd] = useState(false);
+  return (
+    <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderLeft: `2px solid ${priColor}88`, borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8, marginBottom: 10, opacity: isDone ? 0.55 : 1 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <button onClick={() => onToggle(todo)} title="切换状态" style={{
+          width: 18, height: 18, borderRadius: 99, marginTop: 2,
+          border: `1.5px solid ${statusColor}`,
+          background: isDone ? statusColor : "transparent",
+          cursor: "pointer", flexShrink: 0, fontFamily: "inherit",
+        }}/>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-primary)", lineHeight: 1.5, textDecoration: isDone ? "line-through" : "none" }}>{todo.title}</p>
+          {todo.description && <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>{todo.description}</p>}
+        </div>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
+        <Badge color={statusColor + "22"} text={statusColor}>{todo.status}</Badge>
+        <Badge color={priColor + "22"} text={priColor}>{todo.priority}</Badge>
+        {todo.due_date && <span style={{ fontSize: 10.5, color: "var(--text-secondary)" }}>📅 {todo.due_date}</span>}
+        {(todo.tags || []).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
+        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--text-secondary)" }}>{formatDate(todo.created_at)}</span>
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <ActionBtn onClick={() => onEdit(todo)}>编辑</ActionBtn>
+        {cd ? <ActionBtn accent color="#c0392b" onClick={() => { onDelete(todo.id); setCd(false); }}>确认删除</ActionBtn> : <ActionBtn onClick={() => setCd(true)}>删除</ActionBtn>}
+      </div>
+    </div>
+  );
+}
+
+function TodoDrawer({ entry, isNew, onSave, onClose }) {
+  const [f, setF] = useState({
+    title: entry.title || "",
+    description: entry.description || "",
+    status: entry.status || "待办",
+    priority: entry.priority || "一般",
+    due_date: entry.due_date || "",
+    tags: Array.isArray(entry.tags) ? entry.tags.join(", ") : "",
+    author: entry.author || "小茉莉",
+  });
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  return (
+    <Drawer title={isNew ? "新代办" : "编辑代办"} onClose={onClose} footer={<>
+      <ActionBtn onClick={onClose}>取消</ActionBtn>
+      <ActionBtn accent color="#a89fd8" disabled={!f.title.trim()} onClick={() => onSave({
+        title: f.title, description: f.description || null,
+        status: f.status, priority: f.priority,
+        due_date: f.due_date || null,
+        tags: f.tags.split(",").map(t => t.trim()).filter(Boolean),
+        author: f.author,
+      })} flex={2}>{isNew ? "添加" : "保存"}</ActionBtn>
+    </>}>
+      <div><label style={labelStyle}>标题</label><input style={inputStyle} value={f.title} onChange={e => set("title", e.target.value)} placeholder="要做什么…"/></div>
+      <div><label style={labelStyle}>描述（可选）</label><textarea rows={3} style={inputStyle} value={f.description} onChange={e => set("description", e.target.value)}/></div>
+      <div><label style={labelStyle}>状态</label>
+        <select style={inputStyle} value={f.status} onChange={e => set("status", e.target.value)}>
+          {["待办","进行中","完成"].map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+      <div><label style={labelStyle}>优先级</label>
+        <select style={inputStyle} value={f.priority} onChange={e => set("priority", e.target.value)}>
+          {TODO_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+      <div><label style={labelStyle}>截止日期</label><input type="date" style={inputStyle} value={f.due_date} onChange={e => set("due_date", e.target.value)}/></div>
+      <div><label style={labelStyle}>标签（逗号分隔）</label><input style={inputStyle} value={f.tags} onChange={e => set("tags", e.target.value)} placeholder="工作, 学习"/></div>
+      <div><label style={labelStyle}>作者</label><input style={inputStyle} value={f.author} onChange={e => set("author", e.target.value)}/></div>
+    </Drawer>
+  );
+}
+
+function TodoPanel() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [drawer, setDrawer] = useState(null);
+  const [filter, setFilter] = useState("全部");
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try { setItems(await sbGet("todos_cheng", "&order=created_at.desc")); }
+    catch(e) { setError(e.message); } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = filter === "全部" ? items : items.filter(t => t.status === filter);
+
+  const toggleStatus = async (todo) => {
+    const next = todo.status === "完成" ? "待办" : todo.status === "待办" ? "进行中" : "完成";
+    setItems(arr => arr.map(t => t.id === todo.id ? { ...t, status: next } : t));
+    try { await sbPatch("todos_cheng", todo.id, { status: next }); }
+    catch(e) { setError(e.message); load(); }
+  };
+
+  const filterBtn = (active) => ({
+    background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13,
+    color: active ? "var(--text-primary)" : "var(--text-secondary)",
+    fontWeight: active ? 600 : 400,
+  });
+
+  return (
+    <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 16, alignItems: "center" }}>
+        {TODO_STATUSES.map(s => <button key={s} style={filterBtn(filter===s)} onClick={() => setFilter(s)}>{s}</button>)}
+        <span style={{ flex: 1 }}/>
+        <ActionBtn accent color="#a89fd8" onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 代办</ActionBtn>
+        <ActionBtn onClick={load}>{loading ? "…" : "刷新"}</ActionBtn>
+      </div>
+      <ErrorBar error={error} onClose={() => setError(null)}/>
+      {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+        : filtered.length === 0 ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>没有代办</div>
+        : filtered.map(t => <TodoCard key={t.id} todo={t}
+            onToggle={toggleStatus}
+            onEdit={todo => setDrawer({ mode: "edit", entry: todo })}
+            onDelete={async id => { try { await sbDelete("todos_cheng", id); load(); } catch(e) { setError(e.message); } }}
+          />)}
+      {drawer && <TodoDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("todos_cheng", patch); else await sbPatch("todos_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
+    </div>
+  );
+}
+
+function FantasyCard({ entry, onEdit, onDelete }) {
+  const [cd, setCd] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  return (
+    <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+      <div onClick={() => setSheet(true)} style={{ cursor: "pointer" }}>
+        {entry.title && <p style={{ margin: "0 0 4px", fontSize: 14, color: "var(--text-primary)", fontWeight: 500 }}>{entry.title}</p>}
+        <p style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{entry.content}</p>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
+        {(entry.tags || []).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
+        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--text-secondary)" }}>{formatDateTime(entry.created_at)}</span>
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <ActionBtn onClick={() => onEdit(entry)}>编辑</ActionBtn>
+        {cd ? <ActionBtn accent color="#c0392b" onClick={() => { onDelete(entry.id); setCd(false); }}>确认删除</ActionBtn> : <ActionBtn onClick={() => setCd(true)}>删除</ActionBtn>}
+      </div>
+      {sheet && (
+        <BottomSheet onClose={() => setSheet(false)}>
+          {entry.title && <div style={{ fontSize: 16, color: "var(--text-primary)", fontWeight: 500, marginBottom: 10 }}>{entry.title}</div>}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14, alignItems: "center" }}>
+            {(entry.tags||[]).map(t => <Badge key={t} color="var(--border)" text="var(--text-secondary)">{t}</Badge>)}
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-secondary)" }}>{formatDateTime(entry.created_at)}</span>
+          </div>
+          <div>{entry.content}</div>
+        </BottomSheet>
+      )}
+    </div>
+  );
+}
+
+function FantasyDrawer({ entry, isNew, onSave, onClose }) {
+  const [f, setF] = useState({
+    title: entry.title || "",
+    content: entry.content || "",
+    tags: Array.isArray(entry.tags) ? entry.tags.join(", ") : "",
+    author: entry.author || "小茉莉",
+  });
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  return (
+    <Drawer title={isNew ? "新幻想" : "编辑幻想"} onClose={onClose} footer={<>
+      <ActionBtn onClick={onClose}>取消</ActionBtn>
+      <ActionBtn accent color="#a89fd8" disabled={!f.content.trim()} onClick={() => onSave({
+        title: f.title || null, content: f.content,
+        tags: f.tags.split(",").map(t => t.trim()).filter(Boolean),
+        author: f.author,
+      })} flex={2}>{isNew ? "写入" : "保存"}</ActionBtn>
+    </>}>
+      <div><label style={labelStyle}>标题（可选）</label><input style={inputStyle} value={f.title} onChange={e => set("title", e.target.value)}/></div>
+      <div><label style={labelStyle}>内容</label><textarea rows={8} style={inputStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="脑海里的画面…"/></div>
+      <div><label style={labelStyle}>标签（逗号分隔）</label><input style={inputStyle} value={f.tags} onChange={e => set("tags", e.target.value)}/></div>
+      <div><label style={labelStyle}>作者</label><input style={inputStyle} value={f.author} onChange={e => set("author", e.target.value)}/></div>
+    </Drawer>
+  );
+}
+
+function FantasyPanel() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [drawer, setDrawer] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try { setItems(await sbGet("fantasy_cheng", "&order=created_at.desc")); }
+    catch(e) { setError(e.message); } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 14 }}>
+        <ActionBtn accent color="#a89fd8" onClick={() => setDrawer({ mode: "create", entry: {} })}>+ 幻想</ActionBtn>
+        <ActionBtn onClick={load}>{loading ? "…" : "刷新"}</ActionBtn>
+      </div>
+      <ErrorBar error={error} onClose={() => setError(null)}/>
+      {loading ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>正在拉取…</div>
+        : items.length === 0 ? <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)", fontSize: 13 }}>还没有幻想</div>
+        : items.map(e => <FantasyCard key={e.id} entry={e}
+            onEdit={ent => setDrawer({ mode: "edit", entry: ent })}
+            onDelete={async id => { try { await sbDelete("fantasy_cheng", id); load(); } catch(e) { setError(e.message); } }}
+          />)}
+      {drawer && <FantasyDrawer entry={drawer.entry} isNew={drawer.mode==="create"} onClose={() => setDrawer(null)} onSave={async patch => { try { if (drawer.mode==="create") await sbPost("fantasy_cheng", patch); else await sbPatch("fantasy_cheng", drawer.entry.id, patch); setDrawer(null); load(); } catch(e) { setError(e.message); } }}/>}
+    </div>
+  );
+}
+
+// ── 简单密码 hash（SHA-256，hex 字符串） ───────────────────
+async function pwdHash(text) {
+  const buf = new TextEncoder().encode(text || "");
+  const hash = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+const PWD_KEY = "cheng-pwd-hash";
+
+function SecurityPanel() {
+  const [hasPwd, setHasPwd] = useState(!!localStorage.getItem(PWD_KEY));
+  const [oldPwd, setOldPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [msg, setMsg] = useState(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+
+  const refresh = () => setHasPwd(!!localStorage.getItem(PWD_KEY));
+
+  const submit = async () => {
+    setMsg(null);
+    if (hasPwd) {
+      const stored = localStorage.getItem(PWD_KEY);
+      const oh = await pwdHash(oldPwd);
+      if (oh !== stored) { setMsg({ type: "err", text: "旧密码不对" }); return; }
+    }
+    if (newPwd.length < 4) { setMsg({ type: "err", text: "新密码至少 4 位" }); return; }
+    if (newPwd !== confirm) { setMsg({ type: "err", text: "两次输入不一致" }); return; }
+    const nh = await pwdHash(newPwd);
+    localStorage.setItem(PWD_KEY, nh);
+    setOldPwd(""); setNewPwd(""); setConfirm("");
+    refresh();
+    setMsg({ type: "ok", text: hasPwd ? "密码已更新" : "密码已设置" });
+  };
+
+  const remove = async () => {
+    setMsg(null);
+    const stored = localStorage.getItem(PWD_KEY);
+    const oh = await pwdHash(oldPwd);
+    if (oh !== stored) { setMsg({ type: "err", text: "密码不对" }); return; }
+    localStorage.removeItem(PWD_KEY);
+    setOldPwd(""); setConfirmRemove(false);
+    refresh();
+    setMsg({ type: "ok", text: "已移除密码保护" });
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "16px 18px" }}>
+        <p style={{ margin: 0, fontSize: 14, color: "var(--text-primary)" }}>密码保护</p>
+        <p style={{ margin: "4px 0 12px", fontSize: 12, color: "var(--text-secondary)" }}>
+          状态：{hasPwd ? "已开启 — 打开网页时会要求输入密码" : "未设置"}
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {hasPwd && (
+            <div><label style={labelStyle}>旧密码</label>
+              <input type="password" style={inputStyle} value={oldPwd} onChange={e => setOldPwd(e.target.value)}/>
+            </div>
+          )}
+          <div><label style={labelStyle}>{hasPwd ? "新密码" : "设置密码"}</label>
+            <input type="password" style={inputStyle} value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder="至少 4 位"/>
+          </div>
+          <div><label style={labelStyle}>再次输入</label>
+            <input type="password" style={inputStyle} value={confirm} onChange={e => setConfirm(e.target.value)}/>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <ActionBtn accent color="#a89fd8" onClick={submit}>{hasPwd ? "更新密码" : "设置密码"}</ActionBtn>
+            {hasPwd && (
+              confirmRemove
+                ? <ActionBtn accent color="#c0392b" onClick={remove}>确认移除</ActionBtn>
+                : <ActionBtn onClick={() => setConfirmRemove(true)}>移除密码</ActionBtn>
+            )}
+          </div>
+          {msg && (
+            <p style={{ margin: 0, fontSize: 11.5, color: msg.type === "err" ? "#c0392b" : "#5e9e8a" }}>{msg.text}</p>
+          )}
+        </div>
+      </div>
+      <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)", textAlign: "center" }}>
+        提示：密码 hash 仅存在本机 localStorage，不上传服务端。后续可加 IP 白名单 / TOTP。
+      </p>
+    </div>
+  );
+}
+
+function ConsolePanel() {
+  const [sub, setSub] = useState("todos");
+  const subTabs = [
+    { key: "todos", label: "代办" },
+    { key: "fantasy", label: "幻想" },
+    { key: "security", label: "安全设置" },
+  ];
+  const tabBtn = (active) => ({
+    background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 14,
+    color: active ? "var(--text-primary)" : "var(--text-secondary)",
+    fontWeight: active ? 600 : 400,
+  });
+  return (
+    <div>
+      <div style={{
+        position: "sticky", top: 0, zIndex: 5,
+        background: "var(--bg-page)",
+        display: "flex", flexWrap: "wrap", gap: 22, alignItems: "center",
+        padding: "10px 0 14px",
+        margin: "-20px 0 0",
+      }}>
+        {subTabs.map(t => <button key={t.key} style={tabBtn(sub === t.key)} onClick={() => setSub(t.key)}>{t.label}</button>)}
+      </div>
+      <div style={{ display: sub === "todos" ? "block" : "none" }}><TodoPanel/></div>
+      <div style={{ display: sub === "fantasy" ? "block" : "none" }}><FantasyPanel/></div>
+      <div style={{ display: sub === "security" ? "block" : "none" }}><SecurityPanel/></div>
+    </div>
+  );
+}
+
+// ── 密码门：localStorage 存了 hash 就先验密码 ────────────
+function PasswordGate({ children }) {
+  const [unlocked, setUnlocked] = useState(() => !localStorage.getItem(PWD_KEY));
+  const [input, setInput] = useState("");
+  const [error, setError] = useState(null);
+
+  const submit = async () => {
+    const stored = localStorage.getItem(PWD_KEY);
+    if (!stored) { setUnlocked(true); return; }
+    const h = await pwdHash(input);
+    if (h === stored) { setUnlocked(true); setInput(""); setError(null); }
+    else { setError("密码不对"); }
+  };
+
+  if (unlocked) return children;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "var(--bg-page)",
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      gap: 14, padding: "40px 20px",
+    }}>
+      <div style={{ fontSize: 18, color: "var(--text-primary)", fontWeight: 500 }}>请输入密码</div>
+      <input
+        type="password"
+        autoFocus
+        value={input}
+        onChange={e => { setInput(e.target.value); setError(null); }}
+        onKeyDown={e => { if (e.key === "Enter") submit(); }}
+        style={{ ...inputStyle, maxWidth: 260, textAlign: "center" }}
+      />
+      <button onClick={submit} style={{
+        background: "#a89fd822", border: "1px solid #a89fd866", color: "#a89fd8",
+        borderRadius: 6, padding: "8px 24px", fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+      }}>解锁</button>
+      {error && <div style={{ fontSize: 12, color: "#c0392b" }}>{error}</div>}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
 //  主应用
 // ════════════════════════════════════════════════════════════
 export default function App() {
@@ -938,7 +1323,7 @@ export default function App() {
   return (
     <>
       {stylesEl}
-
+      <PasswordGate>
       <div style={{
         height: "100dvh",
         display: "flex", flexDirection: "column",
@@ -972,12 +1357,14 @@ export default function App() {
               <div style={{ display: tab === "diary" ? "block" : "none" }}><DiaryPanel/></div>
               <div style={{ display: tab === "milestones" ? "block" : "none" }}><MilestonesPanel/></div>
               <div style={{ display: tab === "board" ? "block" : "none" }}><BoardPanel/></div>
+              <div style={{ display: tab === "console" ? "block" : "none" }}><ConsolePanel/></div>
             </div>
           </div>
         </main>
 
         {tab !== "chat" && <BottomTabBar tab={tab} setTab={setTab}/>}
       </div>
+      </PasswordGate>
     </>
   );
 }
