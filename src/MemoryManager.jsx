@@ -356,10 +356,7 @@ function MemoryCard({ mem, onEdit, onDelete }) {
       <StrengthBar value={mem.strength ?? 0} color={LEVEL_META[mem.level]?.color || "#FFEEEE"}/>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 11, color: "var(--text-tertiary)" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <span style={{ width: 6, height: 6, borderRadius: 99, background: meta.color, display: "inline-block" }}/>
-          <span style={{ color: meta.color, letterSpacing: "0.05em" }}>{meta.label}</span>
-        </span>
+        <span style={{ color: "#B98593", letterSpacing: "0.05em" }}>{meta.label}</span>
         <span style={{ color: "var(--text-tertiary)" }}>·</span>
         <span style={{ color: "var(--text-tertiary)" }}>{mem.author}</span>
         {mem.pinned && <span style={{ color: "var(--text-tertiary)" }}>锚</span>}
