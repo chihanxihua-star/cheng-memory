@@ -550,6 +550,8 @@ function MemoryFullForm({ entry, isNew, onCancel, onSave }) {
 
           <div><label style={labelStyle}>日期（可选 · 留空记今天）</label><input type="date" style={underlineStyle} value={f.event_date} onChange={e => set("event_date", e.target.value)}/></div>
 
+          <div><label style={labelStyle}>正文</label><textarea autoFocus rows={6} style={underlineStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="写点什么…"/></div>
+
           <div>
             <label style={labelStyle}>层级</label>
             <select style={underlineStyle} value={f.level} onChange={e => set("level", e.target.value)}>
@@ -561,22 +563,20 @@ function MemoryFullForm({ entry, isNew, onCancel, onSave }) {
 
           <div>
             <label style={labelStyle}>情绪 — {Number(f.valence).toFixed(2)}</label>
-            <input type="range" min={0} max={1} step={0.01} style={{ width: "100%", accentColor: "var(--accent)" }} value={f.valence} onChange={e => set("valence", e.target.value)}/>
+            <input type="range" min={0} max={1} step={0.01} className="cm-slider" value={f.valence} onChange={e => set("valence", e.target.value)}/>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-tertiary)" }}><span>不嘻嘻</span><span>稳定</span><span>嘻嘻</span></div>
           </div>
 
           <div>
             <label style={labelStyle}>情绪浓度 — {Number(f.arousal).toFixed(2)}</label>
-            <input type="range" min={0} max={1} step={0.01} style={{ width: "100%", accentColor: "var(--accent)" }} value={f.arousal} onChange={e => set("arousal", e.target.value)}/>
+            <input type="range" min={0} max={1} step={0.01} className="cm-slider" value={f.arousal} onChange={e => set("arousal", e.target.value)}/>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-tertiary)" }}><span>淡淡的</span><span>一般</span><span>上头了</span></div>
           </div>
 
-          {!isNew && (
-            <div>
-              <label style={labelStyle}>强度 — {Number(f.strength).toFixed(2)}</label>
-              <input type="range" min={0} max={1} step={0.01} style={{ width: "100%", accentColor: "var(--accent)" }} value={f.strength} onChange={e => set("strength", e.target.value)}/>
-            </div>
-          )}
+          <div>
+            <label style={labelStyle}>强度 — {Number(f.strength).toFixed(2)}</label>
+            <input type="range" min={0} max={1} step={0.01} className="cm-slider" value={f.strength} onChange={e => set("strength", e.target.value)}/>
+          </div>
 
           <div><label style={labelStyle}>标签（逗号分隔）</label><input style={underlineStyle} value={f.tags} onChange={e => set("tags", e.target.value)} placeholder="起源, 调试"/></div>
           <div><label style={labelStyle}>感官锚点（逗号分隔）</label><input style={underlineStyle} value={f.senses} onChange={e => set("senses", e.target.value)} placeholder="窗外下雨, 咖啡的味道"/></div>
@@ -593,8 +593,6 @@ function MemoryFullForm({ entry, isNew, onCancel, onSave }) {
               </label>
             ))}
           </div>
-
-          <div><label style={labelStyle}>正文</label><textarea autoFocus rows={6} style={underlineStyle} value={f.content} onChange={e => set("content", e.target.value)} placeholder="写点什么…"/></div>
         </div>
       </div>
     </div>,
@@ -1763,6 +1761,24 @@ export default function App() {
       input[type=range] { height: 3px; }
       select option { background: var(--bg-card); }
       input[type=date] { color-scheme: dark; }
+      /* 极简发丝 slider —— 用在 MemoryFullForm 情绪/情绪浓度/强度 */
+      input[type=range].cm-slider {
+        -webkit-appearance: none; appearance: none;
+        width: 100%; height: 1px; padding: 0; margin: 12px 0 8px;
+        background: var(--border); border: none; outline: none; cursor: pointer;
+      }
+      input[type=range].cm-slider::-webkit-slider-runnable-track { height: 1px; background: var(--border); }
+      input[type=range].cm-slider::-moz-range-track { height: 1px; background: var(--border); }
+      input[type=range].cm-slider::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none;
+        width: 14px; height: 14px; border-radius: 50%;
+        background: var(--text-primary); border: none; cursor: pointer;
+        margin-top: -7px;
+      }
+      input[type=range].cm-slider::-moz-range-thumb {
+        width: 14px; height: 14px; border-radius: 50%;
+        background: var(--text-primary); border: none; cursor: pointer;
+      }
     `}</style>
   );
 
