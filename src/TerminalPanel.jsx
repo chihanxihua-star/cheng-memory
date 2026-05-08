@@ -13,14 +13,23 @@ export default function TerminalPanel({ onClose }) {
   const fitRef = useRef(null);
   const wsRef = useRef(null);
   const inputRef = useRef(null);
+  const pingTimerRef = useRef(null);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState("connecting"); // connecting | connected | disconnected
+
+  const stopPing = () => {
+    if (pingTimerRef.current) {
+      clearInterval(pingTimerRef.current);
+      pingTimerRef.current = null;
+    }
+  };
 
   const connectWs = () => {
     const term = termRef.current;
     if (!term) return;
 
     // 关掉旧连接（如果还在）
+    stopPing();
     try {
       const old = wsRef.current;
       if (old && old.readyState <= 1) old.close();
@@ -45,12 +54,19 @@ export default function TerminalPanel({ onClose }) {
         ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
       } catch {}
       try { term.focus(); } catch {}
+      // 心跳：Cloudflare WS 默认 100s 空闲就断，每 30s 发个 ping 把它撑住
+      stopPing();
+      pingTimerRef.current = setInterval(() => {
+        if (ws.readyState !== 1) return;
+        try { ws.send(JSON.stringify({ type: "ping" })); } catch {}
+      }, 30000);
     };
     ws.onmessage = (e) => {
       if (typeof e.data === "string") term.write(e.data);
       else if (e.data instanceof ArrayBuffer) term.write(new Uint8Array(e.data));
     };
     ws.onclose = (ev) => {
+      stopPing();
       if (ev && ev.code === 4001) {
         localStorage.removeItem(AUTH_TOKEN_KEY);
         window.dispatchEvent(new CustomEvent("auth-expired"));
@@ -143,6 +159,7 @@ export default function TerminalPanel({ onClose }) {
     return () => {
       window.removeEventListener("resize", handleResize);
       if (ro) try { ro.disconnect(); } catch {}
+      stopPing();
       try { dataDispose.dispose(); } catch {}
       try { wsRef.current?.close(); } catch {}
       try { term.dispose(); } catch {}
