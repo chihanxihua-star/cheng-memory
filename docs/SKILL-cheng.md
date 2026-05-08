@@ -63,7 +63,7 @@ alias sbrest='sb -H "apikey: $SB_KEY" -H "Authorization: Bearer $SB_KEY" -H "Con
 | `长潮` | level=2，按 `strength desc` 前 5 |
 | `浮沫` | level=1，按 `strength desc` 前 3 |
 | `未愈` | `resolved=false` 且 `arousal >= 0.5`，按 `arousal/strength desc` 前 3 |
-| `回响` | 最近 3 天的记忆，按 `created_at desc` 前 5 |
+| `回响` | 被遗忘的旧记忆（`level=2` + `created_at < now() - 30 days`），按 `coalesce(ref_count,0) asc, random()` 取前 N。N 从 `briefing_config_cheng (section='回响', target='cc')` 读，未配置回落到 3 |
 | `回音` | `board_cheng` 里 `is_read=false` + `is_resolved=false` + `author <> '澄'` 的留言（按时间正序）—— **CC 必须处理**，见下文 |
 
 每段是该板块挑出的若干条记忆（`{id, text, valence, arousal, tags, ...}`）。`回音` 不一样，是 board_cheng 的留言（`{id, author, content, category, created_at}`）。

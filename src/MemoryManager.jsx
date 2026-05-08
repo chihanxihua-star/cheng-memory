@@ -2561,6 +2561,9 @@ function SecurityPanel() {
 // ── 简报设置：briefing_config_cheng ───────────────────────────
 const BRIEFING_SECTIONS = ["锚", "深海", "长潮", "浮沫", "未愈", "回响"];
 const BRIEFING_TARGETS = ["cc", "app", "api"];
+const BRIEFING_SECTION_DESC = {
+  "回响": "被遗忘的旧记忆（L2，30 天以上，按引用次数最少排序）",
+};
 
 // 排序算法：返回该板块按规则排好的全量 memories 列表（不限 N）
 function sortMemoriesForSection(section, mems, randomMap) {
@@ -2586,9 +2589,17 @@ function sortMemoriesForSection(section, mems, randomMap) {
     case "未愈":
       return arr.filter(m => m.resolved === false)
                 .sort((a, b) => (b.arousal || 0) - (a.arousal || 0));
-    case "回响":
-      // 全量随机抽样：按 randomMap 里给每条预生成的随机分数排
-      return arr.slice().sort((a, b) => (randomMap.get(a.id) || 0) - (randomMap.get(b.id) || 0));
+    case "回响": {
+      // 被遗忘的旧记忆重新浮现：L2 + 存活 30 天以上，按 ref_count 升序；同分用 randomMap 打散
+      const cutoff = Date.now() - 30 * 24 * 3600 * 1000;
+      return arr
+        .filter(m => m.level === 2 && new Date(m.created_at).getTime() < cutoff)
+        .sort((a, b) => {
+          const d = (a.ref_count || 0) - (b.ref_count || 0);
+          if (d !== 0) return d;
+          return (randomMap.get(a.id) || 0) - (randomMap.get(b.id) || 0);
+        });
+    }
     default:
       return arr;
   }
@@ -2618,7 +2629,7 @@ function BriefingConfigPanel() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // 回响：在内存里给每条 memory 预先打个随机分，刷新一下重新洗牌
+  // 回响：ref_count 同分时用随机数打散，刷新一下重新洗牌
   const randomMap = useMemo(() => {
     const m = new Map();
     for (const mem of memories) m.set(mem.id, Math.random());
@@ -2735,6 +2746,11 @@ function BriefingConfigPanel() {
 
                 {isOpen && (
                   <div style={{ padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
+                    {BRIEFING_SECTION_DESC[sec] && (
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", letterSpacing: "0.04em", lineHeight: 1.5, paddingTop: 4 }}>
+                        {BRIEFING_SECTION_DESC[sec]}
+                      </div>
+                    )}
                     {/* 每个 target 的 max_items + ON/OFF 控件 */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4, borderTop: "1px solid var(--border)" }}>
                       {rows.map(r => (
