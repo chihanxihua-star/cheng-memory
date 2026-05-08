@@ -45,6 +45,13 @@ export default function TerminalPanel({ onClose }) {
     } catch {}
 
     const token = localStorage.getItem(AUTH_TOKEN_KEY) || "";
+    // PWA 调试：在 Safari Web Inspector 里看是否拿到 token
+    // (PWA 的 localStorage 和 Safari 浏览器是隔离的，PasswordGate 在浏览器里存的 token PWA 里看不到)
+    console.log("[terminal] token:", token ? "有值" : "空的", "length:", token.length);
+    console.log("[terminal] url:", WS_URL + (token ? "?token=" + token : ""));
+    console.log("[terminal] localStorage keys:", Object.keys(localStorage));
+    console.log("[terminal] standalone PWA:", window.matchMedia?.("(display-mode: standalone)").matches, "navigator.standalone:", window.navigator?.standalone);
+
     const tokenInfo = token ? `token=${token.length}ch` : "NO TOKEN!";
     setStatus("connecting");
     setStatusDetail(`connecting… (${tokenInfo})`);
