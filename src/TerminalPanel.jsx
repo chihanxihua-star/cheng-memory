@@ -7,6 +7,36 @@ import "xterm/css/xterm.css";
 const WS_URL = "wss://chat.jessaminee.top/terminal";
 const AUTH_TOKEN_KEY = "memhome-auth-token";
 
+// 移动端软键盘修复：xterm 的 helper textarea 默认是 ~9×17px 的小点（用来给 IME
+// 定位组合框），手机上根本点不到。CSS !important 把它撑满整个屏幕区域，
+// 这样 tap 终端任何位置都能 focus 到 textarea、弹出系统键盘。
+// 只在触摸设备应用，桌面端保持 IME 定位正常。
+const MOBILE_KEYBOARD_STYLE_ID = "xterm-mobile-keyboard-fix";
+function ensureMobileKeyboardStyle() {
+  if (document.getElementById(MOBILE_KEYBOARD_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = MOBILE_KEYBOARD_STYLE_ID;
+  style.textContent = `
+    @media (pointer: coarse) {
+      .xterm-helper-textarea {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        opacity: 0 !important;
+        z-index: 10 !important;
+        font-size: 16px !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        pointer-events: auto !important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 export default function TerminalPanel({ onClose }) {
   const containerRef = useRef(null);
   const termRef = useRef(null);
@@ -48,20 +78,11 @@ export default function TerminalPanel({ onClose }) {
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
+    ensureMobileKeyboardStyle();
     term.open(containerRef.current);
 
-    // iOS 软键盘适配：把 xterm 的 helper textarea 撑大、透明、覆盖在终端上方
-    // 默认它是 0 尺寸 -> Safari 不弹键盘。撑大后 tap 会被它接住、键盘弹起、按键事件进 xterm
     const helper = containerRef.current.querySelector(".xterm-helper-textarea");
     if (helper) {
-      helper.style.position = "absolute";
-      helper.style.top = "0";
-      helper.style.left = "0";
-      helper.style.width = "100%";
-      helper.style.height = "100%";
-      helper.style.opacity = "0";
-      helper.style.zIndex = "10";
-      helper.style.fontSize = "16px"; // ≥16px 才能阻止 iOS 自动放大
       helper.setAttribute("autocapitalize", "off");
       helper.setAttribute("autocomplete", "off");
       helper.setAttribute("autocorrect", "off");
