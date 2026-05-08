@@ -44,10 +44,11 @@ export default function TerminalPanel({ onClose }) {
       if (old && old.readyState <= 1) old.close();
     } catch {}
 
-    setStatus("connecting");
-    setStatusDetail("connecting…");
-    logTerm(`connecting → ${WS_URL}`, "33");
     const token = localStorage.getItem(AUTH_TOKEN_KEY) || "";
+    const tokenInfo = token ? `token=${token.length}ch` : "NO TOKEN!";
+    setStatus("connecting");
+    setStatusDetail(`connecting… (${tokenInfo})`);
+    logTerm(`connecting → ${WS_URL}?${tokenInfo}`, "33");
     let ws;
     try {
       ws = new WebSocket(WS_URL + (token ? "?token=" + encodeURIComponent(token) : ""));
