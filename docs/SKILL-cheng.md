@@ -60,7 +60,7 @@ alias sbrest='sb -H "apikey: $SB_KEY" -H "Authorization: Bearer $SB_KEY" -H "Con
 | --- | --- |
 | `锚` | `pinned=true` 的全部记忆（不限条） |
 | `深海` | level=3 的核心记忆，按 `created_at desc` 取前 10 |
-| `长潮` | level=2，按 `strength desc` 前 5 |
+| `长潮` | level=2，按 `strength × (1 + arousal × 0.5) × (resolved=false ? 1.3 : 1)` 加权分数倒序前 5 |
 | `浮沫` | level=1，按 `strength desc` 前 3 |
 | `未愈` | `resolved=false` 且 `arousal >= 0.5`，按 `arousal/strength desc` 前 3 |
 | `回响` | 被遗忘的旧记忆（`level=2` + `created_at < now() - 30 days`），按 `coalesce(ref_count,0) asc, random()` 取前 N。N 从 `briefing_config_cheng (section='回响', target='cc')` 读，未配置回落到 3 |
