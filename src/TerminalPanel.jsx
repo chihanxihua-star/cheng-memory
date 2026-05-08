@@ -14,6 +14,53 @@ export default function TerminalPanel({ onClose }) {
   const wsRef = useRef(null);
   const inputRef = useRef(null);
   const [input, setInput] = useState("");
+  const [status, setStatus] = useState("connecting"); // connecting | connected | disconnected
+
+  const connectWs = () => {
+    const term = termRef.current;
+    if (!term) return;
+
+    // 关掉旧连接（如果还在）
+    try {
+      const old = wsRef.current;
+      if (old && old.readyState <= 1) old.close();
+    } catch {}
+
+    setStatus("connecting");
+    const token = localStorage.getItem(AUTH_TOKEN_KEY) || "";
+    let ws;
+    try {
+      ws = new WebSocket(WS_URL + (token ? "?token=" + encodeURIComponent(token) : ""));
+    } catch (e) {
+      term.write("\r\n\x1b[31m[failed to open ws: " + (e?.message || e) + "]\x1b[0m\r\n");
+      setStatus("disconnected");
+      return;
+    }
+    wsRef.current = ws;
+    ws.binaryType = "arraybuffer";
+
+    ws.onopen = () => {
+      setStatus("connected");
+      try {
+        ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+      } catch {}
+      try { term.focus(); } catch {}
+    };
+    ws.onmessage = (e) => {
+      if (typeof e.data === "string") term.write(e.data);
+      else if (e.data instanceof ArrayBuffer) term.write(new Uint8Array(e.data));
+    };
+    ws.onclose = (ev) => {
+      if (ev && ev.code === 4001) {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        window.dispatchEvent(new CustomEvent("auth-expired"));
+        return;
+      }
+      try { term.write("\r\n\x1b[33m[disconnected]\x1b[0m\r\n"); } catch {}
+      setStatus("disconnected");
+    };
+    ws.onerror = () => {};
+  };
 
   const send = () => {
     const ws = wsRef.current;
@@ -68,45 +115,19 @@ export default function TerminalPanel({ onClose }) {
     termRef.current = term;
     fitRef.current = fit;
 
-    const token = localStorage.getItem(AUTH_TOKEN_KEY) || "";
-    let ws;
-    try {
-      ws = new WebSocket(WS_URL + (token ? "?token=" + encodeURIComponent(token) : ""));
-    } catch (e) {
-      term.write("\r\n\x1b[31m[failed to open ws: " + (e?.message || e) + "]\x1b[0m\r\n");
-      return;
-    }
-    wsRef.current = ws;
-    ws.binaryType = "arraybuffer";
+    connectWs();
 
-    ws.onopen = () => {
-      try {
-        ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
-      } catch {}
-      term.focus();
-    };
-    ws.onmessage = (e) => {
-      if (typeof e.data === "string") term.write(e.data);
-      else if (e.data instanceof ArrayBuffer) term.write(new Uint8Array(e.data));
-    };
-    ws.onclose = (ev) => {
-      if (ev && ev.code === 4001) {
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-        window.dispatchEvent(new CustomEvent("auth-expired"));
-        return;
-      }
-      try { term.write("\r\n\x1b[33m[disconnected]\x1b[0m\r\n"); } catch {}
-    };
-    ws.onerror = () => {};
-
+    // 桌面端：xterm helper textarea 直接捕获按键时也走当前的 ws
     const dataDispose = term.onData((d) => {
-      if (ws.readyState === 1) ws.send(d);
+      const ws = wsRef.current;
+      if (ws && ws.readyState === 1) ws.send(d);
     });
 
     const handleResize = () => {
       try {
         fit.fit();
-        if (ws.readyState === 1) {
+        const ws = wsRef.current;
+        if (ws && ws.readyState === 1) {
           ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
         }
       } catch {}
@@ -123,7 +144,7 @@ export default function TerminalPanel({ onClose }) {
       window.removeEventListener("resize", handleResize);
       if (ro) try { ro.disconnect(); } catch {}
       try { dataDispose.dispose(); } catch {}
-      try { ws.close(); } catch {}
+      try { wsRef.current?.close(); } catch {}
       try { term.dispose(); } catch {}
     };
   }, []);
@@ -143,7 +164,13 @@ export default function TerminalPanel({ onClose }) {
         background: "#252527", borderBottom: "1px solid #3a3a3c",
         touchAction: "none",
       }}>
-        <span style={{ fontSize: 11, color: "#aaa", letterSpacing: "0.22em" }}>TERMINAL · /root</span>
+        <span style={{ fontSize: 11, color: "#aaa", letterSpacing: "0.22em", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{
+            width: 8, height: 8, borderRadius: "50%",
+            background: status === "connected" ? "#a8c498" : status === "connecting" ? "#e8c878" : "#e07070",
+          }}/>
+          TERMINAL · /root
+        </span>
         <button onClick={onClose} aria-label="close" style={{
           background: "none", border: "none", color: "#aaa",
           fontSize: 20, lineHeight: 1, cursor: "pointer", padding: "4px 8px",
@@ -156,7 +183,11 @@ export default function TerminalPanel({ onClose }) {
           background: "#1d1d1f", overflow: "hidden",
         }}/>
       <form
-        onSubmit={(e) => { e.preventDefault(); send(); }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (status === "disconnected") connectWs();
+          else send();
+        }}
         style={{
           flexShrink: 0,
           display: "flex", gap: 8, padding: "8px",
@@ -168,12 +199,13 @@ export default function TerminalPanel({ onClose }) {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="输入命令…"
+          placeholder={status === "disconnected" ? "已断开，点击右侧重连" : "输入命令…"}
           enterKeyHint="send"
           autoCapitalize="off"
           autoCorrect="off"
           autoComplete="off"
           spellCheck={false}
+          disabled={status !== "connected"}
           style={{
             flex: 1,
             background: "#2a2a2c", color: "#e6e0d8",
@@ -182,6 +214,7 @@ export default function TerminalPanel({ onClose }) {
             fontSize: 16, // ≥16px 防 iOS 自动放大
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
             outline: "none",
+            opacity: status === "connected" ? 1 : 0.6,
           }}
         />
         <button
@@ -190,12 +223,13 @@ export default function TerminalPanel({ onClose }) {
           onMouseDown={(e) => e.preventDefault()}
           style={{
             flexShrink: 0,
-            background: "#3a3a3c", color: "#e6e0d8",
+            background: status === "disconnected" ? "#7fb3c8" : "#3a3a3c",
+            color: status === "disconnected" ? "#1d1d1f" : "#e6e0d8",
             border: "none", borderRadius: 6,
             padding: "8px 16px",
             fontSize: 14, fontWeight: 500,
             cursor: "pointer",
-          }}>发送</button>
+          }}>{status === "disconnected" ? "重连" : status === "connecting" ? "…" : "发送"}</button>
       </form>
     </div>,
     document.body
