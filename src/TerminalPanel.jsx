@@ -16,12 +16,21 @@ export default function TerminalPanel({ onClose }) {
   const pingTimerRef = useRef(null);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState("connecting"); // connecting | connected | disconnected
+  const [statusDetail, setStatusDetail] = useState("初始化");
 
   const stopPing = () => {
     if (pingTimerRef.current) {
       clearInterval(pingTimerRef.current);
       pingTimerRef.current = null;
     }
+  };
+
+  // 在 xterm 里写一行带时间戳的调试日志（colorCode: 33黄/32绿/31红/90灰）
+  const logTerm = (msg, colorCode = "90") => {
+    const term = termRef.current;
+    if (!term) return;
+    const ts = new Date().toLocaleTimeString();
+    try { term.write(`\r\n\x1b[${colorCode}m[${ts}] ${msg}\x1b[0m\r\n`); } catch {}
   };
 
   const connectWs = () => {
@@ -36,13 +45,17 @@ export default function TerminalPanel({ onClose }) {
     } catch {}
 
     setStatus("connecting");
+    setStatusDetail("connecting…");
+    logTerm(`connecting → ${WS_URL}`, "33");
     const token = localStorage.getItem(AUTH_TOKEN_KEY) || "";
     let ws;
     try {
       ws = new WebSocket(WS_URL + (token ? "?token=" + encodeURIComponent(token) : ""));
     } catch (e) {
-      term.write("\r\n\x1b[31m[failed to open ws: " + (e?.message || e) + "]\x1b[0m\r\n");
+      const reason = e?.message || String(e);
+      term.write("\r\n\x1b[31m[failed to open ws: " + reason + "]\x1b[0m\r\n");
       setStatus("disconnected");
+      setStatusDetail("ctor 抛错: " + reason);
       return;
     }
     wsRef.current = ws;
@@ -50,6 +63,8 @@ export default function TerminalPanel({ onClose }) {
 
     ws.onopen = () => {
       setStatus("connected");
+      setStatusDetail(`connected (${term.cols}×${term.rows})`);
+      logTerm(`connected, resize cols=${term.cols} rows=${term.rows}`, "32");
       try {
         ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
       } catch {}
@@ -65,6 +80,11 @@ export default function TerminalPanel({ onClose }) {
       if (typeof e.data === "string") term.write(e.data);
       else if (e.data instanceof ArrayBuffer) term.write(new Uint8Array(e.data));
     };
+    ws.onerror = () => {
+      // 浏览器规范不暴露具体错误，只能记 readyState
+      logTerm(`error event (readyState=${ws.readyState})`, "31");
+      setStatusDetail(`error (readyState=${ws.readyState})`);
+    };
     ws.onclose = (ev) => {
       stopPing();
       if (ev && ev.code === 4001) {
@@ -72,10 +92,11 @@ export default function TerminalPanel({ onClose }) {
         window.dispatchEvent(new CustomEvent("auth-expired"));
         return;
       }
-      try { term.write("\r\n\x1b[33m[disconnected]\x1b[0m\r\n"); } catch {}
+      const detail = `code=${ev?.code ?? "?"} reason="${ev?.reason ?? ""}" wasClean=${ev?.wasClean ?? "?"}`;
+      logTerm(`closed: ${detail}`, "33");
       setStatus("disconnected");
+      setStatusDetail(`closed code=${ev?.code ?? "?"}${ev?.reason ? " " + ev.reason : ""}`);
     };
-    ws.onerror = () => {};
   };
 
   const send = () => {
@@ -181,12 +202,16 @@ export default function TerminalPanel({ onClose }) {
         background: "#252527", borderBottom: "1px solid #3a3a3c",
         touchAction: "none",
       }}>
-        <span style={{ fontSize: 11, color: "#aaa", letterSpacing: "0.22em", display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 11, color: "#aaa", letterSpacing: "0.22em", display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
           <span style={{
-            width: 8, height: 8, borderRadius: "50%",
+            width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
             background: status === "connected" ? "#a8c498" : status === "connecting" ? "#e8c878" : "#e07070",
           }}/>
-          TERMINAL · /root
+          <span style={{ flexShrink: 0 }}>TERMINAL</span>
+          <span style={{
+            letterSpacing: 0, fontSize: 10, color: "#888",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>· {statusDetail}</span>
         </span>
         <button onClick={onClose} aria-label="close" style={{
           background: "none", border: "none", color: "#aaa",
