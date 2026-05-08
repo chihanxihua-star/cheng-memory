@@ -7,36 +7,6 @@ import "xterm/css/xterm.css";
 const WS_URL = "wss://chat.jessaminee.top/terminal";
 const AUTH_TOKEN_KEY = "memhome-auth-token";
 
-// 移动端软键盘修复：xterm 的 helper textarea 默认是 ~9×17px 的小点（用来给 IME
-// 定位组合框），手机上根本点不到。CSS !important 把它撑满整个屏幕区域，
-// 这样 tap 终端任何位置都能 focus 到 textarea、弹出系统键盘。
-// 只在触摸设备应用，桌面端保持 IME 定位正常。
-const MOBILE_KEYBOARD_STYLE_ID = "xterm-mobile-keyboard-fix";
-function ensureMobileKeyboardStyle() {
-  if (document.getElementById(MOBILE_KEYBOARD_STYLE_ID)) return;
-  const style = document.createElement("style");
-  style.id = MOBILE_KEYBOARD_STYLE_ID;
-  style.textContent = `
-    @media (pointer: coarse) {
-      .xterm-helper-textarea {
-        position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        opacity: 0 !important;
-        z-index: 10 !important;
-        font-size: 16px !important;
-        padding: 0 !important;
-        border: 0 !important;
-        background: transparent !important;
-        pointer-events: auto !important;
-      }
-    }
-  `;
-  document.head.appendChild(style);
-}
-
 export default function TerminalPanel({ onClose }) {
   const containerRef = useRef(null);
   const termRef = useRef(null);
@@ -78,16 +48,7 @@ export default function TerminalPanel({ onClose }) {
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    ensureMobileKeyboardStyle();
     term.open(containerRef.current);
-
-    const helper = containerRef.current.querySelector(".xterm-helper-textarea");
-    if (helper) {
-      helper.setAttribute("autocapitalize", "off");
-      helper.setAttribute("autocomplete", "off");
-      helper.setAttribute("autocorrect", "off");
-      helper.setAttribute("spellcheck", "false");
-    }
 
     requestAnimationFrame(() => {
       try { fit.fit(); } catch {}
@@ -179,11 +140,41 @@ export default function TerminalPanel({ onClose }) {
       </div>
       <div ref={containerRef}
         onMouseDown={() => { try { termRef.current?.focus(); } catch {} }}
-        onTouchStart={() => { try { termRef.current?.focus(); } catch {} }}
         style={{
           flex: 1, minHeight: 0, padding: "8px 10px",
           background: "#1d1d1f", overflow: "hidden",
         }}/>
+      <div style={{
+        flexShrink: 0,
+        display: "flex", padding: "8px",
+        background: "#1d1d1f",
+        borderTop: "1px solid rgba(255,255,255,0.1)",
+      }}>
+        <input
+          type="text"
+          placeholder="输入命令…"
+          autoCapitalize="off"
+          autoCorrect="off"
+          autoComplete="off"
+          spellCheck={false}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            const ws = wsRef.current;
+            if (!ws || ws.readyState !== 1) return;
+            ws.send(e.target.value + "\n");
+            e.target.value = "";
+          }}
+          style={{
+            flex: 1,
+            background: "#2a2a2c", color: "#e6e0d8",
+            border: "none", borderRadius: 6,
+            padding: "8px 12px",
+            fontSize: 16, // ≥16px 防 iOS 自动放大
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+            outline: "none",
+          }}
+        />
+      </div>
     </div>,
     document.body
   );
