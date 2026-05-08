@@ -14,6 +14,8 @@ export default function TerminalPanel({ onClose }) {
   const wsRef = useRef(null);
   const inputRef = useRef(null);
   const pingTimerRef = useRef(null);
+  const retryCountRef = useRef(0);
+  const connectStartRef = useRef(0);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState("connecting"); // connecting | connected | disconnected
   const [statusDetail, setStatusDetail] = useState("初始化");
@@ -33,9 +35,14 @@ export default function TerminalPanel({ onClose }) {
     try { term.write(`\r\n\x1b[${colorCode}m[${ts}] ${msg}\x1b[0m\r\n`); } catch {}
   };
 
-  const connectWs = () => {
+  const MAX_AUTO_RETRY = 3;
+
+  const connectWs = (isAutoRetry = false) => {
     const term = termRef.current;
     if (!term) return;
+
+    if (!isAutoRetry) retryCountRef.current = 0;
+    connectStartRef.current = Date.now();
 
     // 关掉旧连接（如果还在）
     stopPing();
@@ -77,6 +84,7 @@ export default function TerminalPanel({ onClose }) {
 
     ws.onopen = () => {
       console.log("[terminal] onopen fired");
+      retryCountRef.current = 0;
       setStatus("connected");
       setStatusDetail(`connected (${term.cols}×${term.rows})`);
       logTerm(`connected, resize cols=${term.cols} rows=${term.rows}`, "32");
@@ -111,17 +119,32 @@ export default function TerminalPanel({ onClose }) {
       }
       const detail = `code=${ev?.code ?? "?"} reason="${ev?.reason ?? ""}" wasClean=${ev?.wasClean ?? "?"}`;
       logTerm(`closed: ${detail}`, "33");
+
+      // iOS PWA 第一次 wss 经常 1006 wasClean=false 直接死。延迟一点自动重试几次
+      const failedFast = (Date.now() - connectStartRef.current) < 2500;
+      const isPwaStyleFail = failedFast && !ev?.wasClean;
+      if (isPwaStyleFail && retryCountRef.current < MAX_AUTO_RETRY) {
+        retryCountRef.current += 1;
+        const delay = 400 * retryCountRef.current; // 400 / 800 / 1200ms
+        console.warn(`[terminal] auto-retry ${retryCountRef.current}/${MAX_AUTO_RETRY} after ${delay}ms`);
+        logTerm(`auto-retry ${retryCountRef.current}/${MAX_AUTO_RETRY} (${delay}ms)`, "33");
+        setStatusDetail(`retry ${retryCountRef.current}/${MAX_AUTO_RETRY}…`);
+        setTimeout(() => connectWs(true), delay);
+        return;
+      }
+
       setStatus("disconnected");
       setStatusDetail(`closed code=${ev?.code ?? "?"}${ev?.reason ? " " + ev.reason : ""}`);
     };
 
-    // 1.5s 后还在 CONNECTING 就报警 —— 让我们知道是不是请求根本没出去
+    // 3s 后还在 CONNECTING 就主动关掉触发 onclose（让 retry 链动起来）
     setTimeout(() => {
       if (ws.readyState === 0) {
-        console.warn("[terminal] still CONNECTING after 1.5s, request may be stuck");
-        logTerm(`stuck in CONNECTING 1.5s+`, "31");
+        console.warn("[terminal] still CONNECTING after 3s, force-closing to trigger retry");
+        logTerm(`stuck 3s+, force-close`, "31");
+        try { ws.close(); } catch {}
       }
-    }, 1500);
+    }, 3000);
   };
 
   const send = () => {
@@ -177,7 +200,8 @@ export default function TerminalPanel({ onClose }) {
     termRef.current = term;
     fitRef.current = fit;
 
-    connectWs();
+    // iOS PWA 启动那一下网络栈还没就绪，立刻发 wss 经常 1006。延迟 250ms 再连
+    const initTimer = setTimeout(() => connectWs(), 250);
 
     // 桌面端：xterm helper textarea 直接捕获按键时也走当前的 ws
     const dataDispose = term.onData((d) => {
@@ -205,6 +229,7 @@ export default function TerminalPanel({ onClose }) {
     return () => {
       window.removeEventListener("resize", handleResize);
       if (ro) try { ro.disconnect(); } catch {}
+      clearTimeout(initTimer);
       stopPing();
       try { dataDispose.dispose(); } catch {}
       try { wsRef.current?.close(); } catch {}
