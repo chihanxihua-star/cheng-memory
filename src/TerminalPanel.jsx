@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
@@ -12,6 +12,17 @@ export default function TerminalPanel({ onClose }) {
   const termRef = useRef(null);
   const fitRef = useRef(null);
   const wsRef = useRef(null);
+  const inputRef = useRef(null);
+  const [input, setInput] = useState("");
+
+  const send = () => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== 1) return;
+    ws.send(input + "\n");
+    setInput("");
+    // 保持输入框聚焦，手机键盘不会收回
+    try { inputRef.current?.focus(); } catch {}
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -144,26 +155,25 @@ export default function TerminalPanel({ onClose }) {
           flex: 1, minHeight: 0, padding: "8px 10px",
           background: "#1d1d1f", overflow: "hidden",
         }}/>
-      <div style={{
-        flexShrink: 0,
-        display: "flex", padding: "8px",
-        background: "#1d1d1f",
-        borderTop: "1px solid rgba(255,255,255,0.1)",
-      }}>
+      <form
+        onSubmit={(e) => { e.preventDefault(); send(); }}
+        style={{
+          flexShrink: 0,
+          display: "flex", gap: 8, padding: "8px",
+          background: "#1d1d1f",
+          borderTop: "1px solid rgba(255,255,255,0.1)",
+        }}>
         <input
+          ref={inputRef}
           type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
           placeholder="输入命令…"
+          enterKeyHint="send"
           autoCapitalize="off"
           autoCorrect="off"
           autoComplete="off"
           spellCheck={false}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter") return;
-            const ws = wsRef.current;
-            if (!ws || ws.readyState !== 1) return;
-            ws.send(e.target.value + "\n");
-            e.target.value = "";
-          }}
           style={{
             flex: 1,
             background: "#2a2a2c", color: "#e6e0d8",
@@ -174,7 +184,19 @@ export default function TerminalPanel({ onClose }) {
             outline: "none",
           }}
         />
-      </div>
+        <button
+          type="submit"
+          // 防止按钮抢走 input 焦点导致键盘收回
+          onMouseDown={(e) => e.preventDefault()}
+          style={{
+            flexShrink: 0,
+            background: "#3a3a3c", color: "#e6e0d8",
+            border: "none", borderRadius: 6,
+            padding: "8px 16px",
+            fontSize: 14, fontWeight: 500,
+            cursor: "pointer",
+          }}>发送</button>
+      </form>
     </div>,
     document.body
   );
