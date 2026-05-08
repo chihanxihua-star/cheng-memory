@@ -219,8 +219,6 @@ export default function TerminalPanel({ onClose }) {
         />
         <button
           type="submit"
-          // 防止按钮抢走 input 焦点导致键盘收回
-          onMouseDown={(e) => e.preventDefault()}
           style={{
             flexShrink: 0,
             background: status === "disconnected" ? "#7fb3c8" : "#3a3a3c",
