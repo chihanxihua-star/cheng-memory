@@ -62,9 +62,12 @@ export default function TerminalPanel({ onClose }) {
     let ws;
     try {
       ws = new WebSocket(WS_URL + (token ? "?token=" + encodeURIComponent(token) : ""));
+      console.log("[terminal] ws ctor returned, readyState=", ws.readyState);
     } catch (e) {
       const reason = e?.message || String(e);
+      console.error("[terminal] ws ctor THREW:", reason, e);
       term.write("\r\n\x1b[31m[failed to open ws: " + reason + "]\x1b[0m\r\n");
+      logTerm(`ctor 抛错: ${reason}`, "31");
       setStatus("disconnected");
       setStatusDetail("ctor 抛错: " + reason);
       return;
@@ -73,6 +76,7 @@ export default function TerminalPanel({ onClose }) {
     ws.binaryType = "arraybuffer";
 
     ws.onopen = () => {
+      console.log("[terminal] onopen fired");
       setStatus("connected");
       setStatusDetail(`connected (${term.cols}×${term.rows})`);
       logTerm(`connected, resize cols=${term.cols} rows=${term.rows}`, "32");
@@ -91,12 +95,14 @@ export default function TerminalPanel({ onClose }) {
       if (typeof e.data === "string") term.write(e.data);
       else if (e.data instanceof ArrayBuffer) term.write(new Uint8Array(e.data));
     };
-    ws.onerror = () => {
+    ws.onerror = (e) => {
       // 浏览器规范不暴露具体错误，只能记 readyState
+      console.error("[terminal] onerror fired, readyState=", ws.readyState, e);
       logTerm(`error event (readyState=${ws.readyState})`, "31");
       setStatusDetail(`error (readyState=${ws.readyState})`);
     };
     ws.onclose = (ev) => {
+      console.log("[terminal] onclose code=", ev?.code, "reason=", ev?.reason, "wasClean=", ev?.wasClean);
       stopPing();
       if (ev && ev.code === 4001) {
         localStorage.removeItem(AUTH_TOKEN_KEY);
@@ -108,6 +114,14 @@ export default function TerminalPanel({ onClose }) {
       setStatus("disconnected");
       setStatusDetail(`closed code=${ev?.code ?? "?"}${ev?.reason ? " " + ev.reason : ""}`);
     };
+
+    // 1.5s 后还在 CONNECTING 就报警 —— 让我们知道是不是请求根本没出去
+    setTimeout(() => {
+      if (ws.readyState === 0) {
+        console.warn("[terminal] still CONNECTING after 1.5s, request may be stuck");
+        logTerm(`stuck in CONNECTING 1.5s+`, "31");
+      }
+    }, 1500);
   };
 
   const send = () => {
