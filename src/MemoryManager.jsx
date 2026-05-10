@@ -2005,7 +2005,9 @@ function TodoPanel() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const filtered = filter === "全部" ? items : items.filter(t => t.status === filter);
+  const filtered = (filter === "全部" ? items : items.filter(t => t.status === filter))
+    .slice()
+    .sort((a, b) => (a.status === "完成" ? 1 : 0) - (b.status === "完成" ? 1 : 0));
 
   const toggleStatus = async (todo) => {
     const next = todo.status === "完成" ? "待办" : "完成";
