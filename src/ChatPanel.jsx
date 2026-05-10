@@ -431,6 +431,13 @@ const CSS = `
   margin-top: 4px;
   animation: cp-fadeIn 0.18s ease;
 }
+.cp-tool-item + .cp-tool-item { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border-card); }
+.cp-tool-item-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; color: var(--text-primary); font-weight: 500;
+  margin-bottom: 6px;
+}
+.cp-tool-item.error .cp-tool-item-name { color: #c0392b; }
 .cp-tool-section + .cp-tool-section { margin-top: 10px; }
 .cp-tool-label {
   font-size: 10px; color: var(--text-tertiary); letter-spacing: 0.04em;
@@ -1771,19 +1778,38 @@ function ThinkingBlock({ text, isThinking }) {
 }
 
 function ToolCallsBlock({ calls }) {
+  const [open, setOpen] = useState(false);
+  if (!calls || calls.length === 0) return null;
+
+  const anyRunning = calls.some(c => c.result === undefined);
+  const anyError = calls.some(c => c.isError);
+
+  const label = anyRunning
+    ? "小太阳烧烤中…"
+    : `小太阳烧烤完毕 · ${calls.length}`;
+
+  const toggleClass = "cp-tool-toggle"
+    + (anyRunning ? " thinking" : "")
+    + (anyError ? " error" : "");
+
   return (
-    <>
-      {calls.map((c, i) => (
-        <ToolCallBlock key={c.id || i} call={c} />
-      ))}
-    </>
+    <div className={"cp-tool-block" + (open ? " open" : "")}>
+      <button type="button" className={toggleClass} onClick={() => setOpen(o => !o)}>
+        {label}
+      </button>
+      {open && (
+        <div className="cp-tool-content">
+          {calls.map((c, i) => (
+            <ToolCallItem key={c.id || i} call={c} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
-function ToolCallBlock({ call }) {
-  const [open, setOpen] = useState(false);
+function ToolCallItem({ call }) {
   const hasResult = call.result !== undefined;
-  const status = !hasResult ? "running" : (call.isError ? "error" : "ok");
 
   const paramsText = call.input ? prettyJSON(call.input) : "";
   const showParams = paramsText && paramsText !== "{}" && paramsText !== "null";
@@ -1803,38 +1829,32 @@ function ToolCallBlock({ call }) {
   const truncated = rawResult.length > TOOL_RESULT_MAX_CHARS;
   const resultText = truncated ? rawResult.slice(0, TOOL_RESULT_MAX_CHARS) : rawResult;
 
-  const toggleClass = "cp-tool-toggle"
-    + (status === "running" ? " thinking" : "")
-    + (status === "error" ? " error" : "");
+  const nameSuffix = call.isError ? " · 失败" : !hasResult ? " · 等待中" : "";
 
   return (
-    <div className={"cp-tool-block" + (open ? " open" : "")}>
-      <button type="button" className={toggleClass} onClick={() => setOpen(o => !o)}>
-        工具 · {call.name || "tool"}
-      </button>
-      {open && (
-        <div className="cp-tool-content">
-          {showParams && (
-            <div className="cp-tool-section">
-              <div className="cp-tool-label">参数</div>
-              <pre>{paramsText}</pre>
-            </div>
-          )}
-          <div className="cp-tool-section">
-            <div className="cp-tool-label">{resultIsJson ? "结果（JSON）" : "结果"}</div>
-            {!hasResult ? (
-              <div className="cp-tool-pending">⋯ 等待结果</div>
-            ) : (
-              <>
-                <pre>{resultText || "（空）"}</pre>
-                {truncated && (
-                  <div className="cp-tool-truncated">…已截断，省略 {rawResult.length - TOOL_RESULT_MAX_CHARS} 字符</div>
-                )}
-              </>
-            )}
-          </div>
+    <div className={"cp-tool-item" + (call.isError ? " error" : "")}>
+      <div className="cp-tool-item-name">
+        {call.name || "tool"}{nameSuffix}
+      </div>
+      {showParams && (
+        <div className="cp-tool-section">
+          <div className="cp-tool-label">参数</div>
+          <pre>{paramsText}</pre>
         </div>
       )}
+      <div className="cp-tool-section">
+        <div className="cp-tool-label">{resultIsJson ? "结果（JSON）" : "结果"}</div>
+        {!hasResult ? (
+          <div className="cp-tool-pending">⋯ 等待结果</div>
+        ) : (
+          <>
+            <pre>{resultText || "（空）"}</pre>
+            {truncated && (
+              <div className="cp-tool-truncated">…已截断，省略 {rawResult.length - TOOL_RESULT_MAX_CHARS} 字符</div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
