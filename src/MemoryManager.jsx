@@ -3339,6 +3339,35 @@ export default function App() {
     return () => obs.disconnect();
   }, []);
 
+  // 键盘弹出/收起时根容器高度跟随 visualViewport：
+  // 100dvh 不会因软键盘缩小，iOS 会把页面强行往上滚以露出输入框，
+  // 收键盘后滚动偏移有时不归位，导致键盘原位置留白。
+  // 把根容器锚到 visualViewport.height（已扣掉键盘区域），
+  // 浏览器就不再做自动滚动，键盘收起后空白也自然消失。
+  useEffect(() => {
+    const root = document.documentElement;
+    const vv = window.visualViewport;
+    const update = () => {
+      const h = vv ? vv.height : window.innerHeight;
+      root.style.setProperty("--app-height", h + "px");
+      // 键盘收起后强制把窗口滚回 0，兜底 iOS 残留的滚动偏移
+      if (vv && vv.height >= window.innerHeight - 1 && window.scrollY !== 0) {
+        window.scrollTo(0, 0);
+      }
+    };
+    update();
+    if (vv) {
+      vv.addEventListener("resize", update);
+      vv.addEventListener("scroll", update);
+      return () => {
+        vv.removeEventListener("resize", update);
+        vv.removeEventListener("scroll", update);
+      };
+    }
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
   // iOS 双指缩放手势在所有 tab 全程拦掉（viewport 设了 user-scalable=no
   // 后，部分 iOS Safari 仍会响应 gesture* 事件）
   useEffect(() => {
@@ -3396,7 +3425,7 @@ export default function App() {
       {stylesEl}
       <PasswordGate>
       <div style={{
-        height: "100dvh",
+        height: "var(--app-height, 100dvh)",
         display: "flex", flexDirection: "column",
         background: "var(--bg-page)", color: "var(--text-primary)",
         overflow: "hidden",

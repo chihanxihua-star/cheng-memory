@@ -16,6 +16,9 @@
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { height: 100%; margin: 0; }
       #root { height: 100%; overflow: hidden; }
+      /* 软键盘弹出时锚到 visualViewport.height，避免 iOS 自动滚动留白 */
+      :root { --app-height: 100dvh; }
+      html, body, #root { height: var(--app-height, 100%); }
     </style>
   </head>
   <body>
