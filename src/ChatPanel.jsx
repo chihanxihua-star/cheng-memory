@@ -470,7 +470,13 @@ const CSS = `
   max-height: 280px; overflow-y: auto;
   color: var(--text-primary);
 }
-.cp-tool-truncated { font-size: 10.5px; color: var(--text-tertiary); margin-top: 4px; font-style: italic; }
+.cp-tool-expand {
+  margin-top: 6px; padding: 3px 8px; background: transparent;
+  border: 1px solid var(--border-card); border-radius: 4px;
+  font-size: 11px; color: var(--text-secondary); cursor: pointer;
+  font-family: inherit;
+}
+.cp-tool-expand:hover { background: var(--bg-sidebar-hover); color: var(--text-primary); }
 .cp-tool-pending { font-size: 11.5px; color: var(--text-tertiary); padding: 4px 0; }
 
 
@@ -1830,6 +1836,7 @@ function ToolCallsBlock({ calls }) {
 
 function ToolCallCard({ call }) {
   const [open, setOpen] = useState(false);
+  const [showFull, setShowFull] = useState(false);
   const hasResult = call.result !== undefined;
   const status = !hasResult ? "running" : (call.isError ? "error" : "ok");
 
@@ -1849,7 +1856,7 @@ function ToolCallCard({ call }) {
     }
   }
   const truncated = rawResult.length > TOOL_RESULT_MAX_CHARS;
-  const resultText = truncated ? rawResult.slice(0, TOOL_RESULT_MAX_CHARS) : rawResult;
+  const resultText = (truncated && !showFull) ? rawResult.slice(0, TOOL_RESULT_MAX_CHARS) : rawResult;
 
   const statusText = status === "running" ? "运行中…" : status === "error" ? "失败" : "完成";
 
@@ -1876,7 +1883,9 @@ function ToolCallCard({ call }) {
               <>
                 <pre>{resultText || "（空）"}</pre>
                 {truncated && (
-                  <div className="cp-tool-truncated">…已截断，省略 {rawResult.length - TOOL_RESULT_MAX_CHARS} 字符</div>
+                  <button type="button" className="cp-tool-expand" onClick={() => setShowFull(v => !v)}>
+                    {showFull ? "收起" : `展开全文（剩余 ${rawResult.length - TOOL_RESULT_MAX_CHARS} 字符）`}
+                  </button>
                 )}
               </>
             )}
