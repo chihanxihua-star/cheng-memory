@@ -403,50 +403,32 @@ const CSS = `
   animation: cp-shimmer 1.8s linear infinite;
 }
 
-/* TOOL CALLS — card-style，类似 Claude app */
-.cp-tool-block {
-  margin: 6px 0; max-width: 100%;
-  background: var(--bg-card); border: 1px solid var(--border-card);
-  border-radius: 8px; overflow: hidden;
-  animation: cp-fadeIn 0.2s ease;
-}
+/* TOOL CALLS — 与 思绪 同款折叠样式 */
+.cp-tool-block { margin-bottom: 7px; max-width: 100%; animation: cp-fadeIn 0.2s ease; }
 .cp-tool-toggle {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 7px 11px; background: transparent; border: none; cursor: pointer;
-  color: var(--text-primary); font-family: inherit; font-size: 11.5px;
-  text-align: left; user-select: none;
+  font-size: 11px; color: var(--text-tertiary); cursor: pointer;
+  padding: 2px 4px 2px 0; background: transparent; border: none;
+  display: inline-flex; align-items: center; gap: 4px; user-select: none;
+  font-family: inherit; text-align: left;
 }
-.cp-tool-toggle:hover { background: var(--bg-sidebar-hover); }
-.cp-tool-icon {
-  width: 16px; height: 16px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 50%; font-size: 10px; font-weight: 600; line-height: 1;
+.cp-tool-toggle::before {
+  content: '›'; display: inline-block; font-size: 13px; line-height: 1;
+  transition: transform 0.18s ease;
 }
-.cp-tool-icon.ok { background: rgba(74, 157, 108, 0.18); color: #4a9d6c; }
-.cp-tool-icon.error { background: rgba(192, 57, 43, 0.18); color: #c0392b; }
-.cp-tool-icon.running { background: rgba(122, 169, 200, 0.12); color: #7aa9c8; }
-.cp-tool-spinner {
-  width: 11px; height: 11px;
-  border: 2px solid currentColor; border-top-color: transparent;
-  border-radius: 50%; animation: cp-spin 0.8s linear infinite;
+.cp-tool-block.open .cp-tool-toggle::before { transform: rotate(90deg); }
+.cp-tool-toggle:hover { color: var(--text-secondary); }
+.cp-tool-toggle.error { color: #c0392b; }
+.cp-tool-toggle.thinking {
+  background: linear-gradient(90deg, var(--text-tertiary) 25%, var(--text-primary) 50%, var(--text-tertiary) 75%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: cp-shimmer 1.8s linear infinite;
 }
-.cp-tool-name {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px; color: var(--text-primary); font-weight: 500; flex-shrink: 0;
-}
-.cp-tool-preview {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px; color: var(--text-tertiary);
-  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.cp-tool-chevron {
-  color: var(--text-tertiary); font-size: 14px; flex-shrink: 0;
-  transition: transform 0.18s ease; margin-left: auto;
-}
-.cp-tool-block.open .cp-tool-chevron { transform: rotate(90deg); }
 .cp-tool-content {
-  border-top: 1px solid var(--border-card);
-  padding: 10px 12px; background: var(--bg-panel);
+  border-left: 2px solid var(--border-thinking); padding: 7px 11px;
+  margin-top: 4px;
   animation: cp-fadeIn 0.18s ease;
 }
 .cp-tool-section + .cp-tool-section { margin-top: 10px; }
@@ -463,7 +445,6 @@ const CSS = `
 }
 .cp-tool-truncated { font-size: 10.5px; color: var(--text-tertiary); margin-top: 4px; font-style: italic; }
 .cp-tool-pending { font-size: 11.5px; color: var(--text-tertiary); padding: 4px 0; }
-@keyframes cp-spin { to { transform: rotate(360deg); } }
 
 
 /* INPUT */
@@ -1799,35 +1780,14 @@ function ToolCallsBlock({ calls }) {
   );
 }
 
-// 提取常见工具的关键参数做行内预览（折叠时显示）
-function getToolPreview(input) {
-  if (!input || typeof input !== "object") return null;
-  const trim = (s, n = 80) => {
-    const v = String(s);
-    return v.length > n ? v.slice(0, n) + "…" : v;
-  };
-  if (input.file_path) return trim(input.file_path, 90);
-  if (input.path) return trim(input.path, 90);
-  if (input.command) return trim(input.command);
-  if (input.pattern) return trim(input.pattern);
-  if (input.query) return trim(input.query);
-  if (input.url) return trim(input.url, 90);
-  if (input.description) return trim(input.description);
-  if (input.prompt) return trim(input.prompt);
-  return null;
-}
-
 function ToolCallBlock({ call }) {
   const [open, setOpen] = useState(false);
   const hasResult = call.result !== undefined;
   const status = !hasResult ? "running" : (call.isError ? "error" : "ok");
-  const preview = getToolPreview(call.input);
 
-  // 参数：JSON 美化
   const paramsText = call.input ? prettyJSON(call.input) : "";
   const showParams = paramsText && paramsText !== "{}" && paramsText !== "null";
 
-  // 结果：识别 JSON 自动美化
   let rawResult = "";
   let resultIsJson = false;
   if (hasResult) {
@@ -1843,16 +1803,14 @@ function ToolCallBlock({ call }) {
   const truncated = rawResult.length > TOOL_RESULT_MAX_CHARS;
   const resultText = truncated ? rawResult.slice(0, TOOL_RESULT_MAX_CHARS) : rawResult;
 
+  const toggleClass = "cp-tool-toggle"
+    + (status === "running" ? " thinking" : "")
+    + (status === "error" ? " error" : "");
+
   return (
     <div className={"cp-tool-block" + (open ? " open" : "")}>
-      <button type="button" className="cp-tool-toggle" onClick={() => setOpen(o => !o)}>
-        <span className={"cp-tool-icon " + status} aria-hidden="true">
-          {status === "running" ? <span className="cp-tool-spinner"/>
-            : status === "error" ? "✕" : "✓"}
-        </span>
-        <span className="cp-tool-name">{call.name || "tool"}</span>
-        {preview && <span className="cp-tool-preview">{preview}</span>}
-        <span className="cp-tool-chevron" aria-hidden="true">›</span>
+      <button type="button" className={toggleClass} onClick={() => setOpen(o => !o)}>
+        工具 · {call.name || "tool"}
       </button>
       {open && (
         <div className="cp-tool-content">
