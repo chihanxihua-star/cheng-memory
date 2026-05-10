@@ -106,6 +106,30 @@ function formatK(n) {
 }
 function prettyJSON(v) { try { return JSON.stringify(v, null, 2); } catch { return String(v); } }
 
+// 粗略估算 tokens：CJK 字符 ~1 token，其他 ~1/4 token。
+// 仅前端估算，与真实 tokenizer 有出入，作为参考值显示。
+function estimateTokens(v) {
+  if (v == null) return 0;
+  const s = typeof v === "string" ? v : (() => { try { return JSON.stringify(v); } catch { return String(v); } })();
+  let cjk = 0, other = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if ((c >= 0x3040 && c <= 0x30ff) ||  // 假名
+        (c >= 0x3400 && c <= 0x9fff) ||  // CJK
+        (c >= 0xac00 && c <= 0xd7af) ||  // 谚文
+        (c >= 0xf900 && c <= 0xfaff)) {  // CJK 兼容
+      cjk++;
+    } else {
+      other++;
+    }
+  }
+  return Math.round(cjk + other / 4);
+}
+function toolCallTokens(call) {
+  if (!call) return 0;
+  return estimateTokens(call.input) + estimateTokens(call.result);
+}
+
 function getSettings(projectId) {
   try {
     const key = "chat-settings-" + (projectId || "global");
@@ -448,6 +472,16 @@ const CSS = `
 }
 .cp-tool-card-status { font-size: 11px; color: var(--text-tertiary); flex: 1; min-width: 0; }
 .cp-tool-card.error .cp-tool-card-status { color: #c0392b; }
+.cp-tool-card-tokens {
+  font-size: 10.5px; color: var(--text-tertiary); flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.cp-tool-total {
+  margin-top: 8px; padding: 6px 10px;
+  font-size: 11px; color: var(--text-secondary); text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  border-top: 1px dashed var(--border-card);
+}
 .cp-tool-card-chevron {
   color: var(--text-tertiary); font-size: 14px; flex-shrink: 0;
   transition: transform 0.18s ease; margin-left: auto;
@@ -1828,6 +1862,12 @@ function ToolCallsBlock({ calls }) {
           {calls.map((c, i) => (
             <ToolCallCard key={c.id || i} call={c} />
           ))}
+          {(() => {
+            const total = calls.reduce((s, c) => s + toolCallTokens(c), 0);
+            return total > 0 ? (
+              <div className="cp-tool-total">合计 ~{total.toLocaleString()} tokens（{calls.length} 次调用）</div>
+            ) : null;
+          })()}
         </div>
       )}
     </div>
@@ -1860,11 +1900,16 @@ function ToolCallCard({ call }) {
 
   const statusText = status === "running" ? "运行中…" : status === "error" ? "失败" : "完成";
 
+  const tokens = toolCallTokens(call);
+
   return (
     <div className={"cp-tool-card" + (open ? " open" : "") + (status === "error" ? " error" : "")}>
       <button type="button" className="cp-tool-card-toggle" onClick={() => setOpen(o => !o)}>
         <span className="cp-tool-card-name">{call.name || "tool"}</span>
         <span className="cp-tool-card-status">{statusText}</span>
+        {tokens > 0 && (
+          <span className="cp-tool-card-tokens">~{tokens.toLocaleString()} tokens</span>
+        )}
         <span className="cp-tool-card-chevron" aria-hidden="true">›</span>
       </button>
       {open && (
