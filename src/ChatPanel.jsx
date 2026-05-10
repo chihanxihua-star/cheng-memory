@@ -431,13 +431,33 @@ const CSS = `
   margin-top: 4px;
   animation: cp-fadeIn 0.18s ease;
 }
-.cp-tool-item + .cp-tool-item { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border-card); }
-.cp-tool-item-name {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px; color: var(--text-primary); font-weight: 500;
-  margin-bottom: 6px;
+.cp-tool-card {
+  margin-top: 6px; background: var(--bg-card);
+  border: 1px solid var(--border-card); border-radius: 8px; overflow: hidden;
 }
-.cp-tool-item.error .cp-tool-item-name { color: #c0392b; }
+.cp-tool-card:first-child { margin-top: 0; }
+.cp-tool-card-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 11px; background: transparent; border: none; cursor: pointer;
+  color: var(--text-primary); font-family: inherit; text-align: left; user-select: none;
+}
+.cp-tool-card-toggle:hover { background: var(--bg-sidebar-hover); }
+.cp-tool-card-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; font-weight: 500; flex-shrink: 0;
+}
+.cp-tool-card-status { font-size: 11px; color: var(--text-tertiary); flex: 1; min-width: 0; }
+.cp-tool-card.error .cp-tool-card-status { color: #c0392b; }
+.cp-tool-card-chevron {
+  color: var(--text-tertiary); font-size: 14px; flex-shrink: 0;
+  transition: transform 0.18s ease; margin-left: auto;
+}
+.cp-tool-card.open .cp-tool-card-chevron { transform: rotate(90deg); }
+.cp-tool-card-content {
+  border-top: 1px solid var(--border-card);
+  padding: 10px 12px; background: var(--bg-panel);
+  animation: cp-fadeIn 0.18s ease;
+}
 .cp-tool-section + .cp-tool-section { margin-top: 10px; }
 .cp-tool-label {
   font-size: 10px; color: var(--text-tertiary); letter-spacing: 0.04em;
@@ -1800,7 +1820,7 @@ function ToolCallsBlock({ calls }) {
       {open && (
         <div className="cp-tool-content">
           {calls.map((c, i) => (
-            <ToolCallItem key={c.id || i} call={c} />
+            <ToolCallCard key={c.id || i} call={c} />
           ))}
         </div>
       )}
@@ -1808,8 +1828,10 @@ function ToolCallsBlock({ calls }) {
   );
 }
 
-function ToolCallItem({ call }) {
+function ToolCallCard({ call }) {
+  const [open, setOpen] = useState(false);
   const hasResult = call.result !== undefined;
+  const status = !hasResult ? "running" : (call.isError ? "error" : "ok");
 
   const paramsText = call.input ? prettyJSON(call.input) : "";
   const showParams = paramsText && paramsText !== "{}" && paramsText !== "null";
@@ -1829,32 +1851,38 @@ function ToolCallItem({ call }) {
   const truncated = rawResult.length > TOOL_RESULT_MAX_CHARS;
   const resultText = truncated ? rawResult.slice(0, TOOL_RESULT_MAX_CHARS) : rawResult;
 
-  const nameSuffix = call.isError ? " · 失败" : !hasResult ? " · 等待中" : "";
+  const statusText = status === "running" ? "运行中…" : status === "error" ? "失败" : "完成";
 
   return (
-    <div className={"cp-tool-item" + (call.isError ? " error" : "")}>
-      <div className="cp-tool-item-name">
-        {call.name || "tool"}{nameSuffix}
-      </div>
-      {showParams && (
-        <div className="cp-tool-section">
-          <div className="cp-tool-label">参数</div>
-          <pre>{paramsText}</pre>
+    <div className={"cp-tool-card" + (open ? " open" : "") + (status === "error" ? " error" : "")}>
+      <button type="button" className="cp-tool-card-toggle" onClick={() => setOpen(o => !o)}>
+        <span className="cp-tool-card-name">{call.name || "tool"}</span>
+        <span className="cp-tool-card-status">{statusText}</span>
+        <span className="cp-tool-card-chevron" aria-hidden="true">›</span>
+      </button>
+      {open && (
+        <div className="cp-tool-card-content">
+          {showParams && (
+            <div className="cp-tool-section">
+              <div className="cp-tool-label">参数</div>
+              <pre>{paramsText}</pre>
+            </div>
+          )}
+          <div className="cp-tool-section">
+            <div className="cp-tool-label">{resultIsJson ? "结果（JSON）" : "结果"}</div>
+            {!hasResult ? (
+              <div className="cp-tool-pending">⋯ 等待结果</div>
+            ) : (
+              <>
+                <pre>{resultText || "（空）"}</pre>
+                {truncated && (
+                  <div className="cp-tool-truncated">…已截断，省略 {rawResult.length - TOOL_RESULT_MAX_CHARS} 字符</div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
-      <div className="cp-tool-section">
-        <div className="cp-tool-label">{resultIsJson ? "结果（JSON）" : "结果"}</div>
-        {!hasResult ? (
-          <div className="cp-tool-pending">⋯ 等待结果</div>
-        ) : (
-          <>
-            <pre>{resultText || "（空）"}</pre>
-            {truncated && (
-              <div className="cp-tool-truncated">…已截断，省略 {rawResult.length - TOOL_RESULT_MAX_CHARS} 字符</div>
-            )}
-          </>
-        )}
-      </div>
     </div>
   );
 }
