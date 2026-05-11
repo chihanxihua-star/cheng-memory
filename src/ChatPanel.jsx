@@ -1395,7 +1395,11 @@ export default function ChatPanel({ onBack }) {
     try {
       const r = await authedFetch(API + "/cc/restart", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: value || null, forge: true }),
+        body: JSON.stringify({
+          model: value || null,
+          forge: true,
+          summaryLength: getSettings(PROJECT_ID).summaryLength,
+        }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
@@ -2086,7 +2090,31 @@ function SidebarItem({ onClick, children }) {
 function ParamsScreen({ onBack, showToast }) {
   const [s, setS] = useState(() => getSettings(PROJECT_ID));
   const update = (k, v) => setS(prev => ({ ...prev, [k]: v }));
-  const save = () => {
+
+  // forge 触发阈值 / 保留量 来自 /api/forge/config（daemon 同源），
+  // 摘要长度仍存 localStorage（仅前端透传给后端 forge 总结流程）。
+  const [forge, setForge] = useState(null); // { retain_tokens, trigger_threshold }
+  const [forgeMsg, setForgeMsg] = useState("");
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await authedFetch(API + "/forge/config");
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const d = await r.json();
+        if (alive) setForge({
+          retain_tokens: d.retain_tokens,
+          trigger_threshold: d.trigger_threshold,
+        });
+      } catch (e) {
+        if (alive) setForgeMsg("读取 forge 配置失败：" + (e?.message || e));
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const save = async () => {
+    // 1) 本地参数（摘要长度、短消息模式）
     saveSettingsValues(PROJECT_ID, {
       bufferTime: parseInt(s.bufferTime) || 10,
       shortMsgCount: parseInt(s.shortMsgCount) || 5,
@@ -2094,6 +2122,26 @@ function ParamsScreen({ onBack, showToast }) {
       summaryLength: parseInt(s.summaryLength) || 500,
       defaultModel: s.defaultModel || "",
     });
+    // 2) forge 配置（写 /root/forge-reload/config.json，daemon 下个轮询周期热加载）
+    if (forge) {
+      const retain = parseInt(forge.retain_tokens);
+      const trigger = parseInt(forge.trigger_threshold);
+      if (!retain || !trigger || trigger <= retain) {
+        showToast("forge 配置无效：触发阈值必须大于保留量");
+        return;
+      }
+      try {
+        const r = await authedFetch(API + "/forge/config", {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ retain_tokens: retain, trigger_threshold: trigger }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
+      } catch (e) {
+        showToast("forge 配置保存失败：" + e.message);
+        return;
+      }
+    }
     showToast("参数已保存");
   };
   return (
@@ -2108,27 +2156,33 @@ function ParamsScreen({ onBack, showToast }) {
         <label>短消息条数</label>
         <input type="number" value={s.shortMsgCount} min={1} onChange={e => update("shortMsgCount", e.target.value)} />
       </div>
-      <div className="cp-ps-section-title">对话自动压缩</div>
+      <div className="cp-ps-section-title">forge 设置</div>
       <div className="cp-ps-form">
-        <label>压缩阈值（字数）</label>
-        <input type="number" value={s.compressThreshold} min={10000} step={5000} onChange={e => update("compressThreshold", e.target.value)} />
-        <small>对话超过此字数时提示重启并生成摘要</small>
+        <label>forge 触发阈值（tokens）</label>
+        <input
+          type="number" min={10000} step={10000}
+          value={forge?.trigger_threshold ?? ""}
+          placeholder={forgeMsg ? "—" : "加载中…"}
+          onChange={e => setForge(f => ({ ...(f || {}), trigger_threshold: e.target.value }))}
+        />
+        <small>当前 session 真实 tokens 超过此值时 daemon 自动 forge（默认 200000）</small>
+      </div>
+      <div className="cp-ps-form">
+        <label>保留量（tokens）</label>
+        <input
+          type="number" min={10000} step={10000}
+          value={forge?.retain_tokens ?? ""}
+          placeholder={forgeMsg ? "—" : "加载中…"}
+          onChange={e => setForge(f => ({ ...(f || {}), retain_tokens: e.target.value }))}
+        />
+        <small>forge 时保留最后 N tokens；当前 tokens ≤ 保留量则整段保留不截（默认 100000）</small>
       </div>
       <div className="cp-ps-form">
         <label>摘要长度（字）</label>
         <input type="number" value={s.summaryLength} min={200} max={2000} step={100} onChange={e => update("summaryLength", e.target.value)} />
-        <small>自动生成的摘要目标字数</small>
+        <small>forge 时让 CC 总结被截掉部分的目标字数</small>
       </div>
-      <div className="cp-ps-section-title">模型预设</div>
-      <div className="cp-ps-form">
-        <label>默认模型</label>
-        <select value={s.defaultModel} onChange={e => update("defaultModel", e.target.value)}>
-          <option value="">默认（跟随 CC 配置）</option>
-          {MODEL_OPTIONS.filter(m => m.value).map(m => (
-            <option key={m.value} value={m.value}>{m.name}</option>
-          ))}
-        </select>
-      </div>
+      {forgeMsg && <div className="cp-ps-form"><small style={{ color: "#d87878" }}>{forgeMsg}</small></div>}
       <button className="cp-ps-btn" onClick={save}>保存设置</button>
     </>
   );
