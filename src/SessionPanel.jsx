@@ -177,21 +177,24 @@ const STYLES = `
   color: var(--sp-pink);
   font-weight: 500;
 }
-/* 头部右侧统计：turn 数 + toggle */
-.sp-head-stats {
+/* 头部右侧：X turn / 删除 纵向叠（删除只在 ended 卡片显示） */
+.sp-head-meta {
   margin-left: auto;
-  display: flex; align-items: center; gap: 10px;
+  display: flex; flex-direction: column;
+  align-items: flex-end; gap: 4px;
   flex-shrink: 0;
+  font-size: 12px;
 }
-.sp-head-turn {
-  font-size: 12px; color: var(--text-tertiary, #999);
-}
+.sp-head-turn { color: var(--text-tertiary, #999); }
 .sp-toggle {
+  margin-left: 4px;
+  align-self: center;
   font-size: 13px;
   color: var(--text-tertiary, #999);
   display: inline-block;
   width: 14px; text-align: center;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  flex-shrink: 0;
 }
 .sp-card-head:hover .sp-toggle { color: var(--text-secondary, #6b6358); }
 
@@ -199,9 +202,10 @@ const STYLES = `
   background: none; border: none;
   color: var(--text-tertiary, #999);
   font-size: 11px; cursor: pointer;
-  padding: 2px 6px; margin-left: 8px;
+  padding: 2px 6px;
   border-radius: 4px;
   transition: color 0.15s ease, background 0.15s ease;
+  font-family: inherit;
 }
 .sp-delete:hover {
   color: #d87878;
@@ -360,10 +364,12 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                   </span>
                 </div>
                 {sid && (
-                  <span className="sp-head-stats">
-                    <span className="sp-head-turn">{activeSession?.turn_count || 0} turn</span>
+                  <>
+                    <div className="sp-head-meta">
+                      <span className="sp-head-turn">{activeSession?.turn_count || 0} turn</span>
+                    </div>
                     <span className="sp-toggle">{isOpen ? "v" : ">"}</span>
-                  </span>
+                  </>
                 )}
               </div>
               {sid && isOpen && (
@@ -373,7 +379,8 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                       {fmtSessionTime(activeSession.started_at)} - 当前
                     </span>
                     <span className="sp-detail-turn">
-                      <span className="sp-status-active">活跃中</span>
+                      {activeSession.turn_count || 0} turn
+                      {" · "}<span className="sp-status-active">活跃</span>
                     </span>
                   </div>
                 </div>
@@ -402,10 +409,15 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                     {fmtSessionTime(s.started_at)}
                   </span>
                 </div>
-                <span className="sp-head-stats">
+                <div className="sp-head-meta">
                   <span className="sp-head-turn">{s.turn_count || 0} turn</span>
-                  <span className="sp-toggle">{isOpen ? "v" : ">"}</span>
-                </span>
+                  <button
+                    className="sp-delete"
+                    onClick={(e) => { e.stopPropagation(); deleteSession(s.session_id); }}
+                    title="删除这条 session"
+                  >删除</button>
+                </div>
+                <span className="sp-toggle">{isOpen ? "v" : ">"}</span>
               </div>
               {isOpen && (
                 <div className="sp-detail">
@@ -413,11 +425,7 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                     <span className="sp-detail-range">
                       {fmtSessionTime(s.started_at)} - {fmtSessionTime(s.ended_at)}
                     </span>
-                    <button
-                      className="sp-delete"
-                      onClick={(e) => { e.stopPropagation(); deleteSession(s.session_id); }}
-                      title="删除这条 session"
-                    >删除</button>
+                    <span className="sp-detail-turn">{s.turn_count || 0} turn</span>
                   </div>
                   <div className="sp-detail-summary">
                     {s.summary || <span className="sp-detail-empty">无总结</span>}
