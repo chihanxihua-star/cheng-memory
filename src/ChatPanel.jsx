@@ -1268,6 +1268,7 @@ export default function ChatPanel({ onBack }) {
     try {
       const body = {};
       if (opts.model !== undefined) body.model = opts.model;
+      if (opts.forge) body.forge = true;
       const r = await authedFetch(API + "/cc/restart", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1388,11 +1389,16 @@ export default function ChatPanel({ onBack }) {
 
   const selectModel = useCallback(async (value, name) => {
     setShowModelDropdown(false);
-    if (value === currentModel) return;
     setCurrentModel(value);
     const label = name || value || "默认";
-    await restartCC({ model: value || null, silent: true, toastMessage: "CC 已重启，当前模型：" + label });
-  }, [currentModel, restartCC]);
+    // 任何模型点击（含重选当前模型）都触发 forge + 重启
+    await restartCC({
+      model: value || null,
+      forge: true,
+      silent: true,
+      toastMessage: "已锻造并重启，当前模型：" + label,
+    });
+  }, [restartCC]);
 
   /* ─────── 重命名 ─────── */
   const confirmRename = useCallback(async (id, title) => {

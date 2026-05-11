@@ -2,6 +2,22 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
 
+// 与 ChatPanel 一致：所有 /api/* 带 Bearer token
+const API_BASE = "https://chat.jessaminee.top";
+const AUTH_TOKEN_KEY = "memhome-auth-token";
+function authedFetch(url, opts = {}) {
+  const t = localStorage.getItem(AUTH_TOKEN_KEY) || "";
+  const headers = { ...(opts.headers || {}) };
+  if (t) headers.Authorization = "Bearer " + t;
+  return fetch(url, { ...opts, headers });
+}
+function fmtK(n) {
+  n = Number(n) || 0;
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return (k === Math.floor(k) ? k : Math.round(k * 10) / 10) + "k";
+}
+
 // 数据库存 UTC ISO，前端强制按 UTC+8 显示（不依赖浏览器时区）
 function fmtSessionTime(iso) {
   if (!iso) return "—";
@@ -241,6 +257,80 @@ const STYLES = `
 .sp-detail-empty {
   color: var(--text-tertiary, #999); font-style: italic;
 }
+
+/* forge 配置卡：和 session 卡同样的边框与背景，标题加图标占位 */
+.sp-forge-card {
+  border: 1px solid var(--border-primary, #E0D8CE);
+  background: var(--bg-secondary, #fff);
+  padding: 14px 16px;
+  margin: 0 0 16px;
+}
+.sp-root[data-theme="dark"] .sp-forge-card {
+  background: #2a2a2c; border-color: #3a3a3c;
+}
+.sp-forge-title {
+  font-size: 13px; letter-spacing: 0.1em;
+  color: var(--text-secondary, #6b6358);
+  margin-bottom: 12px;
+  display: flex; align-items: center; gap: 6px;
+}
+.sp-forge-hint {
+  font-size: 11.5px; color: var(--text-tertiary, #999);
+  margin-bottom: 12px; line-height: 1.55;
+}
+.sp-forge-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.sp-forge-row label {
+  flex: 0 0 96px;
+  color: var(--text-primary, #2B2925);
+}
+.sp-forge-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px; font-family: inherit;
+  color: var(--text-primary, #2B2925);
+  background: var(--bg-primary, #FAF6F0);
+  border: 1px solid var(--border-primary, #E0D8CE);
+  border-radius: 0;
+  padding: 5px 8px;
+  outline: none;
+}
+.sp-root[data-theme="dark"] .sp-forge-row input {
+  background: #1c1c1e; border-color: #3a3a3c; color: #f0ece6;
+}
+.sp-forge-row .sp-forge-k {
+  flex: 0 0 auto;
+  font-size: 11.5px; color: var(--text-tertiary, #999);
+  min-width: 44px; text-align: right;
+}
+.sp-forge-actions {
+  display: flex; justify-content: flex-end; align-items: center; gap: 10px;
+  margin-top: 6px;
+}
+.sp-forge-msg {
+  flex: 1 1 auto;
+  font-size: 11.5px;
+  color: var(--text-tertiary, #999);
+}
+.sp-forge-msg.err { color: #d87878; }
+.sp-forge-msg.ok { color: var(--sp-pink); }
+.sp-forge-save {
+  background: var(--sp-pink);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 0;
+  letter-spacing: 0.05em;
+}
+.sp-forge-save:disabled {
+  opacity: 0.5; cursor: not-allowed;
+}
 `;
 
 export default function SessionPanel({ onClose, theme = "light" }) {
@@ -249,6 +339,69 @@ export default function SessionPanel({ onClose, theme = "light" }) {
   const [loading, setLoading] = useState(true);
   const [editingSid, setEditingSid] = useState(null);
   const [nameDraft, setNameDraft] = useState("");
+
+  // forge 配置：retain_tokens / trigger_threshold
+  const [forgeCfg, setForgeCfg] = useState(null); // {retain_tokens, trigger_threshold}
+  const [forgeDraft, setForgeDraft] = useState({ retain_tokens: "", trigger_threshold: "" });
+  const [forgeSaving, setForgeSaving] = useState(false);
+  const [forgeMsg, setForgeMsg] = useState({ text: "", level: "" }); // level: ok / err / ""
+
+  const fetchForgeCfg = useCallback(async () => {
+    try {
+      const r = await authedFetch(API_BASE + "/api/forge/config");
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const d = await r.json();
+      setForgeCfg(d);
+      setForgeDraft({
+        retain_tokens: String(d.retain_tokens ?? ""),
+        trigger_threshold: String(d.trigger_threshold ?? ""),
+      });
+    } catch (e) {
+      setForgeMsg({ text: "读取配置失败：" + (e?.message || e), level: "err" });
+    }
+  }, []);
+
+  useEffect(() => { fetchForgeCfg(); }, [fetchForgeCfg]);
+
+  const forgeDirty = useMemo(() => {
+    if (!forgeCfg) return false;
+    return String(forgeCfg.retain_tokens) !== forgeDraft.retain_tokens
+      || String(forgeCfg.trigger_threshold) !== forgeDraft.trigger_threshold;
+  }, [forgeCfg, forgeDraft]);
+
+  const saveForgeCfg = useCallback(async () => {
+    const retain = Number(forgeDraft.retain_tokens);
+    const trigger = Number(forgeDraft.trigger_threshold);
+    if (!Number.isFinite(retain) || retain <= 0 || !Number.isFinite(trigger) || trigger <= 0) {
+      setForgeMsg({ text: "请输入正整数", level: "err" });
+      return;
+    }
+    if (trigger <= retain) {
+      setForgeMsg({ text: "触发阈值必须大于保留 tokens", level: "err" });
+      return;
+    }
+    setForgeSaving(true);
+    setForgeMsg({ text: "", level: "" });
+    try {
+      const r = await authedFetch(API_BASE + "/api/forge/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ retain_tokens: retain, trigger_threshold: trigger }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
+      setForgeCfg({ retain_tokens: d.retain_tokens, trigger_threshold: d.trigger_threshold });
+      setForgeDraft({
+        retain_tokens: String(d.retain_tokens),
+        trigger_threshold: String(d.trigger_threshold),
+      });
+      setForgeMsg({ text: "已保存（daemon 下个轮询周期生效）", level: "ok" });
+    } catch (e) {
+      setForgeMsg({ text: "保存失败：" + (e?.message || e), level: "err" });
+    } finally {
+      setForgeSaving(false);
+    }
+  }, [forgeDraft]);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -336,6 +489,43 @@ export default function SessionPanel({ onClose, theme = "light" }) {
       </div>
 
       <div className="sp-body">
+        {/* forge 配置卡：触发阈值（daemon 监控）+ 保留 tokens（forge 截断点 / 重选模型时整段保留 if ≤ retain） */}
+        <div className="sp-forge-card">
+          <div className="sp-forge-title">♥ FORGE 配置</div>
+          <div className="sp-forge-hint">
+            选模型即触发锻造重启。当前 tokens 大于「保留」时截尾保留最后 N tokens，否则全部保留不截断。
+            自动锻造在 tokens 超过「触发阈值」时由 daemon 触发，逻辑不变。
+          </div>
+          <div className="sp-forge-row">
+            <label>保留 tokens</label>
+            <input
+              type="number" min="1" step="1000"
+              value={forgeDraft.retain_tokens}
+              onChange={e => setForgeDraft(d => ({ ...d, retain_tokens: e.target.value }))}
+              placeholder="100000"
+            />
+            <span className="sp-forge-k">{fmtK(forgeDraft.retain_tokens)}</span>
+          </div>
+          <div className="sp-forge-row">
+            <label>触发阈值</label>
+            <input
+              type="number" min="1" step="1000"
+              value={forgeDraft.trigger_threshold}
+              onChange={e => setForgeDraft(d => ({ ...d, trigger_threshold: e.target.value }))}
+              placeholder="200000"
+            />
+            <span className="sp-forge-k">{fmtK(forgeDraft.trigger_threshold)}</span>
+          </div>
+          <div className="sp-forge-actions">
+            <span className={"sp-forge-msg " + forgeMsg.level}>{forgeMsg.text}</span>
+            <button
+              className="sp-forge-save"
+              disabled={!forgeDirty || forgeSaving || !forgeCfg}
+              onClick={saveForgeCfg}
+            >{forgeSaving ? "保存中…" : "保存"}</button>
+          </div>
+        </div>
+
         {loading && sessions.length === 0 && (
           <div className="sp-loading">加载中…</div>
         )}
