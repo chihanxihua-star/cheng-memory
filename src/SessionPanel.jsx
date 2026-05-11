@@ -324,25 +324,51 @@ export default function SessionPanel({ onClose, theme = "light" }) {
           <div className="sp-loading">加载中…</div>
         )}
 
-        {/* 当前 session 卡 */}
-        <div className="sp-card active">
-          <div className="sp-card-head">
-            <span className="sp-dot">{sessionIcon(activeSession)}</span>
-            <div className="sp-name-block">
-              {renderName(activeSession, {
-                editingSid, nameDraft, setNameDraft,
-                startEditName, commitName, cancelEditName,
-              })}
-              <span className="sp-subtime">
-                {activeSession ? fmtSessionTime(activeSession.started_at) : "—"}
-                {" · "}<span className="sp-status-active">活跃</span>
-              </span>
+        {/* 当前 session 卡（可展开看完整 detail） */}
+        {(() => {
+          const sid = activeSession?.session_id;
+          const isOpen = sid ? expanded.has(sid) : false;
+          const isEditing = sid && editingSid === sid;
+          return (
+            <div className="sp-card active">
+              <div
+                className="sp-card-head"
+                onClick={() => { if (sid && !isEditing) toggle(sid); }}
+                style={{ cursor: sid ? "pointer" : "default" }}
+              >
+                <span className="sp-dot">{sessionIcon(activeSession)}</span>
+                <div className="sp-name-block">
+                  {renderName(activeSession, {
+                    editingSid, nameDraft, setNameDraft,
+                    startEditName, commitName, cancelEditName,
+                  })}
+                  <span className="sp-subtime">
+                    {activeSession ? fmtSessionTime(activeSession.started_at) : "—"}
+                    {" · "}<span className="sp-status-active">活跃</span>
+                  </span>
+                </div>
+                {sid && (
+                  <span className="sp-toggle">
+                    {isOpen ? "▼ 收起" : "▶ 展开"}
+                  </span>
+                )}
+              </div>
+              {sid && isOpen && (
+                <div className="sp-detail">
+                  <div className="sp-detail-row">
+                    <span className="sp-detail-range">
+                      {fmtSessionTime(activeSession.started_at)} - 当前
+                    </span>
+                    <span className="sp-detail-turn">
+                      {activeSession.turn_count || 0} turn
+                      {" · "}<span className="sp-status-active">活跃</span>
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-            <span className="sp-meta">
-              {activeSession?.turn_count ? `${activeSession.turn_count} turn` : "0 turn"}
-            </span>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* 历史 sessions */}
         {endedSessions.map(s => {
