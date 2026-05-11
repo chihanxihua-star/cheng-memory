@@ -33,6 +33,11 @@ const STYLES = `
   padding-bottom: env(safe-area-inset-bottom, 0px);
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
   color: var(--text-primary, #2B2925);
+  /* active 卡的图标用这个粉，比全局 --border-input-focus 更亮 */
+  --sp-pink: #EC8FA8;
+}
+.sp-root[data-theme="dark"] {
+  --sp-pink: #F0A4B8;
 }
 .sp-root[data-theme="dark"] {
   background: #1c1c1e;
@@ -88,8 +93,14 @@ const STYLES = `
   font-size: 13px;
 }
 .sp-card.ended .sp-card-head { cursor: pointer; user-select: none; }
-.sp-dot { font-size: 14px; line-height: 1; flex-shrink: 0; }
-.sp-card.active .sp-dot { color: var(--border-input-focus, #C9A8AD); }
+/* 各 unicode 字形宽高不一致（♥ ♡ ● ㅇ），统一框住居中渲染 */
+.sp-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px;
+  font-size: 14px; line-height: 1;
+  flex-shrink: 0;
+}
+.sp-card.active .sp-dot { color: var(--sp-pink); }
 .sp-card.ended .sp-dot { color: var(--text-tertiary, #999); }
 .sp-range {
   color: var(--text-primary, #2B2925);
@@ -100,7 +111,7 @@ const STYLES = `
   font-size: 12px;
 }
 .sp-status-active {
-  color: var(--border-input-focus, #C9A8AD);
+  color: var(--sp-pink);
   font-weight: 500;
 }
 .sp-toggle {
@@ -137,27 +148,33 @@ const STYLES = `
   color: var(--text-tertiary, #999);
 }
 
-.sp-summary {
-  margin-top: 8px;
-  padding: 12px 14px;
+/* 展开后的详情：第一行 时间范围 + turn 数；下一行 summary */
+.sp-detail {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-primary, #E0D8CE);
+}
+.sp-detail-row {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.sp-detail-range { color: var(--text-primary, #2B2925); }
+.sp-detail-turn { color: var(--text-tertiary, #999); font-size: 12px; }
+.sp-detail-summary {
+  padding: 11px 13px;
   background: var(--bg-bubble-bot, #fff);
   border: 1px solid var(--border-primary, #E0D8CE);
   border-radius: 8px;
-}
-.sp-root[data-theme="dark"] .sp-summary {
-  background: #1c1c1e; border-color: #3a3a3c;
-}
-.sp-summary-head {
-  font-size: 11.5px; color: var(--text-tertiary, #999);
-  margin-bottom: 6px; letter-spacing: 0.05em;
-}
-.sp-summary-body {
   font-size: 13px; line-height: 1.65;
   color: var(--text-primary, #2B2925);
   white-space: pre-wrap; word-break: break-word;
 }
-.sp-summary-empty {
-  font-size: 12px; color: var(--text-tertiary, #999); font-style: italic;
+.sp-root[data-theme="dark"] .sp-detail-summary {
+  background: #1c1c1e; border-color: #3a3a3c;
+}
+.sp-detail-empty {
+  color: var(--text-tertiary, #999); font-style: italic;
 }
 `;
 
@@ -264,7 +281,7 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                   {s.turn_count || 0} turn · 已结束
                 </span>
                 <span className="sp-toggle">
-                  {isOpen ? "▼ 收起" : "▶ 展开查看总结"}
+                  {isOpen ? "▼ 收起" : "▶ 展开"}
                 </span>
                 <button
                   className="sp-delete"
@@ -273,15 +290,16 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                 >删除</button>
               </div>
               {isOpen && (
-                <div className="sp-summary">
-                  {s.summary ? (
-                    <>
-                      <div className="sp-summary-head">本段对话总结 · {fmtSessionTime(s.ended_at)}</div>
-                      <div className="sp-summary-body">{s.summary}</div>
-                    </>
-                  ) : (
-                    <div className="sp-summary-empty">无总结</div>
-                  )}
+                <div className="sp-detail">
+                  <div className="sp-detail-row">
+                    <span className="sp-detail-range">
+                      {fmtSessionTime(s.started_at)} - {fmtSessionTime(s.ended_at)}
+                    </span>
+                    <span className="sp-detail-turn">{s.turn_count || 0} turn</span>
+                  </div>
+                  <div className="sp-detail-summary">
+                    {s.summary || <span className="sp-detail-empty">无总结</span>}
+                  </div>
                 </div>
               )}
             </div>
