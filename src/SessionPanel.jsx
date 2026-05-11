@@ -15,13 +15,14 @@ function fmtSessionTime(iso) {
   return `${mm}-${dd} ${hh}:${mi}`;
 }
 
-// 形状 = 来源：♥/♡ = forge 锻造，●/ㅇ = 普通重启
+// 形状 = 来源：♥/♡ = forge 锻造，●/○ = 普通重启
 // 填充 = 状态：实心 = active，空心 = ended
+// 注：之前用 ㅇ (Korean ieung) 跟 ● 大小差太多，换成同 Unicode 几何系列的 ○ (U+25CB) 才协调
 function sessionIcon(s) {
   const forge = !!s?.forged_from_session;
   const active = s?.status === "active";
   if (forge) return active ? "♥" : "♡";
-  return active ? "●" : "ㅇ";
+  return active ? "●" : "○";
 }
 
 // 渲染 session 名字 —— 默认 span (点击进入编辑)，编辑态 input
@@ -68,11 +69,11 @@ const STYLES = `
   /* 跟随聊天界面字体（ChatPanel.jsx .cp-root） */
   font-family: 'Noto Serif SC', Georgia, serif;
   color: var(--text-primary, #2B2925);
-  /* active 卡的图标用这个粉，比全局 --border-input-focus 更亮 */
-  --sp-pink: #EC8FA8;
+  /* active 卡图标的粉：低饱和、保留亮度（HSL 344° 36% 74%）*/
+  --sp-pink: #D9A0AE;
 }
 .sp-root[data-theme="dark"] {
-  --sp-pink: #F0A4B8;
+  --sp-pink: #DDA8B5;
 }
 .sp-root[data-theme="dark"] {
   background: #1c1c1e;
