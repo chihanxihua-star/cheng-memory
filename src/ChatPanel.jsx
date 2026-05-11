@@ -1389,16 +1389,38 @@ export default function ChatPanel({ onBack }) {
 
   const selectModel = useCallback(async (value, name) => {
     setShowModelDropdown(false);
+    const prevModel = currentModel;
     setCurrentModel(value);
     const label = name || value || "默认";
-    // 任何模型点击（含重选当前模型）都触发 forge + 重启
-    await restartCC({
-      model: value || null,
-      forge: true,
-      silent: true,
-      toastMessage: "已锻造并重启，当前模型：" + label,
-    });
-  }, [restartCC]);
+    try {
+      const r = await authedFetch(API + "/cc/restart", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: value || null, forge: true }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
+      // 进程已重启：清干净流式状态
+      setIsGenerating(false);
+      setStreamSnap(null);
+      streamRef.current = null;
+      // 从后端响应里抠出锻造信息
+      let detail = "";
+      if (d.forged) {
+        const sidShort = String(d.forged).slice(0, 8);
+        if (d.forge_truncated && d.forge_total != null && d.forge_retained != null) {
+          detail = ` ♥ ${sidShort} · 截断 ${d.forge_total}→${d.forge_retained} events`;
+        } else if (d.forge_retained != null) {
+          detail = ` ♥ ${sidShort} · 整段保留 ${d.forge_retained} events`;
+        } else {
+          detail = ` ♥ ${sidShort}`;
+        }
+      }
+      showToast(`小太阳醒啦${detail} 当前模型：${label}`);
+    } catch (e) {
+      setCurrentModel(prevModel);
+      showToast("小太阳起床失败：forge 失败：" + e.message);
+    }
+  }, [currentModel, showToast]);
 
   /* ─────── 重命名 ─────── */
   const confirmRename = useCallback(async (id, title) => {
