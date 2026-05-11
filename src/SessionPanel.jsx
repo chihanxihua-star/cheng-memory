@@ -15,9 +15,13 @@ function fmtSessionTime(iso) {
   return `${mm}-${dd} ${hh}:${mi}`;
 }
 
-// ♡ = forge 锻造产生；ㅇ = 普通重启
+// 形状 = 来源：♥/♡ = forge 锻造，●/ㅇ = 普通重启
+// 填充 = 状态：实心 = active，空心 = ended
 function sessionIcon(s) {
-  return s?.forged_from_session ? "♡" : "ㅇ";
+  const forge = !!s?.forged_from_session;
+  const active = s?.status === "active";
+  if (forge) return active ? "♥" : "♡";
+  return active ? "●" : "ㅇ";
 }
 
 const STYLES = `
@@ -78,20 +82,13 @@ const STYLES = `
 .sp-root[data-theme="dark"] .sp-card {
   background: #2a2a2c; border-color: #3a3a3c;
 }
-.sp-card.active {
-  border-color: var(--border-input-focus, #C9A8AD);
-  background: var(--bg-bubble-user, #F2DCE0);
-}
-.sp-root[data-theme="dark"] .sp-card.active {
-  background: rgba(201, 168, 173, 0.15);
-  border-color: rgba(201, 168, 173, 0.5);
-}
+/* 不再给 active 卡上底色，仅靠图标的实心/粉色表达活跃状态 */
 .sp-card-head {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   font-size: 13px;
 }
 .sp-card.ended .sp-card-head { cursor: pointer; user-select: none; }
-.sp-dot { font-size: 13px; line-height: 1; flex-shrink: 0; }
+.sp-dot { font-size: 14px; line-height: 1; flex-shrink: 0; }
 .sp-card.active .sp-dot { color: var(--border-input-focus, #C9A8AD); }
 .sp-card.ended .sp-dot { color: var(--text-tertiary, #999); }
 .sp-range {
