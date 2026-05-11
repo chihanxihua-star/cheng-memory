@@ -24,6 +24,40 @@ function sessionIcon(s) {
   return active ? "●" : "ㅇ";
 }
 
+// 渲染 session 名字 —— 默认 span (点击进入编辑)，编辑态 input
+function renderName(s, ctx) {
+  if (!s) {
+    return <span className="sp-name sp-name-empty">—</span>;
+  }
+  const { editingSid, nameDraft, setNameDraft, startEditName, commitName, cancelEditName } = ctx;
+  if (editingSid === s.session_id) {
+    return (
+      <input
+        autoFocus
+        className="sp-name-input"
+        value={nameDraft}
+        placeholder="未命名"
+        onChange={e => setNameDraft(e.target.value)}
+        onBlur={commitName}
+        onKeyDown={e => {
+          if (e.key === "Enter") { e.preventDefault(); commitName(); }
+          else if (e.key === "Escape") { e.preventDefault(); cancelEditName(); }
+        }}
+        onClick={e => e.stopPropagation()}
+      />
+    );
+  }
+  return (
+    <span
+      className={"sp-name" + (s.name ? "" : " sp-name-empty")}
+      onClick={e => { e.stopPropagation(); startEditName(s); }}
+      title="点击编辑名字"
+    >
+      {s.name || "未命名"}
+    </span>
+  );
+}
+
 const STYLES = `
 .sp-root {
   position: fixed; inset: 0; z-index: 200;
@@ -31,7 +65,8 @@ const STYLES = `
   display: flex; flex-direction: column;
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* 跟随聊天界面字体（ChatPanel.jsx .cp-root） */
+  font-family: 'Noto Serif SC', Georgia, serif;
   color: var(--text-primary, #2B2925);
   /* active 卡的图标用这个粉，比全局 --border-input-focus 更亮 */
   --sp-pink: #EC8FA8;
@@ -75,10 +110,10 @@ const STYLES = `
   padding: 40px 0;
 }
 
-/* Session 卡片：统一格式，活跃和已结束只是颜色/标记不同 */
+/* Session 卡片：直角、统一格式，活跃和已结束只是颜色/标记不同 */
 .sp-card {
   border: 1px solid var(--border-primary, #E0D8CE);
-  border-radius: 12px;
+  border-radius: 0;
   padding: 14px 16px;
   margin: 0 0 12px;
   background: var(--bg-secondary, #fff);
@@ -102,9 +137,36 @@ const STYLES = `
 }
 .sp-card.active .sp-dot { color: var(--sp-pink); }
 .sp-card.ended .sp-dot { color: var(--text-tertiary, #999); }
-.sp-range {
+
+/* 名字 + 创建时间堆叠在图标右边 */
+.sp-name-block {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.sp-name {
+  font-size: 14px; font-weight: 500;
   color: var(--text-primary, #2B2925);
-  font-weight: 500;
+  font-family: inherit;
+  padding: 2px 6px; margin: -2px -6px;
+  border-radius: 3px;
+  cursor: text;
+  word-break: break-all;
+}
+.sp-name:hover {
+  background: var(--bg-sidebar-hover, rgba(0,0,0,0.04));
+}
+.sp-name-empty { color: var(--text-tertiary, #999); font-style: italic; font-weight: 400; }
+.sp-name-input {
+  font-size: 14px; font-weight: 500; font-family: inherit;
+  color: var(--text-primary, #2B2925);
+  background: transparent;
+  border: none; border-bottom: 1px solid var(--sp-pink);
+  outline: none; padding: 1px 2px; margin: 0;
+  width: 100%; min-width: 0;
+}
+.sp-subtime {
+  font-size: 11.5px; color: var(--text-tertiary, #999);
+  font-family: inherit;
 }
 .sp-meta {
   color: var(--text-tertiary, #999);
@@ -133,20 +195,6 @@ const STYLES = `
   background: rgba(216, 120, 120, 0.08);
 }
 
-.sp-card-body {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border-primary, #E0D8CE);
-  font-size: 12.5px;
-  color: var(--text-secondary, #6b6358);
-}
-.sp-card.active .sp-card-body {
-  border-top-color: rgba(201, 168, 173, 0.4);
-}
-.sp-card-body-hint {
-  font-style: italic;
-  color: var(--text-tertiary, #999);
-}
 
 /* 展开后的详情：第一行 时间范围 + turn 数；下一行 summary */
 .sp-detail {
@@ -165,7 +213,7 @@ const STYLES = `
   padding: 11px 13px;
   background: var(--bg-bubble-bot, #fff);
   border: 1px solid var(--border-primary, #E0D8CE);
-  border-radius: 8px;
+  border-radius: 0;
   font-size: 13px; line-height: 1.65;
   color: var(--text-primary, #2B2925);
   white-space: pre-wrap; word-break: break-word;
@@ -182,12 +230,14 @@ export default function SessionPanel({ onClose, theme = "light" }) {
   const [sessions, setSessions] = useState([]);
   const [expanded, setExpanded] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
+  const [editingSid, setEditingSid] = useState(null);
+  const [nameDraft, setNameDraft] = useState("");
 
   const fetchSessions = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("sessions_cheng")
-        .select("session_id, started_at, ended_at, turn_count, status, summary, forged_from_session")
+        .select("session_id, name, started_at, ended_at, turn_count, status, summary, forged_from_session")
         .order("created_at", { ascending: false })
         .limit(20);
       if (!error && Array.isArray(data)) setSessions(data);
@@ -236,6 +286,30 @@ export default function SessionPanel({ onClose, theme = "light" }) {
     }
   }, []);
 
+  const startEditName = useCallback((s) => {
+    setEditingSid(s.session_id);
+    setNameDraft(s.name || "");
+  }, []);
+
+  const commitName = useCallback(async () => {
+    const sid = editingSid;
+    if (!sid) return;
+    const next = nameDraft.trim() || null;
+    setEditingSid(null);
+    // 本地先乐观更新
+    setSessions(prev => prev.map(s => s.session_id === sid ? { ...s, name: next } : s));
+    try {
+      await supabase.from("sessions_cheng").update({ name: next }).eq("session_id", sid);
+    } catch (e) {
+      console.warn("rename failed:", e?.message || e);
+    }
+  }, [editingSid, nameDraft]);
+
+  const cancelEditName = useCallback(() => {
+    setEditingSid(null);
+    setNameDraft("");
+  }, []);
+
   return createPortal(
     <div className="sp-root" data-theme={theme}>
       <style>{STYLES}</style>
@@ -249,37 +323,46 @@ export default function SessionPanel({ onClose, theme = "light" }) {
           <div className="sp-loading">加载中…</div>
         )}
 
-        {/* 当前 session 卡（始终显示，无 active 行时降级展示） */}
+        {/* 当前 session 卡 */}
         <div className="sp-card active">
           <div className="sp-card-head">
             <span className="sp-dot">{sessionIcon(activeSession)}</span>
-            <span className="sp-range">
-              {activeSession ? `${fmtSessionTime(activeSession.started_at)} - 当前` : "— · 当前"}
-            </span>
+            <div className="sp-name-block">
+              {renderName(activeSession, {
+                editingSid, nameDraft, setNameDraft,
+                startEditName, commitName, cancelEditName,
+              })}
+              <span className="sp-subtime">
+                {activeSession ? fmtSessionTime(activeSession.started_at) : "—"}
+                {" · "}<span className="sp-status-active">活跃</span>
+              </span>
+            </div>
             <span className="sp-meta">
               {activeSession?.turn_count ? `${activeSession.turn_count} turn` : "0 turn"}
-              {" · "}
-              <span className="sp-status-active">活跃</span>
             </span>
-          </div>
-          <div className="sp-card-body">
-            <span className="sp-card-body-hint">实时聊天消息在主界面，此处不重复显示</span>
           </div>
         </div>
 
         {/* 历史 sessions */}
         {endedSessions.map(s => {
           const isOpen = expanded.has(s.session_id);
+          const isEditing = editingSid === s.session_id;
           return (
             <div key={s.session_id} className="sp-card ended">
-              <div className="sp-card-head" onClick={() => toggle(s.session_id)}>
+              <div
+                className="sp-card-head"
+                onClick={() => { if (!isEditing) toggle(s.session_id); }}
+              >
                 <span className="sp-dot">{sessionIcon(s)}</span>
-                <span className="sp-range">
-                  {fmtSessionTime(s.started_at)} - {fmtSessionTime(s.ended_at)}
-                </span>
-                <span className="sp-meta">
-                  {s.turn_count || 0} turn · 已结束
-                </span>
+                <div className="sp-name-block">
+                  {renderName(s, {
+                    editingSid, nameDraft, setNameDraft,
+                    startEditName, commitName, cancelEditName,
+                  })}
+                  <span className="sp-subtime">
+                    {fmtSessionTime(s.started_at)}
+                  </span>
+                </div>
                 <span className="sp-toggle">
                   {isOpen ? "▼ 收起" : "▶ 展开"}
                 </span>
