@@ -1403,16 +1403,14 @@ export default function ChatPanel({ onBack }) {
       setIsGenerating(false);
       setStreamSnap(null);
       streamRef.current = null;
-      // 从后端响应里抠出锻造信息
+      // 从后端响应里抠出锻造信息（优先 tokens，回退 events）
       let detail = "";
       if (d.forged) {
-        const sidShort = String(d.forged).slice(0, 8);
-        if (d.forge_truncated && d.forge_total != null && d.forge_retained != null) {
-          detail = ` ♥ ${sidShort} · 截断 ${d.forge_total}→${d.forge_retained} events`;
-        } else if (d.forge_retained != null) {
-          detail = ` ♥ ${sidShort} · 整段保留 ${d.forge_retained} events`;
-        } else {
-          detail = ` ♥ ${sidShort}`;
+        const tk = d.forge_total_tokens, rt = d.forge_retained_tokens;
+        if (d.forge_truncated && tk != null && rt != null) {
+          detail = ` 截断 ${formatK(tk)}→${formatK(rt)} tokens`;
+        } else if (rt != null) {
+          detail = ` 整段保留 ${formatK(rt)} tokens`;
         }
       }
       showToast(`小太阳醒啦${detail} 当前模型：${label}`);
