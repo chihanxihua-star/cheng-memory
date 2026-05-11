@@ -177,9 +177,21 @@ const STYLES = `
   color: var(--sp-pink);
   font-weight: 500;
 }
+/* 头部右侧统计：turn 数 + toggle */
+.sp-head-stats {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0;
+}
+.sp-head-turn {
+  font-size: 12px; color: var(--text-tertiary, #999);
+}
 .sp-toggle {
-  margin-left: auto; font-size: 11.5px;
+  font-size: 13px;
   color: var(--text-tertiary, #999);
+  display: inline-block;
+  width: 14px; text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .sp-card-head:hover .sp-toggle { color: var(--text-secondary, #6b6358); }
 
@@ -348,8 +360,9 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                   </span>
                 </div>
                 {sid && (
-                  <span className="sp-toggle">
-                    {isOpen ? "▼ 收起" : "▶ 展开"}
+                  <span className="sp-head-stats">
+                    <span className="sp-head-turn">{activeSession?.turn_count || 0} turn</span>
+                    <span className="sp-toggle">{isOpen ? "v" : ">"}</span>
                   </span>
                 )}
               </div>
@@ -360,8 +373,7 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                       {fmtSessionTime(activeSession.started_at)} - 当前
                     </span>
                     <span className="sp-detail-turn">
-                      {activeSession.turn_count || 0} turn
-                      {" · "}<span className="sp-status-active">活跃</span>
+                      <span className="sp-status-active">活跃中</span>
                     </span>
                   </div>
                 </div>
@@ -390,14 +402,10 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                     {fmtSessionTime(s.started_at)}
                   </span>
                 </div>
-                <span className="sp-toggle">
-                  {isOpen ? "▼ 收起" : "▶ 展开"}
+                <span className="sp-head-stats">
+                  <span className="sp-head-turn">{s.turn_count || 0} turn</span>
+                  <span className="sp-toggle">{isOpen ? "v" : ">"}</span>
                 </span>
-                <button
-                  className="sp-delete"
-                  onClick={(e) => { e.stopPropagation(); deleteSession(s.session_id); }}
-                  title="删除这条 session"
-                >删除</button>
               </div>
               {isOpen && (
                 <div className="sp-detail">
@@ -405,7 +413,11 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                     <span className="sp-detail-range">
                       {fmtSessionTime(s.started_at)} - {fmtSessionTime(s.ended_at)}
                     </span>
-                    <span className="sp-detail-turn">{s.turn_count || 0} turn</span>
+                    <button
+                      className="sp-delete"
+                      onClick={(e) => { e.stopPropagation(); deleteSession(s.session_id); }}
+                      title="删除这条 session"
+                    >删除</button>
                   </div>
                   <div className="sp-detail-summary">
                     {s.summary || <span className="sp-detail-empty">无总结</span>}
