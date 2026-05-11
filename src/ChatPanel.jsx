@@ -291,7 +291,8 @@ const CSS = `
 }
 .cp-model-btn:hover { background: var(--bg-sidebar-hover); }
 .cp-model-name { font-size: 12px; font-weight: 500; color: var(--text-primary); }
-.cp-model-status { font-size: 10px; color: var(--text-tertiary); }
+.cp-model-status { font-size: 10px; color: var(--text-tertiary); transition: color 0.2s; }
+.cp-model-status.over { color: #d87878; font-weight: 600; }
 .cp-model-dropdown {
   position: absolute; top: 100%; right: 0; margin-top: 4px;
   background: var(--bg-panel); border: 1px solid var(--border-card);
@@ -846,6 +847,9 @@ export default function ChatPanel({ onBack }) {
   const [ccStatus, setCcStatus] = useState("unknown"); // ready / down / unknown
   const [currentModel, setCurrentModel] = useState("");
   const [charCount, setCharCount] = useState(0);
+  // 截断触发值：右上角字数 ≥ 此值时变红。来自 localStorage settings.compressThreshold
+  // sidebar 关闭时刷新一次，保证从「参数设置」改完保存就立刻生效
+  const [alertThreshold, setAlertThreshold] = useState(() => getSettings(PROJECT_ID).compressThreshold);
 
   // UI 开关
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -860,6 +864,11 @@ export default function ChatPanel({ onBack }) {
 
   // Session 可视化面板开关（点 Claude 头像打开）
   const [sessionOpen, setSessionOpen] = useState(false);
+
+  // sidebar 关闭时重新读截断触发值
+  useEffect(() => {
+    if (!sidebarOpen) setAlertThreshold(getSettings(PROJECT_ID).compressThreshold);
+  }, [sidebarOpen]);
 
   // refs
   const wsRef = useRef(null);
@@ -1510,7 +1519,9 @@ export default function ChatPanel({ onBack }) {
           <div className="cp-model-wrap">
             <button className="cp-model-btn" onClick={(e) => { e.stopPropagation(); setShowModelDropdown(s => !s); }}>
               <span className="cp-model-name">{currentModelInfo.name}</span>
-              <span className="cp-model-status">{formatK(charCount)} / {formatK(getSettings(PROJECT_ID).compressThreshold)}</span>
+              <span className={"cp-model-status" + (charCount >= alertThreshold ? " over" : "")}>
+                {formatK(charCount)} / {formatK(alertThreshold)}
+              </span>
             </button>
             {showModelDropdown && (
               <div className="cp-model-dropdown" onClick={e => e.stopPropagation()}>
@@ -2166,6 +2177,15 @@ function ParamsScreen({ onBack, showToast }) {
           onChange={e => setForge(f => ({ ...(f || {}), trigger_threshold: e.target.value }))}
         />
         <small>当前 session 真实 tokens 超过此值时 daemon 自动 forge（默认 200000）</small>
+      </div>
+      <div className="cp-ps-form">
+        <label>截断触发值（字数）</label>
+        <input
+          type="number" min={1000} step={1000}
+          value={s.compressThreshold}
+          onChange={e => update("compressThreshold", e.target.value)}
+        />
+        <small>右上角字数 ≥ 此值时变红（仅视觉提醒，不会触发 forge，默认 50000）</small>
       </div>
       <div className="cp-ps-form">
         <label>保留量（tokens）</label>
