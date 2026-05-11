@@ -2,15 +2,22 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
 
+// 数据库存 UTC ISO，前端强制按 UTC+8 显示（不依赖浏览器时区）
 function fmtSessionTime(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "—";
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
+  const utc8 = new Date(d.getTime() + 8 * 3600 * 1000);
+  const mm = String(utc8.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(utc8.getUTCDate()).padStart(2, "0");
+  const hh = String(utc8.getUTCHours()).padStart(2, "0");
+  const mi = String(utc8.getUTCMinutes()).padStart(2, "0");
   return `${mm}-${dd} ${hh}:${mi}`;
+}
+
+// ♡ = forge 锻造产生；ㅇ = 普通重启
+function sessionIcon(s) {
+  return s?.forged_from_session ? "♡" : "ㅇ";
 }
 
 const STYLES = `
@@ -105,6 +112,19 @@ const STYLES = `
 }
 .sp-card-head:hover .sp-toggle { color: var(--text-secondary, #6b6358); }
 
+.sp-delete {
+  background: none; border: none;
+  color: var(--text-tertiary, #999);
+  font-size: 11px; cursor: pointer;
+  padding: 2px 6px; margin-left: 8px;
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.sp-delete:hover {
+  color: #d87878;
+  background: rgba(216, 120, 120, 0.08);
+}
+
 .sp-card-body {
   margin-top: 10px;
   padding-top: 10px;
@@ -191,6 +211,17 @@ export default function SessionPanel({ onClose, theme = "light" }) {
     });
   }, []);
 
+  const deleteSession = useCallback(async (sid) => {
+    if (!sid) return;
+    if (!window.confirm("删除这条 session 记录？只删除数据库里的元数据，JSONL 文件不动。")) return;
+    try {
+      await supabase.from("sessions_cheng").delete().eq("session_id", sid);
+      setSessions(prev => prev.filter(s => s.session_id !== sid));
+    } catch (e) {
+      alert("删除失败：" + (e?.message || e));
+    }
+  }, []);
+
   return createPortal(
     <div className="sp-root" data-theme={theme}>
       <style>{STYLES}</style>
@@ -207,7 +238,7 @@ export default function SessionPanel({ onClose, theme = "light" }) {
         {/* 当前 session 卡（始终显示，无 active 行时降级展示） */}
         <div className="sp-card active">
           <div className="sp-card-head">
-            <span className="sp-dot">●</span>
+            <span className="sp-dot">{sessionIcon(activeSession)}</span>
             <span className="sp-range">
               {activeSession ? `${fmtSessionTime(activeSession.started_at)} - 当前` : "— · 当前"}
             </span>
@@ -228,7 +259,7 @@ export default function SessionPanel({ onClose, theme = "light" }) {
           return (
             <div key={s.session_id} className="sp-card ended">
               <div className="sp-card-head" onClick={() => toggle(s.session_id)}>
-                <span className="sp-dot">○</span>
+                <span className="sp-dot">{sessionIcon(s)}</span>
                 <span className="sp-range">
                   {fmtSessionTime(s.started_at)} - {fmtSessionTime(s.ended_at)}
                 </span>
@@ -238,6 +269,11 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                 <span className="sp-toggle">
                   {isOpen ? "▼ 收起" : "▶ 展开查看总结"}
                 </span>
+                <button
+                  className="sp-delete"
+                  onClick={(e) => { e.stopPropagation(); deleteSession(s.session_id); }}
+                  title="删除这条 session"
+                >删除</button>
               </div>
               {isOpen && (
                 <div className="sp-summary">
