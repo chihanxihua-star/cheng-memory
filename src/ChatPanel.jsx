@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
 import TerminalPanel from "./TerminalPanel";
+import SessionPanel from "./SessionPanel";
 
 /* ════════════════════════════════════════════════════════════
    配置
@@ -321,61 +322,6 @@ const CSS = `
   color: var(--text-tertiary); font-size: 14px;
 }
 .cp-date-sep { text-align: center; color: var(--text-tertiary); font-size: 11px; margin: 14px 0 8px; }
-
-/* ── Session 可视化 ── */
-.cp-session-header {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 8px 4px 10px;
-  margin: -2px 0 12px;
-  border-bottom: 1px dashed var(--border-primary);
-  font-size: 12px; color: var(--text-secondary);
-}
-.cp-session-title { font-weight: 500; color: var(--text-primary); }
-.cp-session-icon { font-size: 12px; line-height: 1; }
-.cp-session-icon.active { color: var(--border-input-focus); }
-.cp-session-icon.ended { color: var(--text-tertiary); }
-.cp-session-meta { color: var(--text-tertiary); font-size: 11.5px; }
-.cp-session-status.active { color: var(--border-input-focus); }
-.cp-current-end { height: 1px; }
-.cp-session-divider {
-  text-align: center; font-size: 11px; color: var(--text-tertiary);
-  margin: 24px 0 10px; letter-spacing: 1.5px;
-}
-.cp-session-card {
-  border: 1px solid var(--border-primary);
-  border-radius: 10px;
-  padding: 10px 12px;
-  margin: 8px 0;
-  font-size: 12.5px;
-  color: var(--text-secondary);
-  transition: border-color 0.15s ease;
-}
-.cp-session-card:hover { border-color: var(--text-tertiary); }
-.cp-session-card-head {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  cursor: pointer; user-select: none;
-}
-.cp-session-range { color: var(--text-primary); }
-.cp-session-toggle {
-  margin-left: auto; font-size: 11px; color: var(--text-tertiary);
-}
-.cp-session-card-head:hover .cp-session-toggle { color: var(--text-secondary); }
-.cp-session-summary {
-  margin-top: 10px; padding: 10px 12px;
-  background: var(--bg-bubble-bot);
-  border-radius: 8px;
-  border: 1px solid var(--border-primary);
-}
-.cp-session-summary-head {
-  font-size: 11.5px; color: var(--text-tertiary); margin-bottom: 6px;
-}
-.cp-session-summary-body {
-  font-size: 13px; line-height: 1.6; color: var(--text-primary);
-  white-space: pre-wrap; word-break: break-word;
-}
-.cp-session-summary-empty {
-  font-size: 12px; color: var(--text-tertiary); font-style: italic;
-}
 
 .cp-msg-wrap { display: flex; gap: 9px; margin-bottom: 8px; max-width: 92%; align-items: flex-start; animation: cp-msgIn 0.22s ease-out; }
 .cp-msg-wrap.user { margin-left: auto; flex-direction: row-reverse; }
@@ -912,9 +858,8 @@ export default function ChatPanel({ onBack }) {
   const [imageViewer, setImageViewer] = useState(null);
   const [toasts, setToasts] = useState([]);
 
-  // Session 可视化（sessions_cheng 表）
-  const [sessions, setSessions] = useState([]);
-  const [expandedSessions, setExpandedSessions] = useState(() => new Set());
+  // Session 可视化面板开关（点 Claude 头像打开）
+  const [sessionOpen, setSessionOpen] = useState(false);
 
   // refs
   const wsRef = useRef(null);
@@ -922,7 +867,6 @@ export default function ChatPanel({ onBack }) {
   const streamRef = useRef(null); // 累积器
   const typingTimerRef = useRef(null);
   const messagesScrollRef = useRef(null);
-  const currentEndRef = useRef(null); // 当前 session 末尾哨兵，scrollToBottom 用
   const fileInputRef = useRef(null);
   const inputRef = useRef(null);
   const lastDateRef = useRef(null);
@@ -940,19 +884,13 @@ export default function ChatPanel({ onBack }) {
   /* ─────── 滚动 ─────── */
   const scrollToBottom = useCallback(() => {
     // double rAF：长内容 markdown 渲染要两帧才把 scrollHeight 算稳
-    // 优先滚到当前 session 末尾哨兵（避免被下面的历史 session 卡片带着滚过头）
-    const scroll = () => {
-      const sentinel = currentEndRef.current;
-      if (sentinel) {
-        sentinel.scrollIntoView({ block: 'end', behavior: 'auto' });
-      } else {
-        const el = messagesScrollRef.current;
-        if (el) el.scrollTop = el.scrollHeight;
-      }
-    };
     requestAnimationFrame(() => {
-      scroll();
-      requestAnimationFrame(scroll);
+      const el = messagesScrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+      requestAnimationFrame(() => {
+        const el2 = messagesScrollRef.current;
+        if (el2) el2.scrollTop = el2.scrollHeight;
+      });
     });
   }, []);
   const isNearBottom = useCallback(() => {
@@ -1469,53 +1407,6 @@ export default function ChatPanel({ onBack }) {
     setRenameTarget(null);
   }, [showToast]);
 
-  /* ─────── sessions_cheng：拉取、活跃/历史拆分、展开切换 ─────── */
-  const fetchSessions = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('sessions_cheng')
-        .select('session_id, started_at, ended_at, turn_count, status, summary, forged_from_session')
-        .order('created_at', { ascending: false })
-        .limit(20);
-      if (!error && Array.isArray(data)) setSessions(data);
-    } catch { /* 静默 */ }
-  }, []);
-
-  useEffect(() => {
-    fetchSessions();
-    const t = setInterval(fetchSessions, 60000);
-    return () => clearInterval(t);
-  }, [fetchSessions]);
-
-  const activeSession = useMemo(
-    () => sessions.find(s => s.status === 'active') || null,
-    [sessions]
-  );
-  const endedSessions = useMemo(
-    () => sessions.filter(s => s.status === 'ended'),
-    [sessions]
-  );
-
-  const toggleSessionExpand = useCallback((sid) => {
-    setExpandedSessions(prev => {
-      const next = new Set(prev);
-      if (next.has(sid)) next.delete(sid);
-      else next.add(sid);
-      return next;
-    });
-  }, []);
-
-  const fmtSessionTime = useCallback((iso) => {
-    if (!iso) return '—';
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return '—';
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mi = String(d.getMinutes()).padStart(2, '0');
-    return `${mm}-${dd} ${hh}:${mi}`;
-  }, []);
-
   /* ─────── 渲染辅助：日期分隔 ─────── */
   const renderItems = useMemo(() => {
     const items = [];
@@ -1609,20 +1500,9 @@ export default function ChatPanel({ onBack }) {
 
       {/* MESSAGES */}
       <div className="cp-messages" ref={messagesScrollRef} onClick={(e) => {
-        if (e.target.closest(".cp-avatar.b")) setTerminalOpen(true);
+        if (e.target.closest(".cp-avatar.b")) setSessionOpen(true);
         else if (e.target.closest(".cp-avatar.u")) setHistoryOpen(true);
       }}>
-        {/* 当前 session 头 */}
-        <div className="cp-session-header active">
-          <span className="cp-session-icon active">♥</span>
-          <span className="cp-session-title">当前 session</span>
-          <span className="cp-session-meta">
-            {activeSession ? `${fmtSessionTime(activeSession.started_at)} - 当前` : '— · 当前'}
-            {activeSession?.turn_count ? ` · ${activeSession.turn_count} turn` : ''}
-            <span className="cp-session-status active"> · 活跃</span>
-          </span>
-        </div>
-
         {renderItems.length === 0 && !streamSnap && !showTyping && (
           <div className="cp-empty">开始一段新对话</div>
         )}
@@ -1660,45 +1540,6 @@ export default function ChatPanel({ onBack }) {
             </div>
           </div>
         )}
-
-        {/* 当前 session 末尾哨兵：scrollToBottom 滚到这里，不会越过下面的历史卡片 */}
-        <div ref={currentEndRef} className="cp-current-end" />
-
-        {/* 历史 session 卡片 */}
-        {endedSessions.length > 0 && (
-          <div className="cp-session-divider">— 历史 session —</div>
-        )}
-        {endedSessions.map(s => {
-          const expanded = expandedSessions.has(s.session_id);
-          return (
-            <div key={s.session_id} className="cp-session-card">
-              <div className="cp-session-card-head" onClick={() => toggleSessionExpand(s.session_id)}>
-                <span className="cp-session-icon ended">♥</span>
-                <span className="cp-session-range">
-                  {fmtSessionTime(s.started_at)} - {fmtSessionTime(s.ended_at)}
-                </span>
-                <span className="cp-session-meta">
-                  {s.turn_count || 0} turn · 已结束
-                </span>
-                <span className="cp-session-toggle">
-                  {expanded ? '▼ 收起' : '▶ 展开查看总结'}
-                </span>
-              </div>
-              {expanded && (
-                <div className="cp-session-summary">
-                  {s.summary ? (
-                    <>
-                      <div className="cp-session-summary-head">本段对话总结 · {fmtSessionTime(s.ended_at)}</div>
-                      <div className="cp-session-summary-body">{s.summary}</div>
-                    </>
-                  ) : (
-                    <div className="cp-session-summary-empty">无总结</div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
       </div>
 
       {/* INPUT BAR */}
@@ -1738,6 +1579,7 @@ export default function ChatPanel({ onBack }) {
 
       {/* TERMINAL placeholder */}
       {terminalOpen && <TerminalPanel onClose={() => setTerminalOpen(false)} />}
+      {sessionOpen && <SessionPanel onClose={() => setSessionOpen(false)} theme={resolved} />}
 
       {/* HISTORY full-screen modal (user avatar) */}
       {historyOpen && <HistoryModal onClose={() => setHistoryOpen(false)} showToast={showToast} />}
