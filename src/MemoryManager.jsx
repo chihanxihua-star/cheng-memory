@@ -3007,72 +3007,42 @@ function InjectionLogPanel() {
   );
 }
 
-// ── 手机数据：app_usage（只看今天） ──────────────────────────
-function fmtUsageDur(ms) {
-  if (!ms || ms <= 0) return "0 分";
-  const min = Math.round(ms / 60000);
-  if (min < 60) return min + " 分";
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return h + " 时" + (m ? " " + m + " 分" : "");
+// ── 手机数据：调 app-summary edge function 拿结构化数据 ────────────
+function fmtUsageDurMin(min) {
+  if (!min || min <= 0) return "0 分";
+  const m = Math.round(min);
+  if (m < 60) return m + " 分";
+  return Math.floor(m / 60) + " 时" + (m % 60 ? " " + (m % 60) + " 分" : "");
 }
 
-function buildUsageSessions(rows, now) {
-  // 只用 open 事件配对：每段 session = [open, next_open) 或 [open, now)
-  // close 事件忽略 —— 实测 close 噪声大（66/192 是 5 秒内就重新 open，
-  // 144/192 在 open 后 60 秒内触发），按 close 切会把真实使用时长砍到 ~1/2
-  const opens = rows
-    .filter(r => r.action === "open" && r.app_name)
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-  const out = [];
-  for (let i = 0; i < opens.length; i++) {
-    const start = new Date(opens[i].created_at);
-    const end = i + 1 < opens.length ? new Date(opens[i + 1].created_at) : now;
-    out.push({ app: opens[i].app_name, start, end });
-  }
-  return out;
-}
-
-function intersectMs(s1, e1, s2, e2) {
-  const a = Math.max(s1.getTime(), s2.getTime());
-  const b = Math.min(e1.getTime(), e2.getTime());
-  return Math.max(0, b - a);
+function fmtHHMM(iso) {
+  const d = new Date(iso);
+  const z = n => String(n).padStart(2, "0");
+  return z(d.getHours()) + ":" + z(d.getMinutes());
 }
 
 function UsagePanel() {
-  const [rows, setRows] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const start = new Date(); start.setHours(0, 0, 0, 0);
-      const params = `&created_at=gte.${encodeURIComponent(start.toISOString())}&order=created_at.asc&limit=10000`;
-      setRows(await sbGet("app_usage", params));
+      const r = await fetch(`${SB_URL}/functions/v1/app-summary?days=0&format=json`);
+      if (!r.ok) throw new Error(await r.text());
+      setSummary(await r.json());
     } catch(e) { setError(e.message); } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const now = new Date();
-  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
-
-  const sessions = buildUsageSessions(rows, now);
-
-  // 今日总使用时间
-  let todayTotal = 0;
-  for (const s of sessions) todayTotal += intersectMs(s.start, s.end, todayStart, now);
-
-  // 板块 TOP（今日）
-  const tByApp = {};
-  for (const s of sessions) {
-    const t = intersectMs(s.start, s.end, todayStart, now);
-    if (t > 0) tByApp[s.app] = (tByApp[s.app] || 0) + t;
-  }
-  const topApps = Object.entries(tByApp).sort((a, b) => b[1] - a[1]).slice(0, 8);
-
   const z = n => String(n).padStart(2, "0");
   const nowStr = z(now.getHours()) + ":" + z(now.getMinutes());
+
+  const apps = (summary?.apps || []).slice(0, 8);
+  const totalMin = summary?.totalMin || 0;
+  const maxMin = apps[0]?.totalMin || 1;
 
   return (
     <div>
@@ -3093,7 +3063,7 @@ function UsagePanel() {
       }}>
         <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.22em", marginBottom: 8 }}>总使用时间</div>
         <div style={{ fontSize: 28, color: "var(--text-primary)", fontWeight: 500, letterSpacing: "0.05em" }}>
-          {fmtUsageDur(todayTotal)}
+          {fmtUsageDurMin(totalMin)}
         </div>
       </div>
 
@@ -3103,17 +3073,25 @@ function UsagePanel() {
         borderRadius: 8, padding: "14px 14px 12px",
       }}>
         <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 10 }}>板块 TOP</div>
-        {topApps.length === 0 ? (
+        {apps.length === 0 ? (
           <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>—</div>
-        ) : topApps.map(([name, ms]) => {
-          const pct = ms / topApps[0][1];
+        ) : apps.map(a => {
+          const pct = a.totalMin / maxMin;
           return (
-            <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0" }}>
-              <span style={{ flex: "0 0 70px", fontSize: 12, color: "var(--text-primary)" }}>{name}</span>
+            <div key={a.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
+              <span style={{ flex: "0 0 90px", fontSize: 12, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
+                {a.name}
+                {a.active && (
+                  <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "var(--text-primary)", color: "var(--bg-page)", letterSpacing: "0.05em" }}>NOW</span>
+                )}
+              </span>
               <div style={{ flex: 1, height: 4, background: "var(--border)", borderRadius: 99 }}>
                 <div style={{ width: `${pct * 100}%`, height: "100%", background: "var(--text-primary)", opacity: 0.6, borderRadius: 99 }}/>
               </div>
-              <span style={{ flex: "0 0 56px", fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>{fmtUsageDur(ms)}</span>
+              <span style={{ flex: "0 0 90px", fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>
+                <span>{fmtUsageDurMin(a.totalMin)}</span>
+                <span style={{ opacity: 0.6, marginLeft: 6 }}>· {fmtHHMM(a.lastStart)}</span>
+              </span>
             </div>
           );
         })}
