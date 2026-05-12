@@ -13,6 +13,7 @@ const API_BASE = "https://chat.jessaminee.top";
 const API = API_BASE + "/api";
 const PROJECT_ID = "b5e5d83a-0c17-4421-a0e2-217519ed62fb";
 const CONV_KEY = "memhome-conv-id";
+const BASE_TOKENS_KEY = "memhome-base-tokens";
 
 /* 鉴权：所有 /api/* 请求自动带 Bearer，401/4001 抛 auth-expired */
 const AUTH_TOKEN_KEY = "memhome-auth-token";
@@ -850,6 +851,13 @@ export default function ChatPanel({ onBack }) {
   // 累计上下文 input tokens (= input + cache_read + cache_creation)。来自每轮 done 的 usage；
   // 加载历史时从最后一条 assistant 的 token_input 兜底（DB 没存 cache_*，会稍微低估）。
   const [contextInTokens, setContextInTokens] = useState(0);
+  // 基础 tokens：CC 启动时第一次 usage 的值（system prompt + tool defs 等基线）。
+  // 对话 tokens = contextInTokens - baseTokens。CC 重启/失忆/forge 后需要重新捕获。
+  const [baseTokens, setBaseTokens] = useState(() => {
+    const v = localStorage.getItem(BASE_TOKENS_KEY);
+    return v ? (parseInt(v, 10) || 0) : 0;
+  });
+  const baseCaptureNeededRef = useRef(!localStorage.getItem(BASE_TOKENS_KEY));
   const TOKEN_LIMIT = 200000;
   // 截断触发值：右上角字数 ≥ 此值时变红。来自 localStorage settings.compressThreshold
   // sidebar 关闭时刷新一次，保证从「参数设置」改完保存就立刻生效
@@ -1044,7 +1052,14 @@ export default function ChatPanel({ onBack }) {
           const inFull = (msg.usage.input_tokens || 0)
                        + (msg.usage.cache_read_input_tokens || 0)
                        + (msg.usage.cache_creation_input_tokens || 0);
-          if (inFull > 0) setContextInTokens(inFull);
+          if (inFull > 0) {
+            setContextInTokens(inFull);
+            if (baseCaptureNeededRef.current) {
+              setBaseTokens(inFull);
+              localStorage.setItem(BASE_TOKENS_KEY, String(inFull));
+              baseCaptureNeededRef.current = false;
+            }
+          }
         }
         const useBubbles = Array.isArray(s.bubbles) && s.bubbles.length > 0
           ? s.bubbles
@@ -1130,6 +1145,12 @@ export default function ChatPanel({ onBack }) {
         const detail = msg.detail || null;
         const sysId = msg.id || ("sys-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6));
         const sys = { id: sysId, role: "system", content, kind, detail };
+        // forge_done 意味着 CC 已经被重启到新 session，基础 tokens 需要重新捕获
+        if (kind === "forge_done") {
+          setBaseTokens(0);
+          localStorage.removeItem(BASE_TOKENS_KEY);
+          baseCaptureNeededRef.current = true;
+        }
         // forge_done 带 id：替换之前那条 forge_pending（同 id），实现"思绪 → 折叠"原地切换
         if (kind === "forge_done" && msg.id) {
           setMessages(prev => {
@@ -1320,6 +1341,10 @@ export default function ChatPanel({ onBack }) {
       setIsGenerating(false);
       setStreamSnap(null);
       streamRef.current = null;
+      // CC 重启 → 基础 tokens 需要重新捕获
+      setBaseTokens(0);
+      localStorage.removeItem(BASE_TOKENS_KEY);
+      baseCaptureNeededRef.current = true;
       if (opts.toastMessage) {
         // 模型切换等场景仍然走 toast，避免每次都在聊天里塞一条
         showToast(opts.toastMessage);
@@ -1469,6 +1494,15 @@ export default function ChatPanel({ onBack }) {
       setStreamSnap(null);
       streamRef.current = null;
       setContextInTokens(0);
+      setBaseTokens(0);
+      localStorage.removeItem(BASE_TOKENS_KEY);
+      baseCaptureNeededRef.current = true;
+      setMessages(prev => [...prev, {
+        id: "amnesia-" + Date.now(),
+        role: "system",
+        content: "失忆完成 · 干净新 session",
+        kind: "amnesia",
+      }]);
       setSessionOpen(false);
     } catch (e) {
       showToast("失忆失败：" + e.message);
@@ -1565,8 +1599,8 @@ export default function ChatPanel({ onBack }) {
             <button className="cp-model-btn" onClick={(e) => { e.stopPropagation(); setShowModelDropdown(s => !s); }}>
               <span className="cp-model-name">{currentModelInfo.name}</span>
               <span className={"cp-model-status" + (contextInTokens >= TOKEN_LIMIT * 0.8 ? " over" : "")}
-                title={`累计 input tokens（含 cache）/ 上限 ${formatK(TOKEN_LIMIT)}`}>
-                {formatK(contextInTokens)} / {formatK(TOKEN_LIMIT)}
+                title={`对话 ${formatK(Math.max(0, contextInTokens - baseTokens))} / 总 ${formatK(contextInTokens)}（基础 ${formatK(baseTokens)}，上限 ${formatK(TOKEN_LIMIT)}）`}>
+                对话 {formatK(Math.max(0, contextInTokens - baseTokens))} / 总 {formatK(contextInTokens)}
               </span>
             </button>
             {showModelDropdown && (
@@ -1604,6 +1638,9 @@ export default function ChatPanel({ onBack }) {
             }
             if (it.sysKind === "forge_done") {
               return <ForgeDoneRow key={it.id} content={it.content} detail={it.detail} />;
+            }
+            if (it.sysKind === "amnesia") {
+              return <div key={it.id} className="cp-date-sep">{it.content}</div>;
             }
             return <div key={it.id} className="cp-date-sep" style={{ color: "#888" }}>{it.content}</div>;
           }
