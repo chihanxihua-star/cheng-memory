@@ -330,6 +330,11 @@ const CSS = `
 .cp-msg-wrap.continuation { margin-left: 45px; max-width: calc(92% - 45px); margin-bottom: 6px; }
 .cp-msg-wrap.continuation .cp-avatar, .cp-msg-wrap.continuation .cp-msg-nick { display: none; }
 .cp-msg-wrap.continuation .cp-msg-bubble.assistant { border-radius: 4px 12px 12px 4px; }
+.cp-msg-wrap.cp-msg-highlight { animation: cp-msgPulse 1.6s ease-out; }
+@keyframes cp-msgPulse {
+  0%, 100% { background: transparent; }
+  20%, 60% { background: var(--bg-sidebar-hover); }
+}
 
 .cp-avatar {
   width: 34px; height: 34px; border-radius: 6px; flex-shrink: 0;
@@ -877,6 +882,10 @@ export default function ChatPanel({ onBack }) {
   // Session 可视化面板开关（点 Claude 头像打开）
   const [sessionOpen, setSessionOpen] = useState(false);
 
+  // JSONL 全 session 搜索
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState("");
+
   // sidebar 关闭时重新读截断触发值
   useEffect(() => {
     if (!sidebarOpen) setAlertThreshold(getSettings(PROJECT_ID).compressThreshold);
@@ -927,6 +936,7 @@ export default function ChatPanel({ onBack }) {
       const d = await r.json();
       setCcStatus(d.cc_running ? "ready" : "down");
       if (d.model && currentModel === "") setCurrentModel(d.model);
+      if (d.session) setCurrentSessionId(d.session);
     } catch {
       setCcStatus("down");
     }
@@ -1509,6 +1519,34 @@ export default function ChatPanel({ onBack }) {
     }
   }, [showToast]);
 
+  /* ─────── 搜索：跳转到当前对话里的某条消息 ─────── */
+  const jumpToMessage = useCallback((result, keyword) => {
+    if (!result || result.session_id !== currentSessionId) return false;
+    const role = result.type;
+    const kw = (keyword || "").toLowerCase();
+    const candidates = messages.filter(m =>
+      m.role === role && typeof m.content === "string" && kw && m.content.toLowerCase().includes(kw)
+    );
+    if (candidates.length === 0) return false;
+    const targetTs = result.timestamp ? new Date(result.timestamp).getTime() : null;
+    let best = candidates[0];
+    if (targetTs != null) {
+      let bestDiff = Infinity;
+      for (const c of candidates) {
+        const ts = c.created_at ? new Date(c.created_at).getTime() : null;
+        if (ts == null) continue;
+        const diff = Math.abs(ts - targetTs);
+        if (diff < bestDiff) { best = c; bestDiff = diff; }
+      }
+    }
+    const el = document.getElementById("cp-msg-" + best.id);
+    if (!el) return false;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.classList.add("cp-msg-highlight");
+    setTimeout(() => el.classList.remove("cp-msg-highlight"), 1800);
+    return true;
+  }, [currentSessionId, messages]);
+
   /* ─────── 重命名 ─────── */
   const confirmRename = useCallback(async (id, title) => {
     if (!title || !id) return;
@@ -1586,6 +1624,12 @@ export default function ChatPanel({ onBack }) {
               <line x1="3" y1="6" x2="21" y2="6"/>
               <line x1="3" y1="12" x2="21" y2="12"/>
               <line x1="3" y1="18" x2="13" y2="18"/>
+            </svg>
+          </button>
+          <button className="cp-hamburger" onClick={() => setSearchOpen(true)} aria-label="搜索" title="搜索聊天">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
           </button>
         </div>
@@ -1720,6 +1764,19 @@ export default function ChatPanel({ onBack }) {
 
       {/* HISTORY full-screen modal (user avatar) */}
       {historyOpen && <HistoryModal onClose={() => setHistoryOpen(false)} showToast={showToast} />}
+
+      {/* SEARCH JSONL 全 session 搜索 */}
+      {searchOpen && (
+        <SearchModal
+          onClose={() => setSearchOpen(false)}
+          currentSessionId={currentSessionId}
+          onJump={(r, kw) => {
+            const ok = jumpToMessage(r, kw);
+            if (ok) setSearchOpen(false);
+            else showToast("当前对话里没找到这条消息");
+          }}
+        />
+      )}
 
       {/* SIDEBAR */}
       {sidebarOpen && (
@@ -1895,7 +1952,7 @@ function MessageBubble({ item, profile, onCopy, onOpenImage, onEdit, onRegen }) 
   const cancelEdit = () => { setEditing(false); setEditText(partText); };
 
   return (
-    <div className={wrap}>
+    <div className={wrap} id={"cp-msg-" + msg.id}>
       {!continuation && (
         <div className={"cp-avatar " + (isUser ? "u" : "b")}>
           {(isUser ? profile.userImg : profile.botImg)
@@ -3441,6 +3498,144 @@ function HistoryModal({ onClose, showToast }) {
             )}
           </div>
 
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ─────── 全 session JSONL 搜索 ─────── */
+function SearchModal({ onClose, currentSessionId, onJump }) {
+  const [keyword, setKeyword] = useState("");
+  const [results, setResults] = useState([]);
+  const [meta, setMeta] = useState({ total: 0, truncated: false });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [submitted, setSubmitted] = useState("");
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current && inputRef.current.focus(); }, []);
+
+  const doSearch = useCallback(async () => {
+    const q = keyword.trim();
+    if (!q) { setResults([]); setMeta({ total: 0, truncated: false }); setSubmitted(""); return; }
+    setLoading(true); setError(null);
+    try {
+      const r = await authedFetch(API + "/search/messages?q=" + encodeURIComponent(q));
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
+      setResults(d.results || []);
+      setMeta({ total: d.total || 0, truncated: !!d.truncated });
+      setSubmitted(q);
+    } catch (e) {
+      setError(e.message || String(e));
+      setResults([]);
+    } finally { setLoading(false); }
+  }, [keyword]);
+
+  const onKeyDown = (e) => { if (e.key === "Enter") { e.preventDefault(); doSearch(); } };
+
+  // 高亮 preview 里的关键词（大小写不敏感）
+  const renderPreview = (text, kw) => {
+    if (!kw) return text;
+    const lower = text.toLowerCase();
+    const k = kw.toLowerCase();
+    const out = [];
+    let i = 0;
+    while (i < text.length) {
+      const idx = lower.indexOf(k, i);
+      if (idx === -1) { out.push(text.slice(i)); break; }
+      if (idx > i) out.push(text.slice(i, idx));
+      out.push(<mark key={idx} style={{ background: "var(--text-primary)", color: "var(--bg-page)", padding: "0 2px", borderRadius: 2 }}>{text.slice(idx, idx + kw.length)}</mark>);
+      i = idx + kw.length;
+    }
+    return out;
+  };
+
+  return createPortal(
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1000,
+      background: "var(--bg-page)",
+      display: "flex", flexDirection: "column",
+      animation: "slideDown 0.28s ease",
+      fontFamily: "Georgia, 'Noto Serif SC', serif",
+      color: "var(--text-primary)",
+    }}>
+      <div style={{
+        flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>CLOSE</button>
+        <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.22em" }}>搜索聊天</span>
+        <span style={{ width: 60 }}/>
+      </div>
+
+      <div style={{ flexShrink: 0, padding: "16px", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto", display: "flex", gap: 10 }}>
+          <input
+            ref={inputRef}
+            value={keyword}
+            onChange={e => setKeyword(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="搜索所有 session 的对话内容…"
+            style={{ flex: 1, ...HM_INPUT }}
+          />
+          <button onClick={doSearch} disabled={loading || !keyword.trim()} style={{
+            background: "var(--text-primary)", color: "var(--bg-page)",
+            border: "1px solid var(--text-primary)", padding: "6px 14px", borderRadius: 4,
+            fontSize: 11, letterSpacing: "0.18em",
+            cursor: (loading || !keyword.trim()) ? "default" : "pointer", fontFamily: "inherit",
+            opacity: (loading || !keyword.trim()) ? 0.5 : 1,
+          }}>{loading ? "…" : "搜索"}</button>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px calc(16px + env(safe-area-inset-bottom, 0px))" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          {error && <div style={{ color: "#d87878", fontSize: 12, padding: "12px 0" }}>{error}</div>}
+          {!error && submitted && (
+            <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 12 }}>
+              {meta.total} 条结果{meta.truncated ? "（仅显示前 200 条）" : ""}
+            </div>
+          )}
+          {!loading && submitted && results.length === 0 && !error && (
+            <div style={{ color: "var(--text-tertiary)", fontSize: 13, padding: "30px 0", textAlign: "center" }}>没有匹配</div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {results.map((r, i) => {
+              const isCurrent = r.session_id === currentSessionId && currentSessionId;
+              return (
+                <div key={i}
+                  onClick={() => isCurrent && onJump(r, submitted)}
+                  style={{
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                    padding: "10px 12px",
+                    cursor: isCurrent ? "pointer" : "default",
+                    transition: "background 0.15s",
+                    background: "transparent",
+                  }}
+                  onMouseEnter={e => { if (isCurrent) e.currentTarget.style.background = "var(--bg-sidebar-hover)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.1em", marginBottom: 6 }}>
+                    <span>
+                      {r.type === "user" ? "我" : "Claude"} · {r.timestamp ? formatChatTime(r.timestamp) : ""}
+                    </span>
+                    <span style={{ color: isCurrent ? "var(--text-primary)" : "var(--text-tertiary)" }}>
+                      {isCurrent ? "当前 · 点击跳转" : "旧 session"}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                    {renderPreview(r.preview, submitted)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>,
