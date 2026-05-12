@@ -847,6 +847,10 @@ export default function ChatPanel({ onBack }) {
   const [ccStatus, setCcStatus] = useState("unknown"); // ready / down / unknown
   const [currentModel, setCurrentModel] = useState("");
   const [charCount, setCharCount] = useState(0);
+  // 累计上下文 input tokens (= input + cache_read + cache_creation)。来自每轮 done 的 usage；
+  // 加载历史时从最后一条 assistant 的 token_input 兜底（DB 没存 cache_*，会稍微低估）。
+  const [contextInTokens, setContextInTokens] = useState(0);
+  const TOKEN_LIMIT = 200000;
   // 截断触发值：右上角字数 ≥ 此值时变红。来自 localStorage settings.compressThreshold
   // sidebar 关闭时刷新一次，保证从「参数设置」改完保存就立刻生效
   const [alertThreshold, setAlertThreshold] = useState(() => getSettings(PROJECT_ID).compressThreshold);
@@ -936,6 +940,9 @@ export default function ChatPanel({ onBack }) {
       setConvId(saved);
       const total = ms.reduce((s, m) => s + ((m.content || "").length || 0), 0);
       setCharCount(total);
+      // 从最后一条带 token_input 的 assistant 消息取累计 input tokens
+      const lastWithTok = [...ms].reverse().find(m => m.role === "assistant" && m.token_input);
+      setContextInTokens(lastWithTok?.token_input || 0);
       setMessages(ms.map(m => ({
         id: m.id,
         role: m.role,
@@ -1031,6 +1038,14 @@ export default function ChatPanel({ onBack }) {
         if (!s) { setIsGenerating(false); setStreamSnap(null); break; }
         const finalText = s.clean ?? s.delta ?? "";
         const outTokens = (msg.usage && (msg.usage.output_tokens || msg.usage.output)) || 0;
+        // 累计 input = 这一轮请求实际付费的全部 input（含缓存读/写）。
+        // cc-manager.js 推过来的 usage 对象已经把三项都填好了。
+        if (msg.usage) {
+          const inFull = (msg.usage.input_tokens || 0)
+                       + (msg.usage.cache_read_input_tokens || 0)
+                       + (msg.usage.cache_creation_input_tokens || 0);
+          if (inFull > 0) setContextInTokens(inFull);
+        }
         const useBubbles = Array.isArray(s.bubbles) && s.bubbles.length > 0
           ? s.bubbles
           : (finalText.indexOf("---bubble---") !== -1
@@ -1109,8 +1124,17 @@ export default function ChatPanel({ onBack }) {
         break;
       }
       case "system": {
-        // 显示系统消息为分隔符
-        const sys = { id: "sys-" + Date.now(), role: "system", content: msg.message };
+        // 兼容两种形态：旧的 {message:'…'} 和带 kind/detail 的进度消息
+        const content = msg.content || msg.message || "";
+        const kind = msg.kind || null;
+        const detail = msg.detail || null;
+        const sys = {
+          id: msg.id || ("sys-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6)),
+          role: "system",
+          content,
+          kind,
+          detail,
+        };
         setMessages(prev => [...prev, sys]);
         scrollToBottom();
         break;
@@ -1266,6 +1290,7 @@ export default function ChatPanel({ onBack }) {
     setStreamSnap(null);
     setShowTyping(false);
     setCharCount(0);
+    setContextInTokens(0);
     lastDateRef.current = null;
     setSidebarOpen(false);
   }, [isGenerating, stop]);
@@ -1402,12 +1427,15 @@ export default function ChatPanel({ onBack }) {
     setCurrentModel(value);
     const label = name || value || "默认";
     try {
+      // 进度提示走 WebSocket "system" 消息（后端 broadcast），这里不主动追加状态条
       const r = await authedFetch(API + "/cc/restart", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: value || null,
           forge: true,
           summaryLength: getSettings(PROJECT_ID).summaryLength,
+          conversation_id: convId || null,
+          model_label: label,
         }),
       });
       const d = await r.json();
@@ -1416,22 +1444,11 @@ export default function ChatPanel({ onBack }) {
       setIsGenerating(false);
       setStreamSnap(null);
       streamRef.current = null;
-      // 从后端响应里抠出锻造信息（优先 tokens，回退 events）
-      let detail = "";
-      if (d.forged) {
-        const tk = d.forge_total_tokens, rt = d.forge_retained_tokens;
-        if (d.forge_truncated && tk != null && rt != null) {
-          detail = ` 截断 ${formatK(tk)}→${formatK(rt)} tokens`;
-        } else if (rt != null) {
-          detail = ` 整段保留 ${formatK(rt)} tokens`;
-        }
-      }
-      showToast(`小太阳醒啦${detail} 当前模型：${label}`);
     } catch (e) {
       setCurrentModel(prevModel);
-      showToast("小太阳起床失败：forge 失败：" + e.message);
+      showToast("小太阳起床失败：" + e.message);
     }
-  }, [currentModel, showToast]);
+  }, [currentModel, convId, showToast]);
 
   /* ─────── 重命名 ─────── */
   const confirmRename = useCallback(async (id, title) => {
@@ -1452,7 +1469,10 @@ export default function ChatPanel({ onBack }) {
     let lastTs = null;
     for (const m of messages) {
       if (m.role === "system") {
-        items.push({ kind: "system", id: m.id, content: m.content });
+        items.push({
+          kind: "system", id: m.id, content: m.content,
+          sysKind: m.kind || null, detail: m.detail || null,
+        });
         continue;
       }
       const ts = m.created_at ? new Date(m.created_at).getTime() : null;
@@ -1519,8 +1539,9 @@ export default function ChatPanel({ onBack }) {
           <div className="cp-model-wrap">
             <button className="cp-model-btn" onClick={(e) => { e.stopPropagation(); setShowModelDropdown(s => !s); }}>
               <span className="cp-model-name">{currentModelInfo.name}</span>
-              <span className={"cp-model-status" + (charCount >= alertThreshold ? " over" : "")}>
-                {formatK(charCount)} / {formatK(alertThreshold)}
+              <span className={"cp-model-status" + (contextInTokens >= TOKEN_LIMIT * 0.8 ? " over" : "")}
+                title={`累计 input tokens（含 cache）/ 上限 ${formatK(TOKEN_LIMIT)}`}>
+                {formatK(contextInTokens)} / {formatK(TOKEN_LIMIT)}
               </span>
             </button>
             {showModelDropdown && (
@@ -1553,6 +1574,9 @@ export default function ChatPanel({ onBack }) {
             return <div key={it.id} className="cp-date-sep">{it.label}</div>;
           }
           if (it.kind === "system") {
+            if (it.sysKind === "forge_done") {
+              return <ForgeDoneRow key={it.id} content={it.content} detail={it.detail} />;
+            }
             return <div key={it.id} className="cp-date-sep" style={{ color: "#888" }}>{it.content}</div>;
           }
           return (
@@ -1701,6 +1725,45 @@ export default function ChatPanel({ onBack }) {
 /* ════════════════════════════════════════════════════════════
    子组件
    ════════════════════════════════════════════════════════════ */
+
+function ForgeDoneRow({ content, detail }) {
+  const [open, setOpen] = useState(false);
+  const hasDetail = detail && (detail.model || detail.forge_retained_tokens != null || detail.skipped);
+  const summary = content || "小太阳醒啦";
+  return (
+    <div className="cp-date-sep" style={{ color: "#888", display: "flex", justifyContent: "center" }}>
+      <span
+        onClick={hasDetail ? () => setOpen(o => !o) : undefined}
+        style={{
+          cursor: hasDetail ? "pointer" : "default",
+          display: "inline-flex", alignItems: "center", gap: 4,
+          userSelect: "none",
+        }}>
+        {hasDetail && (
+          <span style={{
+            display: "inline-block", transition: "transform .15s",
+            transform: open ? "rotate(90deg)" : "rotate(0deg)",
+            fontSize: 10, opacity: 0.6,
+          }}>›</span>
+        )}
+        <span>{summary}</span>
+      </span>
+      {open && hasDetail && (
+        <div style={{
+          marginLeft: 8, fontSize: 10, color: "#aaa",
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        }}>
+          {detail.skipped && "跳过 forge"}
+          {detail.forge_truncated && detail.forge_total_tokens != null && detail.forge_retained_tokens != null &&
+            `截断 ${formatK(detail.forge_total_tokens)}→${formatK(detail.forge_retained_tokens)} tokens`}
+          {!detail.forge_truncated && !detail.skipped && detail.forge_retained_tokens != null &&
+            `整段保留 ${formatK(detail.forge_retained_tokens)} tokens`}
+          {detail.model && ` · ${detail.model}`}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SendStopButton({ isGenerating, hasContent, onSend, onStop, onVoice }) {
   if (isGenerating) {
