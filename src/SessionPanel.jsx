@@ -2,6 +2,14 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
 
+// 9876 -> "9.9K"，跟 ChatPanel 右上角同一种缩写格式
+function formatK(n) {
+  if (!n || !isFinite(n)) return "0";
+  if (n < 1000) return String(n);
+  if (n < 10000) return (n / 1000).toFixed(1) + "K";
+  return Math.round(n / 1000) + "K";
+}
+
 // 数据库存 UTC ISO，前端强制按 UTC+8 显示（不依赖浏览器时区）
 function fmtSessionTime(iso) {
   if (!iso) return "—";
@@ -98,6 +106,25 @@ const STYLES = `
   background: none; border: none;
   color: var(--text-secondary, #6b6358);
   font-size: 22px; line-height: 1; cursor: pointer; padding: 4px 8px;
+}
+.sp-amnesia {
+  background: none; border: 1px solid var(--border-primary, #E0D8CE);
+  color: var(--text-secondary, #6b6358);
+  font-size: 12px; padding: 4px 10px; border-radius: 4px;
+  cursor: pointer; font-family: inherit;
+  transition: color .15s, border-color .15s, background .15s;
+  margin-left: auto; margin-right: 8px;
+}
+.sp-amnesia:hover {
+  color: #c0392b; border-color: #c0392b;
+  background: rgba(192, 57, 43, 0.06);
+}
+.sp-root[data-theme="dark"] .sp-amnesia {
+  border-color: #3a3a3c;
+}
+.sp-root[data-theme="dark"] .sp-amnesia:hover {
+  color: #ff8d80; border-color: #ff8d80;
+  background: rgba(255, 141, 128, 0.08);
 }
 .sp-body {
   flex: 1; min-height: 0; overflow-y: auto;
@@ -243,7 +270,7 @@ const STYLES = `
 }
 `;
 
-export default function SessionPanel({ onClose, theme = "light" }) {
+export default function SessionPanel({ onClose, theme = "light", currentTokens = 0, onAmnesia }) {
   const [sessions, setSessions] = useState([]);
   const [expanded, setExpanded] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
@@ -254,7 +281,7 @@ export default function SessionPanel({ onClose, theme = "light" }) {
     try {
       const { data, error } = await supabase
         .from("sessions_cheng")
-        .select("session_id, name, started_at, ended_at, turn_count, status, summary, forged_from_session")
+        .select("session_id, name, started_at, ended_at, turn_count, tokens_total, status, summary, forged_from_session")
         .order("created_at", { ascending: false })
         .limit(20);
       if (!error && Array.isArray(data)) setSessions(data);
@@ -332,6 +359,13 @@ export default function SessionPanel({ onClose, theme = "light" }) {
       <style>{STYLES}</style>
       <div className="sp-header">
         <span className="sp-title">SESSIONS</span>
+        {onAmnesia && (
+          <button
+            className="sp-amnesia"
+            onClick={onAmnesia}
+            title="清掉 forge marker，启动干净的新 session（不保留上文）"
+          >失忆</button>
+        )}
         <button className="sp-close" onClick={onClose} aria-label="close">×</button>
       </div>
 
@@ -366,7 +400,9 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                 {sid && (
                   <>
                     <div className="sp-head-meta">
-                      <span className="sp-head-turn">{activeSession?.turn_count || 0} turn</span>
+                      <span className="sp-head-turn" title="累计 input tokens（含 cache）">
+                        {formatK(currentTokens || 0)} tokens
+                      </span>
                     </div>
                     <span className="sp-toggle">{isOpen ? "v" : ">"}</span>
                   </>
@@ -379,7 +415,7 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                       {fmtSessionTime(activeSession.started_at)} - 当前
                     </span>
                     <span className="sp-detail-turn">
-                      {activeSession.turn_count || 0} turn
+                      {formatK(currentTokens || 0)} tokens · {activeSession.turn_count || 0} turn
                       {" · "}<span className="sp-status-active">活跃</span>
                     </span>
                   </div>
@@ -410,7 +446,9 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                   </span>
                 </div>
                 <div className="sp-head-meta">
-                  <span className="sp-head-turn">{s.turn_count || 0} turn</span>
+                  <span className="sp-head-turn" title="结束时累计 input tokens">
+                    {s.tokens_total != null ? `${formatK(s.tokens_total)} tokens` : `${s.turn_count || 0} turn`}
+                  </span>
                   <button
                     className="sp-delete"
                     onClick={(e) => { e.stopPropagation(); deleteSession(s.session_id); }}
@@ -425,7 +463,10 @@ export default function SessionPanel({ onClose, theme = "light" }) {
                     <span className="sp-detail-range">
                       {fmtSessionTime(s.started_at)} - {fmtSessionTime(s.ended_at)}
                     </span>
-                    <span className="sp-detail-turn">{s.turn_count || 0} turn</span>
+                    <span className="sp-detail-turn">
+                      {s.tokens_total != null ? `${formatK(s.tokens_total)} tokens · ` : ""}
+                      {s.turn_count || 0} turn
+                    </span>
                   </div>
                   <div className="sp-detail-summary">
                     {s.summary || <span className="sp-detail-empty">无总结</span>}

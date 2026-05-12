@@ -1124,18 +1124,26 @@ export default function ChatPanel({ onBack }) {
         break;
       }
       case "system": {
-        // 兼容两种形态：旧的 {message:'…'} 和带 kind/detail 的进度消息
+        // 兼容两种形态：旧的 {message:'…'} 和带 kind/detail/id 的进度消息
         const content = msg.content || msg.message || "";
         const kind = msg.kind || null;
         const detail = msg.detail || null;
-        const sys = {
-          id: msg.id || ("sys-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6)),
-          role: "system",
-          content,
-          kind,
-          detail,
-        };
-        setMessages(prev => [...prev, sys]);
+        const sysId = msg.id || ("sys-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6));
+        const sys = { id: sysId, role: "system", content, kind, detail };
+        // forge_done 带 id：替换之前那条 forge_pending（同 id），实现"思绪 → 折叠"原地切换
+        if (kind === "forge_done" && msg.id) {
+          setMessages(prev => {
+            const idx = prev.findIndex(m => m.id === msg.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = sys;
+              return next;
+            }
+            return [...prev, sys];
+          });
+        } else {
+          setMessages(prev => [...prev, sys]);
+        }
         scrollToBottom();
         break;
       }
@@ -1450,6 +1458,23 @@ export default function ChatPanel({ onBack }) {
     }
   }, [currentModel, convId, showToast]);
 
+  /* ─────── 失忆：清 forge marker + 新 random UUID 启动 CC（不 --resume） ─────── */
+  const amnesia = useCallback(async () => {
+    if (!window.confirm("失忆后从干净的新 session 开始（不保留任何上文）。确定？")) return;
+    try {
+      const r = await authedFetch(API + "/cc/amnesia", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
+      setIsGenerating(false);
+      setStreamSnap(null);
+      streamRef.current = null;
+      setContextInTokens(0);
+      setSessionOpen(false);
+    } catch (e) {
+      showToast("失忆失败：" + e.message);
+    }
+  }, [showToast]);
+
   /* ─────── 重命名 ─────── */
   const confirmRename = useCallback(async (id, title) => {
     if (!title || !id) return;
@@ -1574,6 +1599,9 @@ export default function ChatPanel({ onBack }) {
             return <div key={it.id} className="cp-date-sep">{it.label}</div>;
           }
           if (it.kind === "system") {
+            if (it.sysKind === "forge_pending") {
+              return <ForgePendingRow key={it.id} content={it.content} />;
+            }
             if (it.sysKind === "forge_done") {
               return <ForgeDoneRow key={it.id} content={it.content} detail={it.detail} />;
             }
@@ -1644,7 +1672,14 @@ export default function ChatPanel({ onBack }) {
 
       {/* TERMINAL placeholder */}
       {terminalOpen && <TerminalPanel onClose={() => setTerminalOpen(false)} />}
-      {sessionOpen && <SessionPanel onClose={() => setSessionOpen(false)} theme={resolved} />}
+      {sessionOpen && (
+        <SessionPanel
+          onClose={() => setSessionOpen(false)}
+          theme={resolved}
+          currentTokens={contextInTokens}
+          onAmnesia={amnesia}
+        />
+      )}
 
       {/* HISTORY full-screen modal (user avatar) */}
       {historyOpen && <HistoryModal onClose={() => setHistoryOpen(false)} showToast={showToast} />}
@@ -1725,6 +1760,17 @@ export default function ChatPanel({ onBack }) {
 /* ════════════════════════════════════════════════════════════
    子组件
    ════════════════════════════════════════════════════════════ */
+
+// 模型切换 / 失忆进行中：用 .cp-thinking-toggle.thinking 同款 shimmer 渐变动画
+function ForgePendingRow({ content }) {
+  return (
+    <div className="cp-date-sep" style={{ display: "flex", justifyContent: "center" }}>
+      <span className="cp-thinking-toggle thinking" style={{ cursor: "default", padding: 0 }}>
+        {content || "正在唤醒小太阳…"}
+      </span>
+    </div>
+  );
+}
 
 function ForgeDoneRow({ content, detail }) {
   const [open, setOpen] = useState(false);
