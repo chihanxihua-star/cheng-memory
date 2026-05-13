@@ -2309,23 +2309,51 @@ function ParamsScreen({ onBack, showToast }) {
   // 摘要长度仍存 localStorage（仅前端透传给后端 forge 总结流程）。
   const [forge, setForge] = useState(null); // { retain_tokens, trigger_threshold }
   const [forgeMsg, setForgeMsg] = useState("");
+  const [daemonEnabled, setDaemonEnabled] = useState(null); // null=加载中
+  const [daemonBusy, setDaemonBusy] = useState(false);
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const r = await authedFetch(API + "/forge/config");
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        const d = await r.json();
+        const [rc, rd] = await Promise.all([
+          authedFetch(API + "/forge/config"),
+          authedFetch(API + "/forge/daemon"),
+        ]);
+        if (!rc.ok) throw new Error("HTTP " + rc.status);
+        const d = await rc.json();
         if (alive) setForge({
           retain_tokens: d.retain_tokens,
           trigger_threshold: d.trigger_threshold,
         });
+        if (rd.ok) {
+          const dd = await rd.json();
+          if (alive) setDaemonEnabled(!!dd.enabled);
+        }
       } catch (e) {
         if (alive) setForgeMsg("读取 forge 配置失败：" + (e?.message || e));
       }
     })();
     return () => { alive = false; };
   }, []);
+
+  const toggleDaemon = async (next) => {
+    if (daemonBusy) return;
+    setDaemonBusy(true);
+    try {
+      const r = await authedFetch(API + "/forge/daemon", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
+      setDaemonEnabled(!!d.enabled);
+      showToast(d.enabled ? "自动 forge 已开启" : "自动 forge 已停用");
+    } catch (e) {
+      showToast("daemon 切换失败：" + e.message);
+    } finally {
+      setDaemonBusy(false);
+    }
+  };
 
   const save = async () => {
     // 1) 本地参数（摘要长度、短消息模式）
@@ -2373,13 +2401,25 @@ function ParamsScreen({ onBack, showToast }) {
       <div className="cp-ps-section-title">forge 设置</div>
       <div className="cp-ps-form">
         <label>forge 触发阈值（tokens）</label>
-        <input
-          type="number" min={10000} step={10000}
-          value={forge?.trigger_threshold ?? ""}
-          placeholder={forgeMsg ? "—" : "加载中…"}
-          onChange={e => setForge(f => ({ ...(f || {}), trigger_threshold: e.target.value }))}
-        />
-        <small>当前 session 真实 tokens 超过此值时 daemon 自动 forge（默认 200000）</small>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            type="number" min={10000} step={10000}
+            value={forge?.trigger_threshold ?? ""}
+            placeholder={forgeMsg ? "—" : "加载中…"}
+            onChange={e => setForge(f => ({ ...(f || {}), trigger_threshold: e.target.value }))}
+            style={{ flex: 1 }}
+          />
+          <label style={{ display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", cursor: daemonBusy || daemonEnabled === null ? "wait" : "pointer", opacity: daemonEnabled === null ? 0.5 : 1 }}>
+            <input
+              type="checkbox"
+              checked={daemonEnabled === true}
+              disabled={daemonBusy || daemonEnabled === null}
+              onChange={e => toggleDaemon(e.target.checked)}
+            />
+            <span>{daemonEnabled === null ? "…" : daemonEnabled ? "已开启" : "已停用"}</span>
+          </label>
+        </div>
+        <small>当前 session 真实 tokens 超过此值时 daemon 自动 forge（默认 200000）。开关控制 daemon 启停，关闭后只能手动切模型触发 forge。</small>
       </div>
       <div className="cp-ps-form">
         <label>截断触发值（字数）</label>
