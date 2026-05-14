@@ -17,9 +17,11 @@ function getSender(m) {
 }
 
 function getMsgText(m) {
-  if (m.content && Array.isArray(m.content))
-    return m.content.filter(b => b.type === "text").map(b => b.text || "").join("\n");
-  return m.text || "";
+  if (m.content && Array.isArray(m.content) && m.content.length > 0) {
+    const text = m.content.filter(b => b.type === "text").map(b => b.text || b.content || "").join("\n");
+    if (text.trim()) return text;
+  }
+  return m.text || (typeof m.content === "string" ? m.content : "") || "";
 }
 
 function getThinking(m) {
@@ -82,24 +84,30 @@ function downloadFile(name, content, type) {
 // ── Branch resolution ────────────────────────────────────
 function getActiveBranch(conv, msgs) {
   if (!msgs.length) return new Set();
+  const hasUuid = msgs.some(m => m.uuid);
+  if (!hasUuid) return new Set(msgs.map((_, i) => i));
+  const hasParentLinks = msgs.some(m => m.parent_message_uuid);
+  if (!hasParentLinks) return new Set(msgs.map(m => m.uuid));
   const msgMap = {};
   const childrenMap = {};
   msgs.forEach(m => {
-    msgMap[m.uuid] = m;
+    if (m.uuid) msgMap[m.uuid] = m;
     const p = m.parent_message_uuid || "__root__";
     if (!childrenMap[p]) childrenMap[p] = [];
     childrenMap[p].push(m);
   });
   let leaf = conv.current_leaf_message_uuid;
   if (!leaf || !msgMap[leaf]) {
-    const realLeaves = msgs.filter(m => !childrenMap[m.uuid] || !childrenMap[m.uuid].length);
+    const realLeaves = msgs.filter(m => m.uuid && (!childrenMap[m.uuid] || !childrenMap[m.uuid].length));
     const candidates = realLeaves.length ? realLeaves : msgs;
     candidates.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     leaf = candidates[0]?.uuid;
   }
+  if (!leaf) return new Set(msgs.map(m => m.uuid));
   const active = new Set();
   let cur = leaf;
   while (cur && msgMap[cur]) { active.add(cur); cur = msgMap[cur].parent_message_uuid; }
+  if (active.size <= 1 && msgs.length > 1) return new Set(msgs.map(m => m.uuid));
   return active;
 }
 
@@ -108,8 +116,15 @@ function processConversations(data) {
     .filter(c => (c.chat_messages || c.messages || []).length > 0)
     .map(c => {
       const msgs = c.chat_messages || c.messages || [];
-      const activeUuids = getActiveBranch(c, msgs);
-      const active = msgs.filter(m => activeUuids.has(m.uuid)).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      const activeIds = getActiveBranch(c, msgs);
+      const hasUuid = msgs.length > 0 && !!msgs[0].uuid;
+      let active = hasUuid
+        ? msgs.filter(m => activeIds.has(m.uuid))
+        : msgs.filter((_, i) => activeIds.has(i));
+      active.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      if (active.length === 0) {
+        active = [...msgs].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      }
       const first = active.find(m => getSender(m) === "human");
       return {
         uuid: c.uuid || crypto.randomUUID(),

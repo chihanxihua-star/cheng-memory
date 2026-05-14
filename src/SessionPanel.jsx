@@ -501,11 +501,15 @@ export default function SessionPanel({ onClose, theme = "light", currentTokens =
     if (!importMsgs) return 0;
     const cap = importTokenCap * 1000;
     const pct = importThinkingPct / 100;
+    const thinkingMsgs = pct > 0 ? importMsgs.filter(m => m.thinking) : [];
+    const thinkingStartIdx = thinkingMsgs.length > 0 && pct < 1
+      ? importMsgs.indexOf(thinkingMsgs[Math.floor(thinkingMsgs.length * (1 - pct))])
+      : 0;
     let acc = 0;
     for (let i = importMsgs.length - 1; i >= 0; i--) {
       const m = importMsgs[i];
       let tokens = estimateTokens(m.content);
-      if (pct > 0 && m.thinking) tokens += estimateTokens(m.thinking) * pct;
+      if (pct > 0 && m.thinking && i >= thinkingStartIdx) tokens += estimateTokens(m.thinking);
       acc += tokens;
       if (acc > cap) return i + 1;
     }
