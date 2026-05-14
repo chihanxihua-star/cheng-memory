@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
-import ChatPanel from "./ChatPanel";
+const ChatPanel = lazy(() => import("./ChatPanel"));
+const ChatViewer = lazy(() => import("./ChatViewer"));
 
 // ── 配置 ─────────────────────────────────────────────────
 const SB_URL = "https://fgfyvyztjyqvxijfppgm.supabase.co";
@@ -55,6 +56,14 @@ const ICONS = {
       <rect x="14" y="14" width="7" height="7" rx="1.5"/>
     </svg>
   ),
+  viewer: (
+    // 拾光：胶片/时间线
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="2"/>
+      <path d="M2 8h20M2 16h20" opacity="0.4"/>
+      <circle cx="12" cy="12" r="2.5"/>
+    </svg>
+  ),
 };
 
 const TABS = [
@@ -64,6 +73,7 @@ const TABS = [
   { key: "board", label: "回音" },
   { key: "chat", label: "花信风" },
   { key: "console", label: "控制台" },
+  { key: "viewer", label: "拾光" },
 ];
 
 const PANEL_NAME = Object.fromEntries(TABS.map(t => [t.key, t.label]));
@@ -3242,7 +3252,8 @@ function HomePanel({ onPick }) {
     { key: "chat", icon: "🌙", name: "花信风", sub: "聊天", span: 2 },
     { key: "milestones", icon: "🌱", name: "逢春", sub: "时间轴", span: 1 },
     { key: "board", icon: "🎧", name: "回音", sub: "留言板", span: 1 },
-    { key: "console", icon: "🖤", name: "控制台", sub: "工具箱", span: 2 },
+    { key: "viewer", icon: "🎞️", name: "拾光", sub: "对话回溯", span: 1 },
+    { key: "console", icon: "🖤", name: "控制台", sub: "工具箱", span: 1 },
   ];
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "calc(28px + env(safe-area-inset-top, 0px)) 16px 28px" }}>
@@ -3442,8 +3453,25 @@ export default function App() {
           pointerEvents: tab === "chat" ? "auto" : "none",
           zIndex: tab === "chat" ? 10 : -1,
         }}>
-          <ChatPanel onBack={() => setTab("home")}/>
+          <Suspense fallback={<div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-secondary)" }}>加载中…</div>}>
+            <ChatPanel onBack={() => setTab("home")}/>
+          </Suspense>
         </div>
+
+        {/* 拾光：对话回溯查看器 */}
+        {tab === "viewer" && (
+          <div style={{
+            position: "absolute", inset: 0,
+            display: "flex", flexDirection: "column",
+            minHeight: 0, overflow: "hidden",
+            background: "var(--bg-page)",
+            zIndex: 10,
+          }}>
+            <Suspense fallback={<div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-secondary)" }}>加载中…</div>}>
+              <ChatViewer onBack={() => setTab("home")}/>
+            </Suspense>
+          </div>
+        )}
       </div>
       </PasswordGate>
     </>

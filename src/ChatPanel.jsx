@@ -14,6 +14,7 @@ const API = API_BASE + "/api";
 const PROJECT_ID = "b5e5d83a-0c17-4421-a0e2-217519ed62fb";
 const CONV_KEY = "memhome-conv-id";
 const BASE_TOKENS_KEY = "memhome-base-tokens";
+const CONTEXT_TOKENS_KEY = "memhome-context-tokens";
 
 /* 鉴权：所有 /api/* 请求自动带 Bearer，401/4001 抛 auth-expired */
 const AUTH_TOKEN_KEY = "memhome-auth-token";
@@ -126,6 +127,11 @@ function estimateTokens(v) {
     }
   }
   return Math.round(cjk + other / 4);
+}
+
+// 这一轮的 API 消耗 = 本轮 input（含 cache_*）+ 本轮 output。
+function turnIncrement(msg) {
+  return (msg?.token_input || 0) + (msg?.token_output || 0);
 }
 function toolCallTokens(call) {
   if (!call) return 0;
@@ -854,8 +860,13 @@ export default function ChatPanel({ onBack }) {
   const [currentModel, setCurrentModel] = useState("");
   const [charCount, setCharCount] = useState(0);
   // 累计上下文 input tokens (= input + cache_read + cache_creation)。来自每轮 done 的 usage；
-  // 加载历史时从最后一条 assistant 的 token_input 兜底（DB 没存 cache_*，会稍微低估）。
-  const [contextInTokens, setContextInTokens] = useState(0);
+  // 持久化到 localStorage：WS 断线/页面刷新后从 localStorage 恢复，不归零。
+  // null = 还没收到过 usage（显示 "—"），number = 已知值。
+  const [contextInTokens, setContextInTokens] = useState(() => {
+    const v = localStorage.getItem(CONTEXT_TOKENS_KEY);
+    const n = v == null ? NaN : parseInt(v, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  });
   // 基础 tokens：CC 启动时第一次 usage 的值（system prompt + tool defs 等基线）。
   // 对话 tokens = contextInTokens - baseTokens。CC 重启/失忆/forge 后需要重新捕获。
   const [baseTokens, setBaseTokens] = useState(() => {
@@ -958,19 +969,36 @@ export default function ChatPanel({ onBack }) {
       setConvId(saved);
       const total = ms.reduce((s, m) => s + ((m.content || "").length || 0), 0);
       setCharCount(total);
-      // 从最后一条带 token_input 的 assistant 消息取累计 input tokens
-      const lastWithTok = [...ms].reverse().find(m => m.role === "assistant" && m.token_input);
-      setContextInTokens(lastWithTok?.token_input || 0);
-      setMessages(ms.map(m => ({
-        id: m.id,
-        role: m.role,
-        content: m.content || "",
-        thinking: m.thinking || null,
-        tool_calls: m.tool_calls || null,
-        images: m.images || [],
-        created_at: m.created_at || null,
-        token_output: m.token_output || 0,
-      })));
+      // 首次访问 / 清过缓存时 localStorage 没值，contextInTokens 没法初始化。
+      // DB 里 messages.token_input 现在存的是"等效 input"（含缓存折扣），
+      // 不是真实 context 大小——所以不再从 DB 兜底，让首次进来的"总"显示"—"，
+      // 下一轮收到 usage 事件后会立即补上真实值。
+      setMessages(ms.map(m => {
+        const msg = {
+          id: m.id,
+          role: m.role,
+          content: m.content || "",
+          thinking: m.thinking || null,
+          tool_calls: m.tool_calls || null,
+          images: m.images || [],
+          created_at: m.created_at || null,
+          token_input: m.token_input || 0,
+          token_output: m.token_output || 0,
+          cache_detail: m.cache_detail || null,
+        };
+        if (m.role === "system") {
+          if ((m.content || "").includes("小太阳醒啦")) {
+            msg.kind = "forge_done";
+            if (m.tool_calls && typeof m.tool_calls === "object") msg.detail = m.tool_calls;
+          } else if ((m.content || "").includes("失忆完成")) {
+            msg.kind = "amnesia";
+          } else if ((m.content || "").includes("已浮想")) {
+            msg.kind = "inject_done";
+            if (m.tool_calls && typeof m.tool_calls === "object") msg.detail = m.tool_calls;
+          }
+        }
+        return msg;
+      }));
       setTimeout(scrollToBottom, 50);
     } catch (e) {
       console.warn("加载历史失败", e);
@@ -1056,19 +1084,17 @@ export default function ChatPanel({ onBack }) {
         if (!s) { setIsGenerating(false); setStreamSnap(null); break; }
         const finalText = s.clean ?? s.delta ?? "";
         const outTokens = (msg.usage && (msg.usage.output_tokens || msg.usage.output)) || 0;
-        // 累计 input = 这一轮请求实际付费的全部 input（含缓存读/写）。
-        // cc-manager.js 推过来的 usage 对象已经把三项都填好了。
-        if (msg.usage) {
-          const inFull = (msg.usage.input_tokens || 0)
-                       + (msg.usage.cache_read_input_tokens || 0)
-                       + (msg.usage.cache_creation_input_tokens || 0);
-          if (inFull > 0) {
-            setContextInTokens(inFull);
-            if (baseCaptureNeededRef.current) {
-              setBaseTokens(inFull);
-              localStorage.setItem(BASE_TOKENS_KEY, String(inFull));
-              baseCaptureNeededRef.current = false;
-            }
+        // contextTokens = 最后一次 API 调用的实际上下文大小（非累加值）
+        const ctxSize = msg.contextTokens || (msg.usage
+          ? (msg.usage.input_tokens || 0) + (msg.usage.cache_read_input_tokens || 0) + (msg.usage.cache_creation_input_tokens || 0)
+          : 0);
+        if (ctxSize > 0) {
+          setContextInTokens(ctxSize);
+          localStorage.setItem(CONTEXT_TOKENS_KEY, String(ctxSize));
+          if (baseCaptureNeededRef.current) {
+            setBaseTokens(ctxSize);
+            localStorage.setItem(BASE_TOKENS_KEY, String(ctxSize));
+            baseCaptureNeededRef.current = false;
           }
         }
         const useBubbles = Array.isArray(s.bubbles) && s.bubbles.length > 0
@@ -1079,6 +1105,16 @@ export default function ChatPanel({ onBack }) {
         if (useBubbles.length > 0) {
           const created = new Date().toISOString();
           const baseId = msg.message_id || ("local-" + Date.now());
+          // 底部"累计（↑增量）"显示用的是等效 input —— 按缓存费率加权：
+          //   input × 1.0 + cache_read × 0.1 + cache_creation × 2.0（1h 缓存）
+          // 跟后端 index.js 写入 messages.token_input 的公式保持一致，命中缓存的轮次累计涨得慢。
+          const inFullForMsg = msg.usage
+            ? Math.round(
+                (msg.usage.input_tokens || 0) * 1.0
+                + (msg.usage.cache_read_input_tokens || 0) * 0.1
+                + (msg.usage.cache_creation_input_tokens || 0) * 2.0
+              )
+            : 0;
           // 先提交首个气泡（与原版一致：第一个气泡立即出现）
           const baseMsg = {
             id: baseId,
@@ -1088,7 +1124,13 @@ export default function ChatPanel({ onBack }) {
             tool_calls: s.tools.length ? s.tools.map(t => ({ ...t })) : null,
             images: [],
             created_at: created,
+            token_input: inFullForMsg,
             token_output: outTokens,
+            cache_detail: msg.usage ? {
+              input: msg.usage.input_tokens || 0,
+              cache_read: msg.usage.cache_read_input_tokens || 0,
+              cache_creation: msg.usage.cache_creation_input_tokens || 0,
+            } : null,
           };
           setMessages(prev => [...prev, baseMsg]);
           // 多气泡按 1500ms 节拍依次追加（每条气泡触发 cp-msgIn 进场动画）
@@ -1155,10 +1197,12 @@ export default function ChatPanel({ onBack }) {
         const detail = msg.detail || null;
         const sysId = msg.id || ("sys-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6));
         const sys = { id: sysId, role: "system", content, kind, detail };
-        // forge_done 意味着 CC 已经被重启到新 session，基础 tokens 需要重新捕获
+        // forge_done 意味着 CC 已经被重启到新 session，基础 / 上下文 tokens 都需要重新捕获
         if (kind === "forge_done") {
           setBaseTokens(0);
           localStorage.removeItem(BASE_TOKENS_KEY);
+          setContextInTokens(null);
+          localStorage.removeItem(CONTEXT_TOKENS_KEY);
           baseCaptureNeededRef.current = true;
         }
         // forge_done 带 id：替换之前那条 forge_pending（同 id），实现"思绪 → 折叠"原地切换
@@ -1329,7 +1373,8 @@ export default function ChatPanel({ onBack }) {
     setStreamSnap(null);
     setShowTyping(false);
     setCharCount(0);
-    setContextInTokens(0);
+    setContextInTokens(null);
+    localStorage.removeItem(CONTEXT_TOKENS_KEY);
     lastDateRef.current = null;
     setSidebarOpen(false);
   }, [isGenerating, stop]);
@@ -1342,6 +1387,7 @@ export default function ChatPanel({ onBack }) {
       const body = {};
       if (opts.model !== undefined) body.model = opts.model;
       if (opts.forge) body.forge = true;
+      if (convId) body.conversation_id = convId;
       const r = await authedFetch(API + "/cc/restart", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1351,9 +1397,11 @@ export default function ChatPanel({ onBack }) {
       setIsGenerating(false);
       setStreamSnap(null);
       streamRef.current = null;
-      // CC 重启 → 基础 tokens 需要重新捕获
+      // CC 重启 → 基础 tokens 需要重新捕获；上下文 tokens 也作废
       setBaseTokens(0);
       localStorage.removeItem(BASE_TOKENS_KEY);
+      setContextInTokens(null);
+      localStorage.removeItem(CONTEXT_TOKENS_KEY);
       baseCaptureNeededRef.current = true;
       if (opts.toastMessage) {
         // 模型切换等场景仍然走 toast，避免每次都在聊天里塞一条
@@ -1366,7 +1414,7 @@ export default function ChatPanel({ onBack }) {
     } catch (e) {
       showToast("重启失败: " + e.message);
     }
-  }, [isGenerating, showToast]);
+  }, [isGenerating, showToast, convId]);
   useEffect(() => { restartCCRef.current = restartCC; }, [restartCC]);
 
   /* ─────── 编辑 / 重生成 ─────── */
@@ -1422,6 +1470,14 @@ export default function ChatPanel({ onBack }) {
       showToast("正在重新生成…");
     } catch (e) { showToast("重新生成失败: " + e.message); }
   }, [convId, currentModel, loadCurrentConversation, showToast]);
+
+  const deleteMessage = useCallback(async (messageId) => {
+    if (!messageId || String(messageId).startsWith("local-")) return;
+    try {
+      await authedFetch(API + "/messages/" + messageId, { method: "DELETE" });
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+    } catch (e) { showToast("删除失败: " + e.message); }
+  }, [showToast]);
 
   /* ─────── 输入框 ─────── */
   const handleInputChange = (e) => {
@@ -1503,16 +1559,11 @@ export default function ChatPanel({ onBack }) {
       setIsGenerating(false);
       setStreamSnap(null);
       streamRef.current = null;
-      setContextInTokens(0);
+      setContextInTokens(null);
+      localStorage.removeItem(CONTEXT_TOKENS_KEY);
       setBaseTokens(0);
       localStorage.removeItem(BASE_TOKENS_KEY);
       baseCaptureNeededRef.current = true;
-      setMessages(prev => [...prev, {
-        id: "amnesia-" + Date.now(),
-        role: "system",
-        content: "失忆完成 · 干净新 session",
-        kind: "amnesia",
-      }]);
       setSessionOpen(false);
     } catch (e) {
       showToast("失忆失败：" + e.message);
@@ -1564,8 +1615,13 @@ export default function ChatPanel({ onBack }) {
   const renderItems = useMemo(() => {
     const items = [];
     let lastTs = null;
+    // session 级 running total：每轮把本轮 (input + output) 累加进去。
+    // 增量 = 本轮 (input + output)，等同这轮 API 计费消耗，恒 ≥ 0。
+    // 失忆 / forge_done 是 CC 进程级断点——之前的 token 是上个 session 的账，归零重新算。
+    let sessionTotal = 0;
     for (const m of messages) {
       if (m.role === "system") {
+        if (m.kind === "amnesia" || m.kind === "forge_done") sessionTotal = 0;
         items.push({
           kind: "system", id: m.id, content: m.content,
           sysKind: m.kind || null, detail: m.detail || null,
@@ -1579,6 +1635,17 @@ export default function ChatPanel({ onBack }) {
         }
         lastTs = ts;
       }
+      // 每个 assistant 消息一轮：增量 = 本轮 (input + output)，总量 = session 累加值
+      let turnTotal = 0;
+      let turnDelta = 0;
+      if (m.role === "assistant") {
+        const inc = turnIncrement(m);
+        if (inc > 0) {
+          sessionTotal += inc;
+          turnTotal = sessionTotal;
+          turnDelta = inc;
+        }
+      }
       // 拆分 ---bubble--- 多气泡
       if (m.role === "assistant" && m.content && m.content.indexOf("---bubble---") !== -1) {
         const parts = m.content.split("---bubble---").map(x => x.trim()).filter(Boolean);
@@ -1587,10 +1654,15 @@ export default function ChatPanel({ onBack }) {
             kind: "msg", id: m.id + "-" + i, msg: m, partText: text, partIndex: i,
             isHead: i === 0, isTail: i === parts.length - 1,
             continuation: i > 0,
+            turnTotal, turnDelta,
           });
         });
       } else {
-        items.push({ kind: "msg", id: m.id, msg: m, partText: m.content, partIndex: 0, isHead: true, isTail: true });
+        items.push({
+          kind: "msg", id: m.id, msg: m, partText: m.content, partIndex: 0,
+          isHead: true, isTail: true,
+          turnTotal, turnDelta,
+        });
       }
     }
     return items;
@@ -1642,10 +1714,20 @@ export default function ChatPanel({ onBack }) {
           <div className="cp-model-wrap">
             <button className="cp-model-btn" onClick={(e) => { e.stopPropagation(); setShowModelDropdown(s => !s); }}>
               <span className="cp-model-name">{currentModelInfo.name}</span>
-              <span className={"cp-model-status" + (contextInTokens >= TOKEN_LIMIT * 0.8 ? " over" : "")}
-                title={`对话 ${formatK(Math.max(0, contextInTokens - baseTokens))} / 总 ${formatK(contextInTokens)}（基础 ${formatK(baseTokens)}，上限 ${formatK(TOKEN_LIMIT)}）`}>
-                对话 {formatK(Math.max(0, contextInTokens - baseTokens))} / 总 {formatK(contextInTokens)}
-              </span>
+              {(() => {
+                const known = typeof contextInTokens === "number" && contextInTokens > 0;
+                const over = known && contextInTokens >= TOKEN_LIMIT * 0.8;
+                const dialog = known ? formatK(Math.max(0, contextInTokens - baseTokens)) : "—";
+                const total = known ? formatK(contextInTokens) : "—";
+                return (
+                  <span className={"cp-model-status" + (over ? " over" : "")}
+                    title={known
+                      ? `对话 ${dialog} / 总 ${total}（基础 ${formatK(baseTokens)}，上限 ${formatK(TOKEN_LIMIT)}）`
+                      : "还没收到 usage 事件"}>
+                    对话 {dialog} / 总 {total}
+                  </span>
+                );
+              })()}
             </button>
             {showModelDropdown && (
               <div className="cp-model-dropdown" onClick={e => e.stopPropagation()}>
@@ -1681,10 +1763,13 @@ export default function ChatPanel({ onBack }) {
               return <ForgePendingRow key={it.id} content={it.content} />;
             }
             if (it.sysKind === "forge_done") {
-              return <ForgeDoneRow key={it.id} content={it.content} detail={it.detail} />;
+              return <ForgeDoneRow key={it.id} content={it.content} detail={it.detail} showToast={showToast} />;
             }
             if (it.sysKind === "amnesia") {
               return <div key={it.id} className="cp-date-sep">{it.content}</div>;
+            }
+            if (it.sysKind === "inject_done") {
+              return <InjectDoneRow key={it.id} content={it.content} detail={it.detail} />;
             }
             return <div key={it.id} className="cp-date-sep" style={{ color: "#888" }}>{it.content}</div>;
           }
@@ -1694,6 +1779,7 @@ export default function ChatPanel({ onBack }) {
               onOpenImage={(src) => setImageViewer(src)}
               onEdit={editMessage}
               onRegen={regenerateMessage}
+              onDelete={deleteMessage}
             />
           );
         })}
@@ -1759,6 +1845,7 @@ export default function ChatPanel({ onBack }) {
           theme={resolved}
           currentTokens={contextInTokens}
           onAmnesia={amnesia}
+          convId={convId}
         />
       )}
 
@@ -1798,7 +1885,11 @@ export default function ChatPanel({ onBack }) {
                 setTheme={setTheme}
                 onNewChat={newChat}
                 onRestartCC={restartCC}
+                onAmnesia={amnesia}
+                onSelectModel={selectModel}
+                currentModel={currentModel}
                 onOpenTerminal={() => { setTerminalOpen(true); setSidebarOpen(false); }}
+                onOpenSession={() => { setSessionOpen(true); setSidebarOpen(false); }}
                 showToast={showToast}
                 convId={convId}
               />
@@ -1866,12 +1957,34 @@ function ForgePendingRow({ content }) {
   );
 }
 
-function ForgeDoneRow({ content, detail }) {
+function ForgeDoneRow({ content, detail, showToast }) {
   const [open, setOpen] = useState(false);
-  const hasDetail = detail && (detail.model || detail.forge_retained_tokens != null || detail.skipped);
+  const alreadyInjected = detail?.inject_msg_count != null;
+  const [injectState, setInjectState] = useState(alreadyInjected ? "done" : "pending"); // pending | loading | done
+  const [injectResult, setInjectResult] = useState(null);
+  const hasDetail = detail && (detail.model || detail.forge_retained_tokens != null || detail.skipped || detail.inject_msg_count || detail.inject_ready);
   const summary = content || "小太阳醒啦";
+
+  const doInject = async (withThinking) => {
+    if (!detail?.inject_conversation_id) return;
+    setInjectState("loading");
+    try {
+      const r = await authedFetch(API + "/cc/inject", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation_id: detail.inject_conversation_id, withThinking }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
+      setInjectResult(d);
+      setInjectState("done");
+    } catch (e) {
+      showToast && showToast("注入失败：" + e.message);
+      setInjectState("pending");
+    }
+  };
+
   return (
-    <div className="cp-date-sep" style={{ color: "#888", display: "flex", justifyContent: "center" }}>
+    <div className="cp-date-sep" style={{ color: "#888", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
       <span
         onClick={hasDetail ? () => setOpen(o => !o) : undefined}
         style={{
@@ -1889,16 +2002,72 @@ function ForgeDoneRow({ content, detail }) {
         <span>{summary}</span>
       </span>
       {open && hasDetail && (
-        <div style={{
-          marginLeft: 8, fontSize: 10, color: "#aaa",
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        }}>
+        <div style={{ fontSize: 10, color: "#aaa", textAlign: "center" }}>
           {detail.skipped && "跳过 forge"}
           {detail.forge_truncated && detail.forge_total_tokens != null && detail.forge_retained_tokens != null &&
             `截断 ${formatK(detail.forge_total_tokens)}→${formatK(detail.forge_retained_tokens)} tokens`}
           {!detail.forge_truncated && !detail.skipped && detail.forge_retained_tokens != null &&
             `整段保留 ${formatK(detail.forge_retained_tokens)} tokens`}
+          {(() => {
+            const ir = injectResult?.injected ? injectResult : (detail?.inject_msg_count != null ? { msgCount: detail.inject_msg_count, estTokens: detail.inject_est_tokens, thinkingCount: detail.inject_thinking_count, thinkingTokens: detail.inject_thinking_tokens } : null);
+            if (!ir) return null;
+            let s = ` · 已浮想 ${ir.msgCount} 个回忆（~${formatK(ir.estTokens)} tokens）`;
+            if (ir.thinkingCount > 0)
+              s += `${ir.thinkingCount} 个思绪（~${formatK(ir.thinkingTokens)} tokens）`;
+            return s;
+          })()}
           {detail.model && ` · ${detail.model}`}
+        </div>
+      )}
+      {detail?.inject_ready && injectState === "pending" && (
+        <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
+          <button onClick={() => doInject(true)} style={{
+            background: "none", border: "1px solid var(--border-input)", borderRadius: 12,
+            color: "var(--text-secondary)", fontSize: 11, padding: "3px 10px", cursor: "pointer",
+            fontFamily: "inherit",
+          }}>浮想思绪</button>
+          <button onClick={() => doInject(false)} style={{
+            background: "none", border: "1px solid var(--border-input)", borderRadius: 12,
+            color: "var(--text-secondary)", fontSize: 11, padding: "3px 10px", cursor: "pointer",
+            fontFamily: "inherit",
+          }}>不浮想思绪</button>
+        </div>
+      )}
+      {detail?.inject_ready && injectState === "loading" && (
+        <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>小太阳浮想思绪…</div>
+      )}
+    </div>
+  );
+}
+
+function InjectDoneRow({ content, detail }) {
+  const [open, setOpen] = useState(false);
+  const hasDetail = detail && (detail.inject_msg_count != null || detail.inject_est_tokens != null);
+  const summary = content || "小太阳浮想了旧回忆";
+  return (
+    <div className="cp-date-sep" style={{ color: "#888", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+      <span
+        onClick={hasDetail ? () => setOpen(o => !o) : undefined}
+        style={{
+          cursor: hasDetail ? "pointer" : "default",
+          display: "inline-flex", alignItems: "center", gap: 4,
+          userSelect: "none",
+        }}>
+        {hasDetail && (
+          <span style={{
+            display: "inline-block", transition: "transform .15s",
+            transform: open ? "rotate(90deg)" : "rotate(0deg)",
+            fontSize: 10, opacity: 0.6,
+          }}>›</span>
+        )}
+        <span>{summary}</span>
+      </span>
+      {open && hasDetail && (
+        <div style={{ fontSize: 10, color: "#aaa", textAlign: "center" }}>
+          {detail.inject_msg_count != null && `${detail.inject_msg_count} 个回忆（~${formatK(detail.inject_est_tokens || 0)} tokens）`}
+          {detail.inject_thinking_count > 0 &&
+            ` · ${detail.inject_thinking_count} 个思绪（~${formatK(detail.inject_thinking_tokens || 0)} tokens）`}
+          {detail.from_session && ` · 来自旧 session`}
         </div>
       )}
     </div>
@@ -1932,12 +2101,13 @@ function SendStopButton({ isGenerating, hasContent, onSend, onStop, onVoice }) {
   );
 }
 
-function MessageBubble({ item, profile, onCopy, onOpenImage, onEdit, onRegen }) {
-  const { msg, partText, isHead, isTail, continuation } = item;
+function MessageBubble({ item, profile, onCopy, onOpenImage, onEdit, onRegen, onDelete }) {
+  const { msg, partText, isHead, isTail, continuation, turnTotal, turnDelta } = item;
   const role = msg.role;
   const [showActions, setShowActions] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(partText);
+  const [showCacheDetail, setShowCacheDetail] = useState(false);
 
   const isUser = role === "user";
   const wrap = "cp-msg-wrap " + role + (continuation ? " continuation" : "") + (showActions ? " show-actions" : "");
@@ -2004,11 +2174,38 @@ function MessageBubble({ item, profile, onCopy, onOpenImage, onEdit, onRegen }) 
           <div className="cp-msg-actions">
             <span className="cp-action-time">
               {formatTime(ts)}
-              {isTail && msg.token_output ? " · " + msg.token_output + " tokens" : ""}
+              {(() => {
+                if (!isTail || !turnTotal) return "";
+                const cd = msg.cache_detail;
+                const hitPct = cd ? Math.round(cd.cache_read / (cd.input + cd.cache_read + cd.cache_creation) * 100) : null;
+                return (<>
+                  {" · " + turnTotal + " tokens（↑" + turnDelta + (hitPct != null ? " · ⚡" + hitPct + "%" : "") + "）"}
+                  {cd && (<>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); setShowCacheDetail(s => !s); }}
+                      style={{ cursor: "pointer", opacity: 0.5, marginLeft: 2 }}
+                    >{showCacheDetail ? "▾" : "▸"}</span>
+                    {showCacheDetail && (
+                      <span style={{ display: "block", fontSize: 9, opacity: 0.55, lineHeight: 1.6, marginTop: 2 }}>
+                        缓存命中 {cd.cache_read.toLocaleString()} / {(cd.input + cd.cache_read + cd.cache_creation).toLocaleString()}
+                        <br/>命中缓存 {cd.cache_read.toLocaleString()} × 0.1
+                        <br/>新建缓存 {cd.cache_creation.toLocaleString()} × 2.0
+                        <br/>未缓存 {cd.input.toLocaleString()} × 1.0
+                        <br/>claude本轮输出 {msg.token_output.toLocaleString()}
+                      </span>
+                    )}
+                  </>)}
+                </>);
+              })()}
             </span>
             <button className="cp-action-btn" title="复制" onClick={(e) => { e.stopPropagation(); onCopy(partText || ""); }}>
               <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
+            {msg.id && !String(msg.id).startsWith("local-") && (
+              <button className="cp-action-btn" title="删除" onClick={(e) => { e.stopPropagation(); onDelete(msg.id); }}>
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            )}
             {isUser && msg.id && !String(msg.id).startsWith("local-") && (
               <button className="cp-action-btn" title="编辑" onClick={(e) => { e.stopPropagation(); startEdit(); }}>
                 <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -2227,13 +2424,14 @@ function StreamingBubble({ snap, profile, showTyping }) {
 }
 
 /* ─────── Sidebar 多屏 ─────── */
-function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, onOpenTerminal, showToast, convId }) {
+function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, onAmnesia, onSelectModel, currentModel, onOpenTerminal, onOpenSession, showToast, convId }) {
   if (screen === "main") {
     return (
       <>
         <div className="cp-ps-section-title">通用</div>
         <div className="cp-ps-list">
           <SidebarItem onClick={() => setScreen("window")}>CC窗口</SidebarItem>
+          <SidebarItem onClick={onOpenSession}>Session</SidebarItem>
           <SidebarItem onClick={() => setScreen("voice")}>语音服务</SidebarItem>
           <SidebarItem onClick={onOpenTerminal}>终端</SidebarItem>
         </div>
@@ -2269,6 +2467,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
         <div className="cp-ps-list">
           <SidebarItem onClick={onNewChat}>新对话（清屏）</SidebarItem>
           <SidebarItem onClick={() => onRestartCC()}>重启 CC 进程</SidebarItem>
+          <SidebarItem onClick={onAmnesia}>失忆（无上下文）</SidebarItem>
         </div>
       </>
     );
@@ -2284,7 +2483,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
     );
   }
   if (screen === "history") return <HistoryScreen onBack={() => setScreen("main")} showToast={showToast} />;
-  if (screen === "documents") return <DocumentsScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} showToast={showToast} />;
+  if (screen === "documents") return <DocumentsScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} onAmnesia={onAmnesia} onSelectModel={onSelectModel} currentModel={currentModel} showToast={showToast} />;
   if (screen === "params") return <ParamsScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "api") return <APISettingsScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "stats") return <StatsScreen onBack={() => setScreen("stats-menu")} />;
@@ -2915,11 +3114,13 @@ const TEXTAREA_STYLE = {
 };
 
 // CC 文档：CLAUDE.md + system_prompt + 文件 共用一个底部保存按钮
-function CCDocumentsTab({ onRestartCC, showToast }) {
+function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, showToast }) {
   const [claudeMd, setClaudeMd] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [showModelPicker, setShowModelPicker] = useState(false);
 
   const filterEq = useMemo(
     () => ({ project_id: PROJECT_ID, mode: "cc", doc_type: "file" }),
@@ -2953,13 +3154,10 @@ function CCDocumentsTab({ onRestartCC, showToast }) {
   const saveAll = async () => {
     setSaving(true);
     try {
-      // 系统提示在前、CLAUDE.md 在后；任一失败立即抛出
       await upsertDocSingleton("cc", "system_prompt", systemPrompt);
       await upsertDocSingleton("cc", "claude_md", claudeMd);
-      showToast("已保存，重启 CC 后生效", {
-        action: { label: "立即重启", onClick: () => onRestartCC && onRestartCC() },
-        duration: 12000,
-      });
+      setSaved(true);
+      showToast("已保存");
     } catch (e) {
       showToast("保存失败：" + (e.message || e));
     } finally { setSaving(false); }
@@ -3011,9 +3209,62 @@ function CCDocumentsTab({ onRestartCC, showToast }) {
         style={{ marginTop: 18 }}>
         {saving ? "保存中…" : "保存"}
       </button>
-      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 8, lineHeight: 1.6 }}>
-        一次保存系统提示与 CLAUDE.md；保存后会出现「立即重启」按钮，文件区域的增删立即生效。
-      </div>
+
+      {saved && (
+        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.6 }}>
+            已保存，选择重启方式：
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="cp-ps-btn" style={{ flex: 1 }}
+              onClick={() => { setSaved(false); onAmnesia && onAmnesia(); }}>
+              失忆重启
+            </button>
+            <div style={{ flex: 1, position: "relative" }}>
+              <button className="cp-ps-btn" style={{ width: "100%" }}
+                onClick={() => setShowModelPicker(p => !p)}>
+                选择模型重启 ▾
+              </button>
+              {showModelPicker && (
+                <div style={{
+                  position: "absolute", bottom: "100%", left: 0, right: 0,
+                  marginBottom: 4, background: "var(--bg-secondary, #1a1a1a)",
+                  border: "1px solid var(--border-input)", borderRadius: 8,
+                  overflow: "hidden", zIndex: 10,
+                }}>
+                  {MODEL_OPTIONS.map(m => (
+                    <div key={m.value || "default"}
+                      style={{
+                        padding: "8px 12px", cursor: "pointer", fontSize: 13,
+                        color: currentModel === m.value ? "var(--accent, #a89fd8)" : "var(--text-primary)",
+                        background: currentModel === m.value ? "var(--bg-tertiary, #252525)" : "transparent",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-tertiary, #252525)"; }}
+                      onMouseLeave={e => { if (currentModel !== m.value) e.currentTarget.style.background = "transparent"; }}
+                      onClick={() => {
+                        setShowModelPicker(false);
+                        setSaved(false);
+                        onSelectModel && onSelectModel(m.value, m.name);
+                      }}>
+                      <div style={{ fontWeight: 500 }}>{m.name}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>{m.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.6 }}>
+            失忆 = 清空上下文从零开始 · 选择模型 = forge 保留对话记忆
+          </div>
+        </div>
+      )}
+
+      {!saved && (
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 8, lineHeight: 1.6 }}>
+          一次保存系统提示与 CLAUDE.md；文件区域的增删立即生效。
+        </div>
+      )}
     </>
   );
 }
@@ -3051,12 +3302,12 @@ function APIDocumentsTab({ showToast }) {
   );
 }
 
-function DocumentsTab({ mode, onRestartCC, showToast }) {
-  if (mode === "cc") return <CCDocumentsTab onRestartCC={onRestartCC} showToast={showToast} />;
+function DocumentsTab({ mode, onRestartCC, onAmnesia, onSelectModel, currentModel, showToast }) {
+  if (mode === "cc") return <CCDocumentsTab onRestartCC={onRestartCC} onAmnesia={onAmnesia} onSelectModel={onSelectModel} currentModel={currentModel} showToast={showToast} />;
   return <APIDocumentsTab showToast={showToast} />;
 }
 
-function DocumentsScreen({ onBack, onRestartCC, showToast }) {
+function DocumentsScreen({ onBack, onRestartCC, onAmnesia, onSelectModel, currentModel, showToast }) {
   const [tab, setTab] = useState("cc");
   return (
     <>
@@ -3065,7 +3316,7 @@ function DocumentsScreen({ onBack, onRestartCC, showToast }) {
         <div className={"cp-ps-tab" + (tab === "cc" ? " active" : "")} onClick={() => setTab("cc")}>CC 文档</div>
         <div className={"cp-ps-tab" + (tab === "api" ? " active" : "")} onClick={() => setTab("api")}>API 文档</div>
       </div>
-      <DocumentsTab mode={tab} onRestartCC={onRestartCC} showToast={showToast} />
+      <DocumentsTab mode={tab} onRestartCC={onRestartCC} onAmnesia={onAmnesia} onSelectModel={onSelectModel} currentModel={currentModel} showToast={showToast} />
     </>
   );
 }
@@ -3553,7 +3804,11 @@ function SearchModal({ onClose, currentSessionId, onJump }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [submitted, setSubmitted] = useState("");
+  // 旧 session 结果展开：当前展开的索引 + 那天的全部消息（按时间正序）
+  const [expandedIdx, setExpandedIdx] = useState(-1);
+  const [dayData, setDayData] = useState(null); // { loading, error, msgs, anchor }
   const inputRef = useRef(null);
+  const dayScrollRef = useRef(null);
 
   useEffect(() => { inputRef.current && inputRef.current.focus(); }, []);
 
@@ -3561,6 +3816,7 @@ function SearchModal({ onClose, currentSessionId, onJump }) {
     const q = keyword.trim();
     if (!q) { setResults([]); setMeta({ total: 0, truncated: false }); setSubmitted(""); return; }
     setLoading(true); setError(null);
+    setExpandedIdx(-1); setDayData(null);
     try {
       const r = await authedFetch(API + "/search/messages?q=" + encodeURIComponent(q));
       const d = await r.json();
@@ -3575,6 +3831,47 @@ function SearchModal({ onClose, currentSessionId, onJump }) {
   }, [keyword]);
 
   const onKeyDown = (e) => { if (e.key === "Enter") { e.preventDefault(); doSearch(); } };
+
+  // 拉取匹配消息所在那一天的全部消息（应用 forge 去重，时间正序）
+  const expandDay = useCallback(async (i, r) => {
+    if (expandedIdx === i) { setExpandedIdx(-1); setDayData(null); return; }
+    setExpandedIdx(i);
+    if (!r.timestamp) {
+      setDayData({ loading: false, error: "结果无时间戳，无法展开", msgs: [], anchor: null });
+      return;
+    }
+    setDayData({ loading: true, error: null, msgs: [], anchor: null });
+    const d = new Date(r.timestamp);
+    const s = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+    const e = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+    try {
+      const resp = await authedFetch(
+        API + "/search/day-messages"
+        + "?start=" + encodeURIComponent(s.toISOString())
+        + "&end=" + encodeURIComponent(e.toISOString())
+      );
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || "HTTP " + resp.status);
+      setDayData({
+        loading: false, error: null,
+        msgs: data.messages || [],
+        anchor: { session_id: r.session_id, uuid: r.uuid || null, timestamp: r.timestamp },
+      });
+    } catch (err) {
+      setDayData({ loading: false, error: err.message || String(err), msgs: [], anchor: null });
+    }
+  }, [expandedIdx]);
+
+  // dayData 渲染完后，自动滚到匹配的那条消息（在容器中部）
+  useEffect(() => {
+    if (!dayData || dayData.loading || !dayData.anchor) return;
+    const container = dayScrollRef.current;
+    if (!container) return;
+    const el = container.querySelector('[data-match="1"]');
+    if (!el) return;
+    const top = el.offsetTop - container.offsetTop;
+    container.scrollTop = Math.max(0, top - container.clientHeight / 2 + el.clientHeight / 2);
+  }, [dayData]);
 
   // 高亮 preview 里的关键词（大小写不敏感）
   const renderPreview = (text, kw) => {
@@ -3647,31 +3944,47 @@ function SearchModal({ onClose, currentSessionId, onJump }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {results.map((r, i) => {
               const isCurrent = r.session_id === currentSessionId && currentSessionId;
+              const isExpanded = !isCurrent && expandedIdx === i;
+              const onClick = () => {
+                if (isCurrent) onJump(r, submitted);
+                else expandDay(i, r);
+              };
               return (
                 <div key={i}
-                  onClick={() => isCurrent && onJump(r, submitted)}
                   style={{
                     border: "1px solid var(--border)",
                     borderRadius: 6,
                     padding: "10px 12px",
-                    cursor: isCurrent ? "pointer" : "default",
                     transition: "background 0.15s",
                     background: "transparent",
                   }}
-                  onMouseEnter={e => { if (isCurrent) e.currentTarget.style.background = "var(--bg-sidebar-hover)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.1em", marginBottom: 6 }}>
-                    <span>
-                      {r.type === "user" ? "我" : "Claude"} · {r.timestamp ? formatChatTime(r.timestamp) : ""}
-                    </span>
-                    <span style={{ color: isCurrent ? "var(--text-primary)" : "var(--text-tertiary)" }}>
-                      {isCurrent ? "当前 · 点击跳转" : "旧 session"}
-                    </span>
+                  <div
+                    onClick={onClick}
+                    style={{ cursor: "pointer" }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = 0.85; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = 1; }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.1em", marginBottom: 6 }}>
+                      <span>
+                        {r.type === "user" ? "我" : "Claude"} · {r.timestamp ? formatChatTime(r.timestamp) : ""}
+                      </span>
+                      <span style={{ color: isCurrent ? "var(--text-primary)" : "var(--text-tertiary)" }}>
+                        {isCurrent ? "当前 · 点击跳转" : (isExpanded ? "旧 session · 收起" : "旧 session · 点击展开当天")}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+                      {renderPreview(r.preview, submitted)}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
-                    {renderPreview(r.preview, submitted)}
-                  </div>
+                  {isExpanded && (
+                    <DayMessagesPanel
+                      data={dayData}
+                      scrollRef={dayScrollRef}
+                      submitted={submitted}
+                      renderPreview={renderPreview}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -3680,6 +3993,76 @@ function SearchModal({ onClose, currentSessionId, onJump }) {
       </div>
     </div>,
     document.body
+  );
+}
+
+// 旧 session 搜索结果展开后显示的"那一天全部消息"面板（固定高度滚动 + 匹配条高亮）
+function DayMessagesPanel({ data, scrollRef, submitted, renderPreview }) {
+  if (!data) return null;
+  if (data.loading) {
+    return (
+      <div style={{ marginTop: 10, padding: "16px 0", textAlign: "center", color: "var(--text-tertiary)", fontSize: 12, borderTop: "1px dashed var(--border)" }}>
+        加载当天消息…
+      </div>
+    );
+  }
+  if (data.error) {
+    return (
+      <div style={{ marginTop: 10, padding: "10px 0", color: "#d87878", fontSize: 12, borderTop: "1px dashed var(--border)" }}>
+        {data.error}
+      </div>
+    );
+  }
+  const anchor = data.anchor;
+  const matchOf = (m) =>
+    anchor &&
+    m.session_id === anchor.session_id &&
+    ((anchor.uuid && m.uuid === anchor.uuid) || (!anchor.uuid && m.timestamp === anchor.timestamp));
+
+  return (
+    <div style={{ marginTop: 10, borderTop: "1px dashed var(--border)", paddingTop: 10 }}>
+      <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.18em", marginBottom: 6 }}>
+        当天共 {data.msgs.length} 条消息（已去重）
+      </div>
+      <div
+        ref={scrollRef}
+        style={{
+          maxHeight: 360,
+          overflowY: "auto",
+          border: "1px solid var(--border)",
+          borderRadius: 4,
+          padding: "8px 10px",
+          background: "var(--bg-bubble-bot, transparent)",
+        }}
+      >
+        {data.msgs.length === 0 ? (
+          <div style={{ color: "var(--text-tertiary)", fontSize: 12, padding: "12px 0", textAlign: "center" }}>
+            当天无消息
+          </div>
+        ) : data.msgs.map((m, j) => {
+          const matched = matchOf(m);
+          return (
+            <div key={j}
+              data-match={matched ? "1" : undefined}
+              style={{
+                padding: "8px 10px",
+                margin: "4px 0",
+                borderRadius: 4,
+                background: matched ? "var(--bg-sidebar-hover, rgba(216,160,174,0.18))" : "transparent",
+                border: matched ? "1px solid var(--text-primary)" : "1px solid transparent",
+              }}
+            >
+              <div style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.08em", marginBottom: 4 }}>
+                {m.type === "user" ? "我" : "Claude"} · {m.timestamp ? formatChatTime(m.timestamp) : ""}
+              </div>
+              <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                {renderPreview(m.text || "", submitted)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
