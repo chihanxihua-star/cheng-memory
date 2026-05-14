@@ -3369,9 +3369,23 @@ function buildExportMarkdown(rows, rangeLabel) {
   for (const m of sorted) {
     const ts = formatChatTime(m.created_at);
     out += chatDisplayName(m.role) + "  " + ts + "\n\n";
+    if (m.thinking) out += "<details><summary>思考过程</summary>\n\n" + m.thinking + "\n\n</details>\n\n";
     out += (m.content || "") + "\n\n";
   }
   return out;
+}
+
+function buildExportJSON(rows, titleMap) {
+  const sorted = rows.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const convGroups = {};
+  for (const m of sorted) {
+    const cid = m.conversation_id;
+    if (!convGroups[cid]) convGroups[cid] = { name: titleMap[cid] || "未命名对话", messages: [] };
+    const msg = { sender: m.role === "user" ? "human" : "assistant", created_at: m.created_at, text: m.content || "" };
+    if (m.thinking) msg.thinking = m.thinking;
+    convGroups[cid].messages.push(msg);
+  }
+  return JSON.stringify(Object.values(convGroups), null, 2);
 }
 
 // 拉取本 project（含历史 null project_id 的会话）的消息：先取 conv 列表，再按 IN 过滤
@@ -3388,7 +3402,7 @@ async function fetchProjectMessages({ start, end, keyword, ascending = true, lim
 
   let q = supabase
     .from("messages")
-    .select("id, role, content, created_at, conversation_id")
+    .select("id, role, content, thinking, created_at, conversation_id")
     .in("conversation_id", convIds)
     .order("created_at", { ascending })
     .limit(limit);
@@ -3430,41 +3444,61 @@ function HistoryScreen({ onBack, showToast }) {
 
   useEffect(() => { search(); /* 默认加载最近 7 天 */ }, []); // eslint-disable-line
 
+  const fetchExportData = async () => {
+    let exportStart = null;
+    let label;
+    if (exportRange !== "all") {
+      const days = parseInt(exportRange, 10);
+      const since = new Date();
+      since.setDate(since.getDate() - (days - 1));
+      since.setHours(0, 0, 0, 0);
+      exportStart = ymd(since);
+      label = "最近 " + days + " 天（" + exportStart + " 至 " + ymd(new Date()) + "）";
+    } else {
+      label = "全部";
+    }
+    const { rows, titleMap } = await fetchProjectMessages({
+      start: exportStart, end: null, keyword: "",
+      ascending: true,
+      limit: 5000,
+    });
+    return { rows, titleMap, label };
+  };
+
+  const downloadBlob = (content, filename, mime) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const doExport = async () => {
     setExporting(true);
     try {
-      let exportStart = null;
-      let label;
-      if (exportRange !== "all") {
-        const days = parseInt(exportRange, 10);
-        const since = new Date();
-        since.setDate(since.getDate() - (days - 1));
-        since.setHours(0, 0, 0, 0);
-        exportStart = ymd(since);
-        label = "最近 " + days + " 天（" + exportStart + " 至 " + ymd(new Date()) + "）";
-      } else {
-        label = "全部";
-      }
-      const { rows } = await fetchProjectMessages({
-        start: exportStart, end: null, keyword: "",
-        ascending: true,
-        limit: 5000,
-      });
-      if (rows.length === 0) {
-        showToast("范围内没有消息");
-        return;
-      }
+      const { rows, label } = await fetchExportData();
+      if (rows.length === 0) { showToast("范围内没有消息"); return; }
       const md = buildExportMarkdown(rows, label);
-      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "chat-export-" + ymd(new Date())
-        + (exportRange === "all" ? "-all" : "-" + exportRange + "d") + ".md";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const suffix = exportRange === "all" ? "-all" : "-" + exportRange + "d";
+      downloadBlob(md, "chat-export-" + ymd(new Date()) + suffix + ".md", "text/markdown;charset=utf-8");
+      showToast("已导出 " + rows.length + " 条消息");
+    } catch (e) {
+      showToast("导出失败：" + (e.message || e));
+    } finally { setExporting(false); }
+  };
+
+  const doExportJSON = async () => {
+    setExporting(true);
+    try {
+      const { rows, titleMap } = await fetchExportData();
+      if (rows.length === 0) { showToast("范围内没有消息"); return; }
+      const json = buildExportJSON(rows, titleMap);
+      const suffix = exportRange === "all" ? "-all" : "-" + exportRange + "d";
+      downloadBlob(json, "chat-export-" + ymd(new Date()) + suffix + ".json", "application/json");
       showToast("已导出 " + rows.length + " 条消息");
     } catch (e) {
       showToast("导出失败：" + (e.message || e));
@@ -3538,12 +3572,15 @@ function HistoryScreen({ onBack, showToast }) {
           style={{ flex: 1, background: "transparent", border: "none", borderBottom: "1px solid var(--border-input)", borderRadius: 0, padding: "7px 0", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "inherit" }}>
           {EXPORT_RANGES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
         </select>
-        <button className="cp-ps-btn" style={{ width: 110, marginTop: 0 }} disabled={exporting} onClick={doExport}>
-          {exporting ? "导出中…" : "导出 .md"}
+        <button className="cp-ps-btn" style={{ width: 80, marginTop: 0 }} disabled={exporting} onClick={doExport}>
+          {exporting ? "…" : ".md"}
+        </button>
+        <button className="cp-ps-btn" style={{ width: 80, marginTop: 0 }} disabled={exporting} onClick={doExportJSON}>
+          {exporting ? "…" : ".json"}
         </button>
       </div>
       <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
-        按时间正序导出，每条消息独立一段
+        .md 人读 / .json 含思绪，可导入 session
       </div>
     </>
   );
@@ -3630,31 +3667,55 @@ function HistoryModal({ onClose, showToast }) {
     else setViewMonth(m => m + 1);
   };
 
+  const fetchExportData2 = async () => {
+    let exportStart = null;
+    let label;
+    if (exportRange !== "all") {
+      const days = parseInt(exportRange, 10);
+      const since = new Date();
+      since.setDate(since.getDate() - (days - 1));
+      since.setHours(0, 0, 0, 0);
+      exportStart = ymd(since);
+      label = "最近 " + days + " 天（" + exportStart + " 至 " + ymd(new Date()) + "）";
+    } else {
+      label = "全部";
+    }
+    const { rows, titleMap } = await fetchProjectMessages({ start: exportStart, end: null, keyword: "", ascending: true, limit: 5000 });
+    return { rows, titleMap, label };
+  };
+
+  const downloadBlob2 = (content, filename, mime) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const doExport = async () => {
     setExporting(true);
     try {
-      let exportStart = null;
-      let label;
-      if (exportRange !== "all") {
-        const days = parseInt(exportRange, 10);
-        const since = new Date();
-        since.setDate(since.getDate() - (days - 1));
-        since.setHours(0, 0, 0, 0);
-        exportStart = ymd(since);
-        label = "最近 " + days + " 天（" + exportStart + " 至 " + ymd(new Date()) + "）";
-      } else {
-        label = "全部";
-      }
-      const { rows } = await fetchProjectMessages({ start: exportStart, end: null, keyword: "", ascending: true, limit: 5000 });
+      const { rows, label } = await fetchExportData2();
       if (rows.length === 0) { showToast("范围内没有消息"); return; }
       const md = buildExportMarkdown(rows, label);
-      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "chat-export-" + ymd(new Date()) + (exportRange === "all" ? "-all" : "-" + exportRange + "d") + ".md";
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const suffix = exportRange === "all" ? "-all" : "-" + exportRange + "d";
+      downloadBlob2(md, "chat-export-" + ymd(new Date()) + suffix + ".md", "text/markdown;charset=utf-8");
+      showToast("已导出 " + rows.length + " 条消息");
+    } catch (e) {
+      showToast("导出失败：" + (e.message || e));
+    } finally { setExporting(false); }
+  };
+
+  const doExportJSON = async () => {
+    setExporting(true);
+    try {
+      const { rows, titleMap } = await fetchExportData2();
+      if (rows.length === 0) { showToast("范围内没有消息"); return; }
+      const json = buildExportJSON(rows, titleMap);
+      const suffix = exportRange === "all" ? "-all" : "-" + exportRange + "d";
+      downloadBlob2(json, "chat-export-" + ymd(new Date()) + suffix + ".json", "application/json");
       showToast("已导出 " + rows.length + " 条消息");
     } catch (e) {
       showToast("导出失败：" + (e.message || e));
@@ -3741,7 +3802,13 @@ function HistoryModal({ onClose, showToast }) {
                 border: "1px solid var(--text-primary)", padding: "6px 14px", borderRadius: 4,
                 fontSize: 11, letterSpacing: "0.18em",
                 cursor: exporting ? "default" : "pointer", fontFamily: "inherit",
-              }}>{exporting ? "…" : "导出 .md"}</button>
+              }}>{exporting ? "…" : ".md"}</button>
+              <button onClick={doExportJSON} disabled={exporting} style={{
+                background: "transparent", color: "var(--text-primary)",
+                border: "1px solid var(--text-primary)", padding: "6px 14px", borderRadius: 4,
+                fontSize: 11, letterSpacing: "0.18em",
+                cursor: exporting ? "default" : "pointer", fontFamily: "inherit",
+              }}>{exporting ? "…" : ".json"}</button>
             </div>
           </div>
 

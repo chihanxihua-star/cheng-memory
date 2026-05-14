@@ -67,6 +67,45 @@ function fmtDateTime(d) {
   return new Date(d).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+function estimateTokens(s) {
+  if (!s) return 0;
+  let t = 0;
+  for (let i = 0; i < s.length; i++) t += s.charCodeAt(i) > 0x7f ? 1.5 : 0.25;
+  return Math.ceil(t);
+}
+
+function countConvTokens(messages) {
+  let total = 0;
+  for (const m of messages) {
+    total += estimateTokens(getMsgText(m));
+    const th = getThinking(m);
+    if (th) total += estimateTokens(th);
+  }
+  return total;
+}
+
+function countConvChars(messages) {
+  let total = 0;
+  for (const m of messages) {
+    const text = getMsgText(m);
+    for (let i = 0; i < text.length; i++) {
+      if (text.charCodeAt(i) > 0x2e7f) total++;
+    }
+  }
+  return total;
+}
+
+function fmtNum(n) {
+  if (n >= 10000) return (n / 10000).toFixed(1) + "万";
+  return n.toLocaleString("zh-CN");
+}
+
+function fmtTokens(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+  return String(n);
+}
+
 function sanitizeFn(s) {
   return (s || "conversation").replace(/[<>:"/\\|?*]/g, "_").slice(0, 80);
 }
@@ -266,10 +305,17 @@ function Collapsible({ label, badge, children }) {
 }
 
 // ── Message component ────────────────────────────────────
-function Message({ m, searchQuery, id }) {
+function fmtMsgTime(d) {
+  if (!d) return "";
+  const dt = new Date(d);
+  const z = n => String(n).padStart(2, "0");
+  return dt.getFullYear() + "/" + z(dt.getMonth() + 1) + "/" + z(dt.getDate()) + " " + z(dt.getHours()) + ":" + z(dt.getMinutes());
+}
+
+function Message({ m, searchQuery, id, idx }) {
   const sender = getSender(m);
   const isHuman = sender === "human";
-  const time = m.created_at ? new Date(m.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : "";
+  const time = fmtMsgTime(m.created_at);
   const thinking = getThinking(m);
   const tools = getToolUse(m);
   const atts = getAttachments(m);
@@ -281,15 +327,8 @@ function Message({ m, searchQuery, id }) {
   return (
     <div id={id} style={{ marginBottom: 20 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 13, fontWeight: 600, flexShrink: 0,
-          background: isHuman ? "var(--bg-user-bubble)" : "var(--accent)", color: isHuman ? "#7a6f66" : "#fff",
-        }}>
-          {isHuman ? "H" : "C"}
-        </div>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>{isHuman ? "You" : "Claude"}</span>
-        <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{time}</span>
+        <span style={{ fontWeight: 600, fontSize: 13 }}>{isHuman ? "小茉莉" : "小太阳"}</span>
+        <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>#{idx + 1}</span>
       </div>
       <div style={{
         padding: "12px 16px", borderRadius: 12, lineHeight: 1.7, fontSize: 13.5,
@@ -330,6 +369,7 @@ function Message({ m, searchQuery, id }) {
           </div>
         ))}
         {rendered && <div dangerouslySetInnerHTML={{ __html: rendered }} />}
+        {time && <div style={{ textAlign: "right", fontSize: 10, color: "var(--text-secondary)", marginTop: 4, opacity: 0.7 }}>{time}</div>}
       </div>
     </div>
   );
@@ -355,11 +395,31 @@ export default function ChatViewer({ onBack }) {
       try {
         let data = JSON.parse(e.target.result);
         if (!Array.isArray(data)) {
-          if (data.conversations) data = data.conversations;
-          else if (data.chat_messages || data.messages) data = [data];
-          else { alert("无法识别的 JSON 格式"); return; }
+          if (data.chat_messages || data.messages) {
+            data = [data];
+          } else {
+            const arrKey = Object.keys(data).find(k => Array.isArray(data[k]) && data[k].length > 0);
+            if (arrKey) {
+              data = data[arrKey];
+            } else {
+              alert("无法识别的 JSON 格式\n顶层键: " + Object.keys(data).join(", "));
+              return;
+            }
+          }
         }
-        setConversations(processConversations(data));
+        if (data.length > 0 && !data[0].chat_messages && !data[0].messages) {
+          const hasMsgFields = data[0].sender || data[0].role || data[0].text || data[0].content;
+          if (hasMsgFields) {
+            data = [{ uuid: "imported", name: file.name.replace(/\.json$/i, ""), chat_messages: data }];
+          }
+        }
+        const result = processConversations(data);
+        if (result.length === 0 && data.length > 0) {
+          const sample = data[0];
+          alert(`解析到 ${data.length} 个对象但无消息\n字段: ${Object.keys(sample).slice(0, 8).join(", ")}`);
+          return;
+        }
+        setConversations(result);
         setCurrentConv(null);
         setMobileShowList(true);
       } catch (err) { alert("JSON 解析失败: " + err.message); }
@@ -416,12 +476,12 @@ export default function ChatViewer({ onBack }) {
         getMsgText(m).toLowerCase().includes(query) ||
         (getThinking(m) || "").toLowerCase().includes(query)
       );
-      if (idx >= 0) setScrollToMsg(c.messages[idx].uuid);
+      if (idx >= 0) setScrollToMsg(idx);
     }
   }, [query]);
 
   useEffect(() => {
-    if (!scrollToMsg) return;
+    if (scrollToMsg == null) return;
     const timer = setTimeout(() => {
       const el = document.getElementById(`msg-${scrollToMsg}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -429,6 +489,16 @@ export default function ChatViewer({ onBack }) {
     }, 100);
     return () => clearTimeout(timer);
   }, [scrollToMsg, currentConv]);
+
+  // Auto-scroll to first match when search query changes in current conversation
+  useEffect(() => {
+    if (!query || !currentConv) return;
+    const idx = currentConv.messages.findIndex(m =>
+      getMsgText(m).toLowerCase().includes(query) ||
+      (getThinking(m) || "").toLowerCase().includes(query)
+    );
+    if (idx >= 0) setScrollToMsg(idx);
+  }, [query, currentConv]);
 
   // ── exports ──
   const exportJSON = () => {
@@ -444,7 +514,7 @@ export default function ChatViewer({ onBack }) {
     if (!currentConv) return;
     let md = `# ${currentConv.name}\n\n*${fmtDateTime(currentConv.created_at)}*\n\n---\n\n`;
     currentConv.messages.forEach(m => {
-      const s = getSender(m) === "human" ? "**You**" : "**Claude**";
+      const s = getSender(m) === "human" ? "**小茉莉**" : "**小太阳**";
       const t = m.created_at ? ` *${new Date(m.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}*` : "";
       md += `### ${s}${t}\n\n`;
       const thinking = getThinking(m);
@@ -646,7 +716,7 @@ export default function ChatViewer({ onBack }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentConv.name}</div>
           <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-            {fmtDateTime(currentConv.created_at)} · {currentConv.messages.length} 条消息
+            {fmtDateTime(currentConv.created_at)} · {currentConv.messages.length} 条消息 · {fmtNum(countConvChars(currentConv.messages))} 字 · ~{fmtTokens(countConvTokens(currentConv.messages))} tokens
             {currentConv.branchedCount > 0 && ` · 已过滤 ${currentConv.branchedCount} 条分支消息`}
           </div>
         </div>
@@ -671,8 +741,8 @@ export default function ChatViewer({ onBack }) {
       {/* messages */}
       <div ref={msgRef} style={{ flex: 1, overflowY: "auto", padding: "20px 0" }}>
         <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 16px" }}>
-          {currentConv.messages.map(m => (
-            <Message key={m.uuid} m={m} searchQuery={query} id={`msg-${m.uuid}`} />
+          {currentConv.messages.map((m, idx) => (
+            <Message key={m.uuid || idx} m={m} searchQuery={query} id={`msg-${idx}`} idx={idx} />
           ))}
         </div>
       </div>
