@@ -856,6 +856,7 @@ export default function ChatPanel({ onBack }) {
   const [images, setImages] = useState([]); // dataURL 数组
   const [streamSnap, setStreamSnap] = useState(null); // 流式快照（null/对象）
   const [isGenerating, setIsGenerating] = useState(false);
+  const [bufferCount, setBufferCount] = useState(0);
   const [showTyping, setShowTyping] = useState(false);
   const [ccStatus, setCcStatus] = useState("unknown"); // ready / down / unknown
   const [currentModel, setCurrentModel] = useState("");
@@ -1022,8 +1023,12 @@ export default function ChatPanel({ onBack }) {
           clean: null,
         };
         setIsGenerating(true);
+        setBufferCount(0);
         setStreamSnap({ thinking: "", delta: "", tools: [], bubbles: null });
         setShowTyping(true);
+        break;
+      case "buffering":
+        setBufferCount(msg.count || 0);
         break;
       case "thinking": {
         if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
@@ -1174,7 +1179,6 @@ export default function ChatPanel({ onBack }) {
         setIsGenerating(false);
         setStreamSnap(null);
         streamRef.current = null;
-        loadCurrentConversation();
         break;
       }
       case "error": {
@@ -1376,6 +1380,11 @@ export default function ChatPanel({ onBack }) {
   const stop = useCallback(() => {
     const ws = wsRef.current;
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "stop" }));
+  }, []);
+
+  const flush = useCallback(() => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "flush" }));
   }, []);
 
   /* ─────── CC restart / new chat ─────── */
@@ -1867,8 +1876,10 @@ export default function ChatPanel({ onBack }) {
             <SendStopButton
               isGenerating={isGenerating}
               hasContent={!!input.trim() || images.length > 0}
+              bufferCount={bufferCount}
               onSend={send}
               onStop={stop}
+              onFlush={flush}
               onVoice={() => showToast("语音功能开发中")}
             />
           </div>
@@ -2147,7 +2158,7 @@ function InjectDoneRow({ content, detail }) {
   );
 }
 
-function SendStopButton({ isGenerating, hasContent, onSend, onStop, onVoice }) {
+function SendStopButton({ isGenerating, hasContent, bufferCount, onSend, onStop, onFlush, onVoice }) {
   if (isGenerating) {
     return (
       <button className="cp-send-btn" onClick={onStop} title="停止">
@@ -2158,6 +2169,13 @@ function SendStopButton({ isGenerating, hasContent, onSend, onStop, onVoice }) {
   if (hasContent) {
     return (
       <button className="cp-send-btn" onClick={onSend} title="发送">
+        <svg viewBox="0 0 24 24"><path d="M3.4 20.4 20.85 12.9c.81-.35.81-1.45 0-1.8L3.4 3.6c-.66-.29-1.39.2-1.39.92L2 9.12c0 .5.37.93.87 1l10.13 1.38-10.13 1.38c-.5.07-.87.5-.87 1l.01 4.6c0 .72.73 1.21 1.39.92z"/></svg>
+      </button>
+    );
+  }
+  if (bufferCount > 0) {
+    return (
+      <button className="cp-send-btn" onClick={onFlush} title={`发送 ${bufferCount} 条给澄`}>
         <svg viewBox="0 0 24 24"><path d="M3.4 20.4 20.85 12.9c.81-.35.81-1.45 0-1.8L3.4 3.6c-.66-.29-1.39.2-1.39.92L2 9.12c0 .5.37.93.87 1l10.13 1.38-10.13 1.38c-.5.07-.87.5-.87 1l.01 4.6c0 .72.73 1.21 1.39.92z"/></svg>
       </button>
     );
