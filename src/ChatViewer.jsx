@@ -383,6 +383,7 @@ export default function ChatViewer({ onBack }) {
   const [showExport, setShowExport] = useState(false);
   const [mobileShowList, setMobileShowList] = useState(true);
   const [scrollToMsg, setScrollToMsg] = useState(null);
+  const [searchNav, setSearchNav] = useState(null);
   const fileRef = useRef(null);
   const msgRef = useRef(null);
 
@@ -499,6 +500,30 @@ export default function ChatViewer({ onBack }) {
     );
     if (idx >= 0) setScrollToMsg(idx);
   }, [query, currentConv]);
+
+  // ── search nav: build ▲▼ match list ──
+  useEffect(() => {
+    if (!query || !currentConv) { setSearchNav(null); return; }
+    const matchIds = [];
+    currentConv.messages.forEach((m, idx) => {
+      if (getMsgText(m).toLowerCase().includes(query) || (getThinking(m) || "").toLowerCase().includes(query))
+        matchIds.push(idx);
+    });
+    setSearchNav(matchIds.length > 0 ? { keyword: query, matchIds, idx: 0 } : null);
+  }, [query, currentConv]);
+
+  const searchNavGo = useCallback((dir) => {
+    setSearchNav(prev => {
+      if (!prev || prev.matchIds.length === 0) return prev;
+      const len = prev.matchIds.length;
+      const next = (prev.idx + dir + len) % len;
+      setTimeout(() => {
+        const el = document.getElementById(`msg-${prev.matchIds[next]}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 0);
+      return { ...prev, idx: next };
+    });
+  }, []);
 
   // ── exports ──
   const exportJSON = () => {
@@ -746,6 +771,40 @@ export default function ChatViewer({ onBack }) {
           ))}
         </div>
       </div>
+      {/* ▲▼ 搜索导航浮条 */}
+      {searchNav && (
+        <div style={{
+          position: "fixed", bottom: 30, left: "50%", transform: "translateX(-50%)",
+          zIndex: 900, display: "flex", alignItems: "center", gap: 6,
+          background: "var(--bg-card)", border: "1px solid var(--border)",
+          borderRadius: 20, padding: "5px 10px", boxShadow: "0 2px 12px rgba(0,0,0,0.18)",
+          fontFamily: "Georgia, 'Noto Serif SC', serif", fontSize: 12,
+          color: "var(--text-primary)", whiteSpace: "nowrap",
+        }}>
+          <button onClick={() => searchNavGo(-1)} style={{
+            background: "none", border: "none", color: "var(--text-secondary)",
+            cursor: "pointer", padding: "2px 6px", fontSize: 15, lineHeight: 1,
+            fontFamily: "inherit", borderRadius: 4,
+          }} title="上一个">▲</button>
+          <span style={{ fontSize: 11, color: "var(--text-secondary)", letterSpacing: "0.05em", minWidth: 40, textAlign: "center" }}>
+            {searchNav.idx + 1} / {searchNav.matchIds.length}
+          </span>
+          <button onClick={() => searchNavGo(1)} style={{
+            background: "none", border: "none", color: "var(--text-secondary)",
+            cursor: "pointer", padding: "2px 6px", fontSize: 15, lineHeight: 1,
+            fontFamily: "inherit", borderRadius: 4,
+          }} title="下一个">▼</button>
+          <span style={{ fontSize: 11, color: "var(--text-secondary)", margin: "0 2px" }}>·</span>
+          <span style={{ fontSize: 10, color: "var(--text-secondary)", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis" }}>
+            {searchNav.keyword}
+          </span>
+          <button onClick={() => setSearchNav(null)} style={{
+            background: "none", border: "none", color: "var(--text-secondary)",
+            cursor: "pointer", padding: "2px 6px", fontSize: 13, lineHeight: 1,
+            fontFamily: "inherit",
+          }} title="关闭">×</button>
+        </div>
+      )}
     </div>
   ) : (
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8, color: "var(--text-secondary)" }}>

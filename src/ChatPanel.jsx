@@ -356,6 +356,7 @@ const CSS = `
 .cp-msg-nick { font-size: 11px; color: var(--text-tertiary); margin-bottom: 3px; }
 .cp-msg-wrap.user .cp-msg-nick { text-align: right; }
 
+.cp-bark-label { font-size: 11px; color: #E8A838; text-align: center; margin-bottom: 4px; letter-spacing: 0.5px; }
 .cp-msg-bubble { line-height: 1.6; font-size: 13px; cursor: pointer; word-break: break-word; }
 .cp-msg-bubble.user {
   background: rgba(242, 220, 224, 0.78); color: var(--text-bubble-user);
@@ -896,6 +897,10 @@ export default function ChatPanel({ onBack }) {
   // JSONL 全 session 搜索
   const [searchOpen, setSearchOpen] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState("");
+  // 搜索跳转导航：当前对话内所有匹配消息
+  const [searchNav, setSearchNav] = useState(null); // { keyword, matchIds: [id,...], idx: number }
+
+  useEffect(() => { setSearchNav(null); }, [currentSessionId]);
 
   // sidebar 关闭时重新读截断触发值
   useEffect(() => {
@@ -985,6 +990,7 @@ export default function ChatPanel({ onBack }) {
           token_input: m.token_input || 0,
           token_output: m.token_output || 0,
           cache_detail: m.cache_detail || null,
+          event: m.event || null,
         };
         if (m.role === "system") {
           if ((m.content || "").includes("小太阳醒啦")) {
@@ -1236,6 +1242,25 @@ export default function ChatPanel({ onBack }) {
           opts.action = { label: "立即重启", onClick: () => restartCCRef.current && restartCCRef.current() };
         }
         showToast(msg.message || "", opts);
+        break;
+      }
+      case "bark_msg": {
+        if (convId && msg.conversation_id === convId && msg.message) {
+          setMessages(prev => [...prev, {
+            id: msg.message.id,
+            role: "assistant",
+            content: msg.message.content || "",
+            thinking: null,
+            tool_calls: null,
+            images: [],
+            created_at: msg.message.created_at,
+            token_input: 0,
+            token_output: 0,
+            cache_detail: null,
+            event: "bark",
+          }]);
+          setTimeout(scrollToBottom, 50);
+        }
         break;
       }
       default:
@@ -1571,32 +1596,46 @@ export default function ChatPanel({ onBack }) {
   }, [showToast]);
 
   /* ─────── 搜索：跳转到当前对话里的某条消息 ─────── */
-  const jumpToMessage = useCallback((result, keyword) => {
-    if (!result || result.session_id !== currentSessionId) return false;
-    const role = result.type;
-    const kw = (keyword || "").toLowerCase();
-    const candidates = messages.filter(m =>
-      m.role === role && typeof m.content === "string" && kw && m.content.toLowerCase().includes(kw)
-    );
-    if (candidates.length === 0) return false;
-    const targetTs = result.timestamp ? new Date(result.timestamp).getTime() : null;
-    let best = candidates[0];
-    if (targetTs != null) {
-      let bestDiff = Infinity;
-      for (const c of candidates) {
-        const ts = c.created_at ? new Date(c.created_at).getTime() : null;
-        if (ts == null) continue;
-        const diff = Math.abs(ts - targetTs);
-        if (diff < bestDiff) { best = c; bestDiff = diff; }
-      }
-    }
-    const el = document.getElementById("cp-msg-" + best.id);
+  const scrollToMsgById = useCallback((id) => {
+    const el = document.getElementById("cp-msg-" + id);
     if (!el) return false;
     el.scrollIntoView({ block: "center", behavior: "smooth" });
     el.classList.add("cp-msg-highlight");
     setTimeout(() => el.classList.remove("cp-msg-highlight"), 1800);
     return true;
-  }, [currentSessionId, messages]);
+  }, []);
+
+  const jumpToMessage = useCallback((result, keyword) => {
+    if (!result || result.session_id !== currentSessionId) return false;
+    const kw = (keyword || "").toLowerCase();
+    if (!kw) return false;
+    const allMatches = messages.filter(m =>
+      typeof m.content === "string" && m.content.toLowerCase().includes(kw)
+    );
+    if (allMatches.length === 0) return false;
+    const targetTs = result.timestamp ? new Date(result.timestamp).getTime() : null;
+    let bestIdx = 0;
+    if (targetTs != null) {
+      let bestDiff = Infinity;
+      for (let i = 0; i < allMatches.length; i++) {
+        const ts = allMatches[i].created_at ? new Date(allMatches[i].created_at).getTime() : null;
+        if (ts == null) continue;
+        const diff = Math.abs(ts - targetTs);
+        if (diff < bestDiff) { bestIdx = i; bestDiff = diff; }
+      }
+    }
+    const matchIds = allMatches.map(m => m.id);
+    setSearchNav({ keyword: kw, matchIds, idx: bestIdx });
+    return scrollToMsgById(matchIds[bestIdx]);
+  }, [currentSessionId, messages, scrollToMsgById]);
+
+  const searchNavGo = useCallback((dir) => {
+    if (!searchNav || searchNav.matchIds.length === 0) return;
+    const len = searchNav.matchIds.length;
+    const next = (searchNav.idx + dir + len) % len;
+    setSearchNav(prev => ({ ...prev, idx: next }));
+    scrollToMsgById(searchNav.matchIds[next]);
+  }, [searchNav, scrollToMsgById]);
 
   /* ─────── 重命名 ─────── */
   const confirmRename = useCallback(async (id, title) => {
@@ -1855,7 +1894,7 @@ export default function ChatPanel({ onBack }) {
       {/* SEARCH JSONL 全 session 搜索 */}
       {searchOpen && (
         <SearchModal
-          onClose={() => setSearchOpen(false)}
+          onClose={() => { setSearchOpen(false); }}
           currentSessionId={currentSessionId}
           onJump={(r, kw) => {
             const ok = jumpToMessage(r, kw);
@@ -1863,6 +1902,41 @@ export default function ChatPanel({ onBack }) {
             else showToast("当前对话里没找到这条消息");
           }}
         />
+      )}
+
+      {/* 搜索导航浮条 */}
+      {searchNav && !searchOpen && (
+        <div style={{
+          position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)",
+          zIndex: 900, display: "flex", alignItems: "center", gap: 6,
+          background: "var(--bg-sidebar)", border: "1px solid var(--border)",
+          borderRadius: 20, padding: "5px 10px", boxShadow: "0 2px 12px rgba(0,0,0,0.18)",
+          fontFamily: "Georgia, 'Noto Serif SC', serif", fontSize: 12,
+          color: "var(--text-primary)", whiteSpace: "nowrap",
+        }}>
+          <button onClick={() => searchNavGo(-1)} style={{
+            background: "none", border: "none", color: "var(--text-secondary)",
+            cursor: "pointer", padding: "2px 6px", fontSize: 15, lineHeight: 1,
+            fontFamily: "inherit", borderRadius: 4,
+          }} title="上一个">▲</button>
+          <span style={{ fontSize: 11, color: "var(--text-tertiary)", letterSpacing: "0.05em", minWidth: 40, textAlign: "center" }}>
+            {searchNav.idx + 1} / {searchNav.matchIds.length}
+          </span>
+          <button onClick={() => searchNavGo(1)} style={{
+            background: "none", border: "none", color: "var(--text-secondary)",
+            cursor: "pointer", padding: "2px 6px", fontSize: 15, lineHeight: 1,
+            fontFamily: "inherit", borderRadius: 4,
+          }} title="下一个">▼</button>
+          <span style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "0 2px" }}>·</span>
+          <span style={{ fontSize: 10, color: "var(--text-tertiary)", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis" }}>
+            {searchNav.keyword}
+          </span>
+          <button onClick={() => setSearchNav(null)} style={{
+            background: "none", border: "none", color: "var(--text-tertiary)",
+            cursor: "pointer", padding: "2px 6px", fontSize: 13, lineHeight: 1,
+            fontFamily: "inherit", borderRadius: 4, marginLeft: 2,
+          }} title="关闭">✕</button>
+        </div>
       )}
 
       {/* SIDEBAR */}
@@ -2131,6 +2205,7 @@ function MessageBubble({ item, profile, onCopy, onOpenImage, onEdit, onRegen, on
         </div>
       )}
       <div className="cp-msg-body">
+        {isHead && msg.event === "bark" && <div className="cp-bark-label">小太阳想你了</div>}
         {/* thinking 块（仅 head 显示） */}
         {isHead && msg.thinking && <ThinkingBlock text={msg.thinking} />}
         {/* tool calls 块 */}
