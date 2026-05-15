@@ -965,8 +965,7 @@ export default function ChatPanel({ onBack }) {
     try {
       const r = await authedFetch(API + "/conversations/" + saved + "/messages");
       if (!r.ok) {
-        localStorage.removeItem(CONV_KEY);
-        setConvId(null); setMessages([]);
+        setMessages([]);
         return;
       }
       const ms = await r.json();
