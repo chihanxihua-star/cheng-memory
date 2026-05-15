@@ -623,7 +623,7 @@ export default function SessionPanel({ onClose, theme = "light", currentTokens =
       alert("浮想失败：" + e.message);
       setInjectState("idle");
     }
-  }, []);
+  }, [convId]);
 
   return createPortal(
     <div className="sp-root" data-theme={theme}>
