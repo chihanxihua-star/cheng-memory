@@ -859,6 +859,11 @@ export default function ChatPanel({ onBack }) {
   const [bufferCount, setBufferCount] = useState(0);
   const [showTyping, setShowTyping] = useState(false);
   const [ccStatus, setCcStatus] = useState("unknown"); // ready / down / unknown
+  const [opLog, setOpLog] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("memhome-oplog") || "[]"); } catch { return []; }
+  });
+  const [opLogOpen, setOpLogOpen] = useState(false);
+  const opLogUnread = useRef(false);
   const [currentModel, setCurrentModel] = useState("");
   const [charCount, setCharCount] = useState(0);
   // 累计上下文 input tokens (= input + cache_read + cache_creation)。来自每轮 done 的 usage；
@@ -917,6 +922,8 @@ export default function ChatPanel({ onBack }) {
   const fileInputRef = useRef(null);
   const inputRef = useRef(null);
   const lastDateRef = useRef(null);
+  const messagesLenRef = useRef(0);
+  const loadConvRef = useRef(null);
 
   /* ─────── Toast ─────── */
   const showToast = useCallback((message, opts = {}) => {
@@ -959,25 +966,28 @@ export default function ChatPanel({ onBack }) {
     }
   }, [currentModel]);
 
+  const pushLog = useCallback((ok, label, detail) => {
+    const entry = { time: new Date().toISOString(), ok, label, detail };
+    setOpLog(prev => {
+      const next = [entry, ...prev].slice(0, 80);
+      try { localStorage.setItem("memhome-oplog", JSON.stringify(next)); } catch {}
+      return next;
+    });
+    opLogUnread.current = true;
+  }, []);
+
   /* ─────── 加载历史 ─────── */
   const loadCurrentConversation = useCallback(async () => {
     const saved = localStorage.getItem(CONV_KEY);
-    if (!saved) { setConvId(null); setMessages([]); return; }
+    if (!saved) { setConvId(null); setMessages([]); pushLog(false, "加载历史", "无 convId"); return; }
     try {
       const r = await authedFetch(API + "/conversations/" + saved + "/messages");
-      if (!r.ok) {
-        setMessages([]);
-        return;
-      }
+      if (!r.ok) { pushLog(false, "加载历史", `HTTP ${r.status}`); return; }
       const ms = await r.json();
-      if (!Array.isArray(ms)) return;
+      if (!Array.isArray(ms)) { pushLog(false, "加载历史", "响应非数组"); return; }
       setConvId(saved);
       const total = ms.reduce((s, m) => s + ((m.content || "").length || 0), 0);
       setCharCount(total);
-      // 首次访问 / 清过缓存时 localStorage 没值，contextInTokens 没法初始化。
-      // DB 里 messages.token_input 现在存的是"等效 input"（含缓存折扣），
-      // 不是真实 context 大小——所以不再从 DB 兜底，让首次进来的"总"显示"—"，
-      // 下一轮收到 usage 事件后会立即补上真实值。
       setMessages(ms.map(m => {
         const msg = {
           id: m.id,
@@ -1005,11 +1015,16 @@ export default function ChatPanel({ onBack }) {
         }
         return msg;
       }));
+      pushLog(true, "加载历史", `${ms.length} 条`);
       setTimeout(scrollToBottom, 50);
     } catch (e) {
       console.warn("加载历史失败", e);
+      pushLog(false, "加载历史", e.message || "网络错误");
     }
-  }, [scrollToBottom]);
+  }, [scrollToBottom, pushLog]);
+
+  useEffect(() => { messagesLenRef.current = messages.length; }, [messages.length]);
+  useEffect(() => { loadConvRef.current = loadCurrentConversation; }, [loadCurrentConversation]);
 
   /* ─────── WebSocket ─────── */
   const handleWsMsg = useCallback((msg) => {
@@ -1026,6 +1041,7 @@ export default function ChatPanel({ onBack }) {
         setBufferCount(0);
         setStreamSnap({ thinking: "", delta: "", tools: [], bubbles: null });
         setShowTyping(true);
+        pushLog(true, "CC 开始回复", null);
         break;
       case "buffering":
         setBufferCount(msg.count || 0);
@@ -1179,6 +1195,7 @@ export default function ChatPanel({ onBack }) {
         setIsGenerating(false);
         setStreamSnap(null);
         streamRef.current = null;
+        pushLog(true, "已停止", null);
         break;
       }
       case "error": {
@@ -1197,6 +1214,7 @@ export default function ChatPanel({ onBack }) {
           created_at: new Date().toISOString(),
           token_output: 0,
         }]);
+        pushLog(false, "错误", msg.message || "未知错误");
         break;
       }
       case "system": {
@@ -1229,6 +1247,8 @@ export default function ChatPanel({ onBack }) {
           setMessages(prev => [...prev, sys]);
         }
         scrollToBottom();
+        const isErr = kind === "forge_done" && detail?.error;
+        pushLog(!isErr, content || kind || "系统消息", isErr ? detail.error : null);
         break;
       }
       case "char_count":
@@ -1236,9 +1256,13 @@ export default function ChatPanel({ onBack }) {
           setCharCount(msg.total || 0);
         }
         break;
-      case "cc_status":
-        setCcStatus(msg.status === "ready" ? "ready" : msg.status === "down" ? "down" : "unknown");
+      case "cc_status": {
+        const st = msg.status === "ready" ? "ready" : msg.status === "down" ? "down" : "unknown";
+        setCcStatus(st);
+        if (st === "down") pushLog(false, "CC 离线", null);
+        else if (st === "ready") pushLog(true, "CC 就绪", null);
         break;
+      }
       case "toast": {
         const opts = { duration: 15000 };
         if (msg.action === "restart_cc") {
@@ -1306,8 +1330,16 @@ export default function ChatPanel({ onBack }) {
     checkHealth();
     loadCurrentConversation();
     const t = setInterval(checkHealth, 30000);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (messagesLenRef.current === 0 && localStorage.getItem(CONV_KEY)) {
+        loadConvRef.current?.();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
       clearTimeout(reconnectTimer.current);
       if (wsRef.current) try { wsRef.current.close(); } catch {}
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
@@ -1586,7 +1618,11 @@ export default function ChatPanel({ onBack }) {
   const amnesia = useCallback(async () => {
     if (!window.confirm("失忆后从干净的新 session 开始（不保留任何上文）。确定？")) return;
     try {
-      const r = await authedFetch(API + "/cc/amnesia", { method: "POST" });
+      const r = await authedFetch(API + "/cc/amnesia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation_id: convId }),
+      });
       const d = await r.json();
       if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
       setIsGenerating(false);
@@ -1601,7 +1637,7 @@ export default function ChatPanel({ onBack }) {
     } catch (e) {
       showToast("失忆失败：" + e.message);
     }
-  }, [showToast]);
+  }, [convId, showToast]);
 
   /* ─────── 搜索：跳转到当前对话里的某条消息 ─────── */
   const scrollToMsgById = useCallback((id) => {
@@ -1877,7 +1913,7 @@ export default function ChatPanel({ onBack }) {
               isGenerating={isGenerating}
               hasContent={!!input.trim() || images.length > 0}
               bufferCount={bufferCount}
-              onSend={send}
+              onSend={() => { send(); flush(); }}
               onStop={stop}
               onFlush={flush}
               onVoice={() => showToast("语音功能开发中")}
@@ -1885,6 +1921,21 @@ export default function ChatPanel({ onBack }) {
           </div>
         </div>
       </div>
+
+      {/* 操作日志悬浮图标 */}
+      <button onClick={() => { setOpLogOpen(v => !v); opLogUnread.current = false; }} style={{
+        position: "fixed", bottom: 160, right: 14, zIndex: 500,
+        width: 32, height: 32, borderRadius: "50%",
+        background: opLogUnread.current ? "rgba(255,120,120,0.35)" : "rgba(128,128,128,0.18)",
+        border: "none", color: "var(--text-tertiary)", fontSize: 14,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: "pointer", backdropFilter: "blur(4px)",
+      }} title="操作日志">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+        </svg>
+      </button>
+      {opLogOpen && <OpLogPanel log={opLog} onClose={() => setOpLogOpen(false)} />}
 
       {/* TERMINAL placeholder */}
       {terminalOpen && <TerminalPanel onClose={() => setTerminalOpen(false)} />}
@@ -2093,11 +2144,12 @@ function ForgeDoneRow({ content, detail, showToast }) {
           {!detail.forge_truncated && !detail.skipped && detail.forge_retained_tokens != null &&
             `整段保留 ${formatK(detail.forge_retained_tokens)} tokens`}
           {(() => {
-            const ir = injectResult?.injected ? injectResult : (detail?.inject_msg_count != null ? { msgCount: detail.inject_msg_count, estTokens: detail.inject_est_tokens, thinkingCount: detail.inject_thinking_count, thinkingTokens: detail.inject_thinking_tokens } : null);
+            const ir = injectResult?.injected ? injectResult : (detail?.inject_msg_count != null ? { msgCount: detail.inject_msg_count, estTokens: detail.inject_est_tokens, thinkingCount: detail.inject_thinking_count, thinkingTokens: detail.inject_thinking_tokens, realTokens: detail.inject_real_tokens } : null);
             if (!ir) return null;
-            let s = ` · 已浮想 ${ir.msgCount} 个回忆（~${formatK(ir.estTokens)} tokens）`;
-            if (ir.thinkingCount > 0)
-              s += `${ir.thinkingCount} 个思绪（~${formatK(ir.thinkingTokens)} tokens）`;
+            const tokenStr = ir.realTokens ? formatK(ir.realTokens) : '~' + formatK((ir.estTokens || 0) + (ir.thinkingTokens || 0));
+            let s = ` · 已浮想 ${ir.msgCount} 个回忆`;
+            if (ir.thinkingCount > 0) s += ` · ${ir.thinkingCount} 个思绪`;
+            s += `（${tokenStr} tokens）`;
             return s;
           })()}
           {detail.model && ` · ${detail.model}`}
@@ -2148,13 +2200,70 @@ function InjectDoneRow({ content, detail }) {
       </span>
       {open && hasDetail && (
         <div style={{ fontSize: 10, color: "#aaa", textAlign: "center" }}>
-          {detail.inject_msg_count != null && `${detail.inject_msg_count} 个回忆（~${formatK(detail.inject_est_tokens || 0)} tokens）`}
-          {detail.inject_thinking_count > 0 &&
-            ` · ${detail.inject_thinking_count} 个思绪（~${formatK(detail.inject_thinking_tokens || 0)} tokens）`}
+          {detail.inject_msg_count != null && `${detail.inject_msg_count} 个回忆`}
+          {detail.inject_thinking_count > 0 && ` · ${detail.inject_thinking_count} 个思绪`}
+          {detail.inject_msg_count != null && (() => {
+            const tokenStr = detail.inject_real_tokens ? formatK(detail.inject_real_tokens) : '~' + formatK((detail.inject_est_tokens || 0) + (detail.inject_thinking_tokens || 0));
+            return `（${tokenStr} tokens）`;
+          })()}
           {detail.from_session && ` · 来自旧 session`}
         </div>
       )}
     </div>
+  );
+}
+
+function OpLogPanel({ log, onClose }) {
+  const fmtTime = (iso) => {
+    try {
+      const d = new Date(iso);
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mi = String(d.getMinutes()).padStart(2, "0");
+      return `${d.getFullYear()}/${mm}/${dd} ${hh}:${mi}`;
+    } catch { return ""; }
+  };
+  return createPortal(
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, zIndex: 950, background: "rgba(0,0,0,0.3)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 420, maxHeight: "60vh",
+        background: "var(--bg-panel, #1a1a1a)", borderRadius: "14px 14px 0 0",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+        border: "1px solid var(--border, #333)", borderBottom: "none",
+      }}>
+        <div style={{
+          padding: "12px 16px", borderBottom: "1px solid var(--border, #333)",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          fontFamily: "Georgia, 'Noto Serif SC', serif",
+        }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>操作日志</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ overflowY: "auto", flex: 1, padding: "8px 0" }}>
+          {log.length === 0 && <div style={{ padding: "20px 16px", color: "var(--text-tertiary)", fontSize: 13, textAlign: "center" }}>暂无日志</div>}
+          {log.map((e, i) => (
+            <div key={i} style={{
+              padding: "6px 16px", fontSize: 12, lineHeight: 1.6,
+              display: "flex", gap: 8, alignItems: "flex-start",
+              fontFamily: "Georgia, 'Noto Serif SC', serif",
+              color: "#e0e0e0",
+            }}>
+              <span style={{ color: "#999", flexShrink: 0, fontSize: 11 }}>{fmtTime(e.time)}</span>
+              <span style={{ color: e.ok ? "#7cd47c" : "#e07070", flexShrink: 0 }}>{e.ok ? "✓" : "✗"}</span>
+              <span style={{ flex: 1 }}>
+                {e.label}
+                {e.detail && <span style={{ color: "#aaa", marginLeft: 6 }}>— {e.detail}</span>}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
