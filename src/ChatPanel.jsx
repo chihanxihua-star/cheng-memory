@@ -2724,6 +2724,7 @@ function ParamsScreen({ onBack, showToast }) {
         if (alive) setForge({
           retain_tokens: d.retain_tokens,
           trigger_threshold: d.trigger_threshold,
+          thinking_keep_ratio: d.thinking_keep_ratio ?? 0.5,
         });
         if (rd.ok) {
           const dd = await rd.json();
@@ -2775,7 +2776,7 @@ function ParamsScreen({ onBack, showToast }) {
       try {
         const r = await authedFetch(API + "/forge/config", {
           method: "PUT", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ retain_tokens: retain, trigger_threshold: trigger }),
+          body: JSON.stringify({ retain_tokens: retain, trigger_threshold: trigger, thinking_keep_ratio: parseFloat(forge.thinking_keep_ratio) }),
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
@@ -2839,6 +2840,15 @@ function ParamsScreen({ onBack, showToast }) {
           onChange={e => setForge(f => ({ ...(f || {}), retain_tokens: e.target.value }))}
         />
         <small>forge 时保留最后 N tokens；当前 tokens ≤ 保留量则整段保留不截（默认 100000）</small>
+      </div>
+      <div className="cp-ps-form">
+        <label>思绪保留比例</label>
+        <input
+          type="number" min={0} max={1} step={0.1}
+          value={forge?.thinking_keep_ratio ?? 0.5}
+          onChange={e => setForge(f => ({ ...(f || {}), thinking_keep_ratio: e.target.value }))}
+        />
+        <small>浮想时只注入后 X% 的思绪（0=不注入思绪，1=全部注入，默认 0.5）</small>
       </div>
       <div className="cp-ps-form">
         <label>摘要长度（字）</label>
