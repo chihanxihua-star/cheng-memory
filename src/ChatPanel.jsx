@@ -96,10 +96,12 @@ function md(text) {
   return h;
 }
 
-function formatTime(d) { return d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }); }
+function _utc8(d) { return new Date(d.getTime() + 8 * 3600000); }
+function formatTime(d) { const u = _utc8(d); const z = n => String(n).padStart(2, "0"); return z(u.getUTCHours()) + ":" + z(u.getUTCMinutes()); }
 function formatDateTime(d) {
-  return d.getFullYear() + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + String(d.getDate()).padStart(2, "0")
-    + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  const u = _utc8(d); const z = n => String(n).padStart(2, "0");
+  return u.getUTCFullYear() + "/" + z(u.getUTCMonth() + 1) + "/" + z(u.getUTCDate())
+    + " " + z(u.getUTCHours()) + ":" + z(u.getUTCMinutes());
 }
 function formatK(n) {
   n = n || 0;
@@ -2216,12 +2218,12 @@ function InjectDoneRow({ content, detail }) {
 function OpLogPanel({ log, onClose }) {
   const fmtTime = (iso) => {
     try {
-      const d = new Date(iso);
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mi = String(d.getMinutes()).padStart(2, "0");
-      return `${d.getFullYear()}/${mm}/${dd} ${hh}:${mi}`;
+      const u = _utc8(new Date(iso));
+      const mm = String(u.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(u.getUTCDate()).padStart(2, "0");
+      const hh = String(u.getUTCHours()).padStart(2, "0");
+      const mi = String(u.getUTCMinutes()).padStart(2, "0");
+      return `${u.getUTCFullYear()}/${mm}/${dd} ${hh}:${mi}`;
     } catch { return ""; }
   };
   return createPortal(
