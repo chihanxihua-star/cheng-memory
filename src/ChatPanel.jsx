@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
 import TerminalPanel from "./TerminalPanel";
 import SessionPanel from "./SessionPanel";
+import WakePanel from "./WakePanel";
 
 /* ════════════════════════════════════════════════════════════
    配置
@@ -901,6 +902,7 @@ export default function ChatPanel({ onBack }) {
 
   // Session 可视化面板开关（点 Claude 头像打开）
   const [sessionOpen, setSessionOpen] = useState(false);
+  const [wakeOpen, setWakeOpen] = useState(false);
 
   // JSONL 全 session 搜索
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1950,6 +1952,13 @@ export default function ChatPanel({ onBack }) {
           convId={convId}
         />
       )}
+      {wakeOpen && (
+        <WakePanel
+          onClose={() => setWakeOpen(false)}
+          theme={resolved}
+          showToast={showToast}
+        />
+      )}
 
       {/* HISTORY full-screen modal (user avatar) */}
       {historyOpen && <HistoryModal onClose={() => setHistoryOpen(false)} showToast={showToast} />}
@@ -2027,6 +2036,7 @@ export default function ChatPanel({ onBack }) {
                 currentModel={currentModel}
                 onOpenTerminal={() => { setTerminalOpen(true); setSidebarOpen(false); }}
                 onOpenSession={() => { setSessionOpen(true); setSidebarOpen(false); }}
+                onOpenWake={() => { setWakeOpen(true); setSidebarOpen(false); }}
                 showToast={showToast}
                 convId={convId}
               />
@@ -2627,7 +2637,7 @@ function StreamingBubble({ snap, profile, showTyping }) {
 }
 
 /* ─────── Sidebar 多屏 ─────── */
-function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, onAmnesia, onSelectModel, currentModel, onOpenTerminal, onOpenSession, showToast, convId }) {
+function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, onAmnesia, onSelectModel, currentModel, onOpenTerminal, onOpenSession, onOpenWake, showToast, convId }) {
   if (screen === "main") {
     return (
       <>
@@ -2637,6 +2647,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
           <SidebarItem onClick={onOpenSession}>Session</SidebarItem>
           <SidebarItem onClick={() => setScreen("voice")}>语音服务</SidebarItem>
           <SidebarItem onClick={onOpenTerminal}>终端</SidebarItem>
+          <SidebarItem onClick={onOpenWake}>唤醒</SidebarItem>
         </div>
         <div className="cp-ps-section-title">管理</div>
         <div className="cp-ps-list">
