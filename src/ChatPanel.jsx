@@ -3566,15 +3566,15 @@ function stripBubbleMarkers(s) {
 
 // 微信风格的时间戳：2026/02/03 18:38
 function formatChatTime(iso) {
-  const d = new Date(iso);
+  const u = _utc8(new Date(iso));
   const z = n => String(n).padStart(2, "0");
-  return d.getFullYear() + "/" + z(d.getMonth() + 1) + "/" + z(d.getDate())
-    + " " + z(d.getHours()) + ":" + z(d.getMinutes());
+  return u.getUTCFullYear() + "/" + z(u.getUTCMonth() + 1) + "/" + z(u.getUTCDate())
+    + " " + z(u.getUTCHours()) + ":" + z(u.getUTCMinutes());
 }
 
 function buildExportMarkdown(rows, rangeLabel) {
   let out = "# 聊天记录导出\n\n";
-  out += "导出时间：" + new Date().toLocaleString("zh-CN") + "\n\n";
+  out += "导出时间：" + formatDateTime(new Date()) + "\n\n";
   out += "范围：" + rangeLabel + "\n\n";
   out += "共 " + rows.length + " 条消息\n\n---\n\n";
   // 时间正序
@@ -4121,9 +4121,9 @@ function SearchModal({ onClose, currentSessionId, onJump }) {
       return;
     }
     setDayData({ loading: true, error: null, msgs: [], anchor: null });
-    const d = new Date(r.timestamp);
-    const s = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-    const e = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+    const u = _utc8(new Date(r.timestamp));
+    const s = new Date(Date.UTC(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate()) - 8 * 3600000);
+    const e = new Date(Date.UTC(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), 23, 59, 59, 999) - 8 * 3600000);
     try {
       const resp = await authedFetch(
         API + "/search/day-messages"

@@ -668,7 +668,7 @@ export default function SessionPanel({ onClose, theme = "light", currentTokens =
               {importConvs.map((c, i) => (
                 <div key={i} className="sp-conv-item" onClick={() => selectImportConv(c.raw)}>
                   <div className="sp-conv-name">{c.name}</div>
-                  <div className="sp-conv-meta">{c.msgCount} 条 · {c.updatedAt ? new Date(c.updatedAt).toLocaleDateString("zh-CN") : ""}</div>
+                  <div className="sp-conv-meta">{c.msgCount} 条 · {c.updatedAt ? fmtSessionTime(c.updatedAt) : ""}</div>
                 </div>
               ))}
             </div>

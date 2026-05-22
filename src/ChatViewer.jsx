@@ -53,18 +53,22 @@ function shortModel(m) {
   return m.split("-").slice(0, 2).join("-");
 }
 
+function _utc8(d) { return new Date(d.getTime() + 8 * 3600000); }
 function fmtDate(d) {
   if (!d) return "";
-  const date = new Date(d);
-  const now = new Date();
-  if (date.toDateString() === now.toDateString())
-    return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
-  return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
+  const u = _utc8(new Date(d));
+  const n = _utc8(new Date());
+  const z = v => String(v).padStart(2, "0");
+  if (u.getUTCFullYear() === n.getUTCFullYear() && u.getUTCMonth() === n.getUTCMonth() && u.getUTCDate() === n.getUTCDate())
+    return z(u.getUTCHours()) + ":" + z(u.getUTCMinutes());
+  return (u.getUTCMonth() + 1) + "月" + u.getUTCDate() + "日";
 }
 
 function fmtDateTime(d) {
   if (!d) return "";
-  return new Date(d).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const u = _utc8(new Date(d));
+  const z = v => String(v).padStart(2, "0");
+  return u.getUTCFullYear() + "/" + z(u.getUTCMonth() + 1) + "/" + z(u.getUTCDate()) + " " + z(u.getUTCHours()) + ":" + z(u.getUTCMinutes());
 }
 
 function estimateTokens(s) {
@@ -307,9 +311,9 @@ function Collapsible({ label, badge, children }) {
 // ── Message component ────────────────────────────────────
 function fmtMsgTime(d) {
   if (!d) return "";
-  const dt = new Date(d);
+  const u = _utc8(new Date(d));
   const z = n => String(n).padStart(2, "0");
-  return dt.getFullYear() + "/" + z(dt.getMonth() + 1) + "/" + z(dt.getDate()) + " " + z(dt.getHours()) + ":" + z(dt.getMinutes());
+  return u.getUTCFullYear() + "/" + z(u.getUTCMonth() + 1) + "/" + z(u.getUTCDate()) + " " + z(u.getUTCHours()) + ":" + z(u.getUTCMinutes());
 }
 
 function Message({ m, searchQuery, id, idx }) {

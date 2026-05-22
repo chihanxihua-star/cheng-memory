@@ -241,8 +241,9 @@ function BottomSheet({ title, onClose, children }) {
   );
 }
 
-function formatDate(d) { return d ? new Date(d).toLocaleDateString("zh-CN", { month: "short", day: "numeric" }) : ""; }
-function formatDateTime(d) { return d ? new Date(d).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""; }
+function _utc8(d) { return new Date(d.getTime() + 8 * 3600000); }
+function formatDate(d) { if (!d) return ""; const u = _utc8(new Date(d)); return (u.getUTCMonth() + 1) + "月" + u.getUTCDate() + "日"; }
+function formatDateTime(d) { if (!d) return ""; const u = _utc8(new Date(d)); const z = n => String(n).padStart(2, "0"); return (u.getUTCMonth() + 1) + "月" + u.getUTCDate() + "日 " + z(u.getUTCHours()) + ":" + z(u.getUTCMinutes()); }
 
 // ════════════════════════════════════════════════════════════
 //  记忆板块
@@ -3026,9 +3027,9 @@ function fmtUsageDurMin(min) {
 }
 
 function fmtHHMM(iso) {
-  const d = new Date(iso);
+  const u = _utc8(new Date(iso));
   const z = n => String(n).padStart(2, "0");
-  return z(d.getHours()) + ":" + z(d.getMinutes());
+  return z(u.getUTCHours()) + ":" + z(u.getUTCMinutes());
 }
 
 function UsagePanel() {
@@ -3046,9 +3047,9 @@ function UsagePanel() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const now = new Date();
+  const now = _utc8(new Date());
   const z = n => String(n).padStart(2, "0");
-  const nowStr = z(now.getHours()) + ":" + z(now.getMinutes());
+  const nowStr = z(now.getUTCHours()) + ":" + z(now.getUTCMinutes());
 
   const apps = (summary?.apps || []).slice(0, 8);
   const totalMin = summary?.totalMin || 0;
@@ -3058,7 +3059,7 @@ function UsagePanel() {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>
-          {now.getFullYear()}-{z(now.getMonth()+1)}-{z(now.getDate())} · 现在 {nowStr}
+          {now.getUTCFullYear()}-{z(now.getUTCMonth()+1)}-{z(now.getUTCDate())} · 现在 {nowStr}
         </p>
         <button onClick={load} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
       </div>

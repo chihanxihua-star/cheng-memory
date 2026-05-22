@@ -31,7 +31,7 @@ export default function TerminalPanel({ onClose }) {
   const logTerm = (msg, colorCode = "90") => {
     const term = termRef.current;
     if (!term) return;
-    const ts = new Date().toLocaleTimeString();
+    const _u = new Date(Date.now() + 8 * 3600000); const ts = String(_u.getUTCHours()).padStart(2,"0") + ":" + String(_u.getUTCMinutes()).padStart(2,"0") + ":" + String(_u.getUTCSeconds()).padStart(2,"0");
     try { term.write(`\r\n\x1b[${colorCode}m[${ts}] ${msg}\x1b[0m\r\n`); } catch {}
   };
 
