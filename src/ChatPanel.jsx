@@ -3626,7 +3626,7 @@ async function fetchProjectMessages({ start, end, keyword, ascending = true, lim
 
   let q = supabase
     .from("messages")
-    .select("id, role, content, thinking, created_at, conversation_id")
+    .select("id, role, content, thinking, created_at, conversation_id, event")
     .in("conversation_id", convIds)
     .order("created_at", { ascending })
     .limit(limit);
@@ -4373,7 +4373,7 @@ function CharStatsScreen({ onBack, convId }) {
     try {
       const { data, error: err } = await supabase
         .from("messages")
-        .select("role, content")
+        .select("role, content, event")
         .eq("conversation_id", convId)
         .limit(5000);
       if (err) throw err;
