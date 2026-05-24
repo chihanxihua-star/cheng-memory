@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 const API = "https://chat.jessaminee.top/api";
 function wpFetch(url, opts = {}) {
@@ -152,6 +152,32 @@ const STYLES = `
   color: var(--text-tertiary, #999);
   margin-left: 4px;
 }
+.wp-log-thinking-toggle {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary, #999);
+  cursor: pointer;
+  user-select: none;
+}
+.wp-log-thinking {
+  display: block;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(120, 120, 140, 0.08);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-secondary, #6b6358);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.wp-root[data-theme="dark"] .wp-log-thinking {
+  background: rgba(200, 200, 220, 0.08);
+  color: #b0aca4;
+}
 
 /* 渴望度 tab */
 .wp-desire {
@@ -259,6 +285,19 @@ const STYLES = `
 }
 `;
 
+function ThinkingBlock({ text }) {
+  const [open, setOpen] = useState(false);
+  if (!text) return null;
+  return (
+    <>
+      <span className="wp-log-thinking-toggle" onClick={() => setOpen(v => !v)}>
+        {open ? '▾ 收起思绪' : '▸ 思绪'}
+      </span>
+      {open && <span className="wp-log-thinking">{text}</span>}
+    </>
+  );
+}
+
 function LogItem({ row }) {
   const time = fmtTime(row.created_at);
   const prob = `t=${fmtHours(row.t_hours)}, P=${row.probability != null ? (row.probability * 100).toFixed(0) + '%' : '—'}, roll=${row.roll != null ? row.roll.toFixed(2) : '—'}`;
@@ -282,6 +321,7 @@ function LogItem({ row }) {
         命中 → 发消息
         <span className="wp-log-prob">({prob})</span>
         {row.message_sent && <span className="wp-log-msg">{row.message_sent}</span>}
+        <ThinkingBlock text={row.thinking} />
       </div>
     );
   }
@@ -299,6 +339,7 @@ function LogItem({ row }) {
       命中 → {reasonText}
       <span className="wp-log-sigh"> (叹气)</span>
       <span className="wp-log-prob">({prob})</span>
+      <ThinkingBlock text={row.thinking} />
     </div>
   );
 }
@@ -345,6 +386,8 @@ function SighLogTab() {
 function DesireTab({ showToast }) {
   const [status, setStatus] = useState(null);
   const [lambda, setLambda] = useState(0.15);
+  const [intMin, setIntMin] = useState(30);
+  const [intMax, setIntMax] = useState(50);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -359,6 +402,8 @@ function DesireTab({ showToast }) {
         const st = await rs.json();
         if (alive) {
           setLambda(cfg.lambda || 0.15);
+          setIntMin(cfg.dice_interval_min ?? 30);
+          setIntMax(cfg.dice_interval_max ?? 50);
           setStatus(st);
         }
       } catch (e) {
@@ -375,10 +420,12 @@ function DesireTab({ showToast }) {
   const save = async () => {
     setSaving(true);
     try {
+      const finalMin = Math.min(intMin, intMax);
+      const finalMax = Math.max(intMin, intMax);
       const r = await wpFetch(API + "/dice/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lambda }),
+        body: JSON.stringify({ lambda, dice_interval_min: finalMin, dice_interval_max: finalMax }),
       });
       if (!r.ok) throw new Error("HTTP " + r.status);
       showToast("已保存");
@@ -416,6 +463,23 @@ function DesireTab({ showToast }) {
       <div className="wp-stat-row">
         <span className="wp-stat-key">当前命中概率</span>
         <span className="wp-stat-val">{currentP != null ? (currentP * 100).toFixed(1) + '%' : '—'}</span>
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <div className="wp-slider-labels">
+          <span>轮询间隔</span>
+          <span>{intMin}~{intMax} 分钟</span>
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary, #999)', flexShrink: 0 }}>min</span>
+          <input type="range" className="wp-slider" min={5} max={120} step={5}
+            value={intMin} onChange={e => setIntMin(parseInt(e.target.value))} />
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary, #999)', flexShrink: 0 }}>max</span>
+          <input type="range" className="wp-slider" min={5} max={120} step={5}
+            value={intMax} onChange={e => setIntMax(parseInt(e.target.value))} />
+        </div>
       </div>
 
       <button className="wp-save-btn" onClick={save} disabled={saving}>

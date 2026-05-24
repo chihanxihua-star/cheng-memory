@@ -48,6 +48,13 @@ const MODEL_OPTIONS = [
   { value: "claude-sonnet-4-5-20250929", name: "Sonnet 4.5", desc: "Classic" },
 ];
 
+const EFFORT_OPTIONS = [
+  { value: "low", name: "Low" },
+  { value: "medium", name: "Medium" },
+  { value: "high", name: "High" },
+  { value: "max", name: "Max" },
+];
+
 /* ════════════════════════════════════════════════════════════
    工具函数
    ════════════════════════════════════════════════════════════ */
@@ -364,6 +371,7 @@ const CSS = `
 .cp-msg-bubble.user {
   background: rgba(242, 220, 224, 0.78); color: var(--text-bubble-user);
   padding: 9px 13px; border-radius: 12px 12px 4px 12px; white-space: pre-wrap;
+  position: relative;
 }
 .cp-msg-bubble.assistant {
   background: rgba(255, 255, 255, 0.68); color: var(--text-bubble-bot);
@@ -371,6 +379,15 @@ const CSS = `
 }
 .cp-root[data-theme="dark"] .cp-msg-bubble.user { background: rgba(248, 245, 240, 0.82); }
 .cp-root[data-theme="dark"] .cp-msg-bubble.assistant { background: rgba(58, 58, 60, 0.72); }
+
+.cp-msg-check-pad { display: inline-block; width: 20px; }
+.cp-msg-check {
+  position: absolute; right: 5px; bottom: 5px;
+  line-height: 1; color: transparent; pointer-events: none;
+  display: flex; align-items: center;
+}
+.cp-msg-check.sent { color: #D0C8C0; }
+.cp-root[data-theme="dark"] .cp-msg-check.sent { color: #6A6460; }
 
 .cp-msg-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin-bottom: 8px; }
 .cp-msg-images img { width: 100%; border-radius: 8px; cursor: pointer; object-fit: cover; aspect-ratio: 1; }
@@ -868,6 +885,7 @@ export default function ChatPanel({ onBack }) {
   const [opLogOpen, setOpLogOpen] = useState(false);
   const opLogUnread = useRef(false);
   const [currentModel, setCurrentModel] = useState("");
+  const [currentEffort, setCurrentEffort] = useState("high");
   const [charCount, setCharCount] = useState(0);
   // 累计上下文 input tokens (= input + cache_read + cache_creation)。来自每轮 done 的 usage；
   // 持久化到 localStorage：WS 断线/页面刷新后从 localStorage 恢复，不归零。
@@ -899,6 +917,7 @@ export default function ChatPanel({ onBack }) {
   const [renameTarget, setRenameTarget] = useState(null); // {id, title}
   const [imageViewer, setImageViewer] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [flushedIds, setFlushedIds] = useState(new Set());
 
   // Session 可视化面板开关（点 Claude 头像打开）
   const [sessionOpen, setSessionOpen] = useState(false);
@@ -964,6 +983,7 @@ export default function ChatPanel({ onBack }) {
       const d = await r.json();
       setCcStatus(d.cc_running ? "ready" : "down");
       if (d.model && currentModel === "") setCurrentModel(d.model);
+      if (d.effort) setCurrentEffort(d.effort);
       if (d.session) setCurrentSessionId(d.session);
     } catch {
       setCcStatus("down");
@@ -1255,6 +1275,15 @@ export default function ChatPanel({ onBack }) {
         pushLog(!isErr, content || kind || "系统消息", isErr ? detail.error : null);
         break;
       }
+      case "flushed":
+        if (msg.ids && msg.ids.length) {
+          setFlushedIds(prev => {
+            const next = new Set(prev);
+            msg.ids.forEach(id => next.add(id));
+            return next;
+          });
+        }
+        break;
       case "char_count":
         if (!convId || msg.conversation_id === convId) {
           setCharCount(msg.total || 0);
@@ -1398,6 +1427,7 @@ export default function ChatPanel({ onBack }) {
       conversation_id: cid,
       settings: getSettings(PROJECT_ID),
       api_settings: getAPISettings(PROJECT_ID),
+      msgId: userMsg.id,
     };
     if (imgs.length > 0) payload.images = imgs;
     if (currentModel) payload.model = currentModel;
@@ -1589,43 +1619,48 @@ export default function ChatPanel({ onBack }) {
     return () => document.removeEventListener("click", onDoc);
   }, [showModelDropdown]);
 
-  const selectModel = useCallback(async (value, name) => {
+  const selectModel = useCallback(async (value, name, effort) => {
     setShowModelDropdown(false);
     const prevModel = currentModel;
+    const prevEffort = currentEffort;
     setCurrentModel(value);
+    if (effort) setCurrentEffort(effort);
     const label = name || value || "默认";
     try {
-      // 进度提示走 WebSocket "system" 消息（后端 broadcast），这里不主动追加状态条
+      const body = {
+        model: value || null,
+        forge: true,
+        summaryLength: getSettings(PROJECT_ID).summaryLength,
+        conversation_id: convId || null,
+        model_label: label,
+      };
+      if (effort) body.effort = effort;
       const r = await authedFetch(API + "/cc/restart", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: value || null,
-          forge: true,
-          summaryLength: getSettings(PROJECT_ID).summaryLength,
-          conversation_id: convId || null,
-          model_label: label,
-        }),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
-      // 进程已重启：清干净流式状态
       setIsGenerating(false);
       setStreamSnap(null);
       streamRef.current = null;
     } catch (e) {
       setCurrentModel(prevModel);
+      setCurrentEffort(prevEffort);
       showToast("小太阳起床失败：" + e.message);
     }
-  }, [currentModel, convId, showToast]);
+  }, [currentModel, currentEffort, convId, showToast]);
 
   /* ─────── 失忆：清 forge marker + 新 random UUID 启动 CC（不 --resume） ─────── */
-  const amnesia = useCallback(async () => {
+  const amnesia = useCallback(async (effort) => {
     if (!window.confirm("失忆后从干净的新 session 开始（不保留任何上文）。确定？")) return;
     try {
+      const amnesiaBody = { conversation_id: convId };
+      if (typeof effort === "string" && effort) amnesiaBody.effort = effort;
       const r = await authedFetch(API + "/cc/amnesia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversation_id: convId }),
+        body: JSON.stringify(amnesiaBody),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
@@ -1760,6 +1795,23 @@ export default function ChatPanel({ onBack }) {
     if (isNearBottom()) scrollToBottom();
   }, [messages, streamSnap, showTyping, scrollToBottom, isNearBottom]);
 
+  /* ─────── 键盘弹起时滚到底部 + 清除 iOS 滚动偏移 ─────── */
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      if (vv.offsetTop !== 0) window.scrollTo(0, 0);
+      if (isNearBottom()) scrollToBottom();
+    };
+    vv.addEventListener("resize", onResize);
+    vv.addEventListener("scroll", onResize);
+    return () => {
+      vv.removeEventListener("resize", onResize);
+      vv.removeEventListener("scroll", onResize);
+    };
+  }, [scrollToBottom, isNearBottom]);
+
   /* ─────── 渲染 ─────── */
   const statusColor = ccStatus === "ready" ? "ok" : ccStatus === "down" ? "err" : "err";
   const currentModelInfo = MODEL_OPTIONS.find(m => m.value === currentModel) || MODEL_OPTIONS[0];
@@ -1862,6 +1914,7 @@ export default function ChatPanel({ onBack }) {
           }
           return (
             <MessageBubble key={it.id} item={it} profile={profile}
+              flushedIds={flushedIds}
               onCopy={copyText}
               onOpenImage={(src) => setImageViewer(src)}
               onEdit={editMessage}
@@ -1917,7 +1970,7 @@ export default function ChatPanel({ onBack }) {
               isGenerating={isGenerating}
               hasContent={!!input.trim() || images.length > 0}
               bufferCount={bufferCount}
-              onSend={() => { send(); flush(); }}
+              onSend={() => { send().then(() => flush()); }}
               onStop={stop}
               onFlush={flush}
               onVoice={() => showToast("语音功能开发中")}
@@ -2034,6 +2087,7 @@ export default function ChatPanel({ onBack }) {
                 onAmnesia={amnesia}
                 onSelectModel={selectModel}
                 currentModel={currentModel}
+                currentEffort={currentEffort}
                 onOpenTerminal={() => { setTerminalOpen(true); setSidebarOpen(false); }}
                 onOpenSession={() => { setSessionOpen(true); setSidebarOpen(false); }}
                 onOpenWake={() => { setWakeOpen(true); setSidebarOpen(false); }}
@@ -2313,7 +2367,7 @@ function SendStopButton({ isGenerating, hasContent, bufferCount, onSend, onStop,
   );
 }
 
-function MessageBubble({ item, profile, onCopy, onOpenImage, onEdit, onRegen, onDelete }) {
+function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit, onRegen, onDelete }) {
   const { msg, partText, isHead, isTail, continuation, turnTotal, turnDelta } = item;
   const role = msg.role;
   const [showActions, setShowActions] = useState(false);
@@ -2362,7 +2416,7 @@ function MessageBubble({ item, profile, onCopy, onOpenImage, onEdit, onRegen, on
             </div>
           )}
           {isUser ? (
-            !editing ? (partText || "")
+            !editing ? (<>{partText || ""}{isTail && <><span className="cp-msg-check-pad">{" "}</span><span className={"cp-msg-check" + ((!msg.id.startsWith("local-u-") || flushedIds?.has(msg.id)) ? " sent" : "")}>{(!msg.id.startsWith("local-u-") || flushedIds?.has(msg.id)) ? <svg width="18" height="12" viewBox="0 0 18 12" fill="none"><path d="M1.5 6.5L5 10L11 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M6.5 6.5L10 10L16 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> : ""}</span></>}</>)
             : (
               <>
                 <textarea className="cp-edit-area" value={editText}
@@ -2637,7 +2691,7 @@ function StreamingBubble({ snap, profile, showTyping }) {
 }
 
 /* ─────── Sidebar 多屏 ─────── */
-function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, onAmnesia, onSelectModel, currentModel, onOpenTerminal, onOpenSession, onOpenWake, showToast, convId }) {
+function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, onAmnesia, onSelectModel, currentModel, currentEffort, onOpenTerminal, onOpenSession, onOpenWake, showToast, convId }) {
   if (screen === "main") {
     return (
       <>
@@ -2697,7 +2751,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
     );
   }
   if (screen === "history") return <HistoryScreen onBack={() => setScreen("main")} showToast={showToast} />;
-  if (screen === "documents") return <DocumentsScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} onAmnesia={onAmnesia} onSelectModel={onSelectModel} currentModel={currentModel} showToast={showToast} />;
+  if (screen === "documents") return <DocumentsScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} onAmnesia={onAmnesia} onSelectModel={onSelectModel} currentModel={currentModel} currentEffort={currentEffort} showToast={showToast} />;
   if (screen === "params") return <ParamsScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "api") return <APISettingsScreen onBack={() => setScreen("main")} showToast={showToast} />;
   if (screen === "stats") return <StatsScreen onBack={() => setScreen("stats-menu")} />;
@@ -3338,13 +3392,16 @@ const TEXTAREA_STYLE = {
 };
 
 // CC 文档：CLAUDE.md + system_prompt + 文件 共用一个底部保存按钮
-function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, showToast }) {
+function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, currentEffort, showToast }) {
   const [claudeMd, setClaudeMd] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [selectedEffort, setSelectedEffort] = useState(currentEffort || "high");
+
+  useEffect(() => { setSelectedEffort(currentEffort || "high"); }, [currentEffort]);
 
   const filterEq = useMemo(
     () => ({ project_id: PROJECT_ID, mode: "cc", doc_type: "file" }),
@@ -3439,9 +3496,27 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, s
           <div style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.6 }}>
             已保存，选择重启方式：
           </div>
+          <div style={{ marginBottom: 4 }}>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>思考深度</div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {EFFORT_OPTIONS.map(e => (
+                <button key={e.value}
+                  className="cp-ps-btn"
+                  style={{
+                    flex: 1, padding: "6px 0", fontSize: 12,
+                    background: selectedEffort === e.value ? "var(--bg-button)" : "transparent",
+                    color: selectedEffort === e.value ? "var(--text-button)" : "var(--text-tertiary)",
+                    borderColor: selectedEffort === e.value ? "var(--bg-button)" : "var(--border-card)",
+                  }}
+                  onClick={() => setSelectedEffort(e.value)}>
+                  {e.name}
+                </button>
+              ))}
+            </div>
+          </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="cp-ps-btn" style={{ flex: 1 }}
-              onClick={() => { setSaved(false); onAmnesia && onAmnesia(); }}>
+              onClick={() => { setSaved(false); onAmnesia && onAmnesia(selectedEffort); }}>
               失忆重启
             </button>
             <div style={{ flex: 1, position: "relative" }}>
@@ -3468,7 +3543,7 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, s
                       onClick={() => {
                         setShowModelPicker(false);
                         setSaved(false);
-                        onSelectModel && onSelectModel(m.value, m.name);
+                        onSelectModel && onSelectModel(m.value, m.name, selectedEffort);
                       }}>
                       <div style={{ fontWeight: 500 }}>{m.name}</div>
                       <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>{m.desc}</div>
@@ -3526,12 +3601,12 @@ function APIDocumentsTab({ showToast }) {
   );
 }
 
-function DocumentsTab({ mode, onRestartCC, onAmnesia, onSelectModel, currentModel, showToast }) {
-  if (mode === "cc") return <CCDocumentsTab onRestartCC={onRestartCC} onAmnesia={onAmnesia} onSelectModel={onSelectModel} currentModel={currentModel} showToast={showToast} />;
+function DocumentsTab({ mode, onRestartCC, onAmnesia, onSelectModel, currentModel, currentEffort, showToast }) {
+  if (mode === "cc") return <CCDocumentsTab onRestartCC={onRestartCC} onAmnesia={onAmnesia} onSelectModel={onSelectModel} currentModel={currentModel} currentEffort={currentEffort} showToast={showToast} />;
   return <APIDocumentsTab showToast={showToast} />;
 }
 
-function DocumentsScreen({ onBack, onRestartCC, onAmnesia, onSelectModel, currentModel, showToast }) {
+function DocumentsScreen({ onBack, onRestartCC, onAmnesia, onSelectModel, currentModel, currentEffort, showToast }) {
   const [tab, setTab] = useState("cc");
   return (
     <>
@@ -3540,7 +3615,7 @@ function DocumentsScreen({ onBack, onRestartCC, onAmnesia, onSelectModel, curren
         <div className={"cp-ps-tab" + (tab === "cc" ? " active" : "")} onClick={() => setTab("cc")}>CC 文档</div>
         <div className={"cp-ps-tab" + (tab === "api" ? " active" : "")} onClick={() => setTab("api")}>API 文档</div>
       </div>
-      <DocumentsTab mode={tab} onRestartCC={onRestartCC} onAmnesia={onAmnesia} onSelectModel={onSelectModel} currentModel={currentModel} showToast={showToast} />
+      <DocumentsTab mode={tab} onRestartCC={onRestartCC} onAmnesia={onAmnesia} onSelectModel={onSelectModel} currentModel={currentModel} currentEffort={currentEffort} showToast={showToast} />
     </>
   );
 }
