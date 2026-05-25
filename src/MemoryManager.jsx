@@ -253,14 +253,14 @@ const MEM_SORTS = [
   { key: "strength.desc", label: "强度↓" }, { key: "strength.asc", label: "强度↑" },
   { key: "arousal.desc", label: "唤醒度↓" }, { key: "ref_count.desc", label: "引用↓" },
 ];
-const EMPTY_MEM = { content: "", summary: "", level: 1, valence: 0.5, arousal: 0.5, tags: [], resolved: false, flashbulb: false, pinned: false, strength: 1.0, author: "小茉莉", context: null };
+const EMPTY_MEM = { content: "", summary: "", level: 1, valence: 0.5, arousal: 0.5, tags: [], resolved: true, flashbulb: false, pinned: false, strength: 1.0, author: "小茉莉", context: null };
 
 function MemoryDrawer({ memory, isNew, onSave, onClose }) {
   const [f, setF] = useState({
     content: memory.content || "", summary: memory.summary || "",
     level: memory.level ?? 1, valence: memory.valence ?? 0.5, arousal: memory.arousal ?? 0.5,
     tags: Array.isArray(memory.tags) ? memory.tags.join(", ") : "",
-    resolved: memory.resolved ?? false, pinned: memory.pinned ?? false, flashbulb: memory.flashbulb ?? false,
+    resolved: memory.resolved ?? true, pinned: memory.pinned ?? false, flashbulb: memory.flashbulb ?? false,
     strength: memory.strength ?? 1, author: memory.author || "小茉莉", senses: "",
   });
   useEffect(() => { try { const p = typeof memory.context === "string" ? JSON.parse(memory.context) : memory.context; if (p?.senses) setF(x => ({ ...x, senses: p.senses.join(", ") })); } catch {} }, [memory.context]);
