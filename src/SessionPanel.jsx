@@ -877,7 +877,7 @@ export default function SessionPanel({ onClose, theme = "light", currentTokens =
                       {m.thinking && (
                         <div className="sp-msg-thinking">{m.thinking.length > 500 ? m.thinking.slice(0, 500) + "…" : m.thinking}</div>
                       )}
-                      <div className="sp-msg-content">{m.content.length > 300 ? m.content.slice(0, 300) + "…" : m.content}</div>
+                      <div className="sp-msg-content">{(() => { const c = (m.content || "").replace(/---bubble---/g, "\n").replace(/\n{3,}/g, "\n\n").trim(); return c.length > 300 ? c.slice(0, 300) + "…" : c; })()}</div>
                     </div>
                   ))}
                   {!previewLoading && previewMsgs.length > 0 && injectState === "idle" && (

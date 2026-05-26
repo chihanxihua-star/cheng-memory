@@ -89,14 +89,20 @@ function countConvTokens(messages) {
 }
 
 function countConvChars(messages) {
-  let total = 0;
+  let text = 0, thinking = 0;
   for (const m of messages) {
-    const text = getMsgText(m);
-    for (let i = 0; i < text.length; i++) {
-      if (text.charCodeAt(i) > 0x2e7f) total++;
+    const t = getMsgText(m);
+    for (let i = 0; i < t.length; i++) {
+      if (t.charCodeAt(i) > 0x2e7f) text++;
+    }
+    const th = getThinking(m);
+    if (th) {
+      for (let i = 0; i < th.length; i++) {
+        if (th.charCodeAt(i) > 0x2e7f) thinking++;
+      }
     }
   }
-  return total;
+  return { text, thinking };
 }
 
 function fmtNum(n) {
@@ -1075,7 +1081,7 @@ export default function ChatViewer({ onBack }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentConv.name}</div>
           <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-            {currentConv.created_at ? fmtDateTime(currentConv.created_at) + " · " : ""}{currentConv.messages.length} 条消息 · {fmtNum(countConvChars(currentConv.messages))} 字 · ~{fmtTokens(countConvTokens(currentConv.messages))} tokens
+            {currentConv.created_at ? fmtDateTime(currentConv.created_at) + " · " : ""}{currentConv.messages.length} 条消息 · {(() => { const c = countConvChars(currentConv.messages); return `正文 ${fmtNum(c.text)} 字` + (c.thinking > 0 ? ` · 思绪 ${fmtNum(c.thinking)} 字` : ""); })()} · ~{fmtTokens(countConvTokens(currentConv.messages))} tokens
             {currentConv.branchedCount > 0 && ` · 已过滤 ${currentConv.branchedCount} 条分支消息`}
           </div>
         </div>
