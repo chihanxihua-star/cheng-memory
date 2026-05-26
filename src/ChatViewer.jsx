@@ -316,7 +316,32 @@ function fmtMsgTime(d) {
   return u.getUTCFullYear() + "/" + z(u.getUTCMonth() + 1) + "/" + z(u.getUTCDate()) + " " + z(u.getUTCHours()) + ":" + z(u.getUTCMinutes());
 }
 
-function Message({ m, searchQuery, id, idx }) {
+function ThinkingBlock({ text }) {
+  const [open, setOpen] = useState(false);
+  const badge = text.length > 1000 ? `${Math.round(text.length / 1000)}k 字符` : `${text.length} 字符`;
+  return (
+    <div style={{ marginBottom: 7 }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        fontSize: 11, color: "var(--text-tertiary)", cursor: "pointer",
+        padding: "2px 4px 2px 0", background: "transparent", border: "none",
+        display: "inline-flex", alignItems: "center", gap: 4, userSelect: "none", fontFamily: "inherit",
+      }}>
+        <span style={{ display: "inline-block", fontSize: 13, lineHeight: 1, transition: "transform 0.18s ease", transform: open ? "rotate(90deg)" : "rotate(0deg)" }}>›</span>
+        思绪
+        <span style={{ fontSize: 10, opacity: 0.6 }}>{badge}</span>
+      </button>
+      {open && (
+        <div style={{
+          borderLeft: "2px solid var(--border)", padding: "7px 11px",
+          fontSize: 12, color: "var(--text-tertiary)", whiteSpace: "pre-wrap",
+          lineHeight: 1.45, marginTop: 4, maxHeight: 200, overflowY: "auto", wordBreak: "break-word",
+        }}>{text}</div>
+      )}
+    </div>
+  );
+}
+
+function Message({ m, searchQuery, id, idx, showSender = true, showTime = false }) {
   const sender = getSender(m);
   const isHuman = sender === "human";
   const time = fmtMsgTime(m.created_at);
@@ -325,61 +350,94 @@ function Message({ m, searchQuery, id, idx }) {
   const atts = getAttachments(m);
   let text = getMsgText(m);
 
-  let rendered = text ? renderMarkdown(text) : "";
-  if (searchQuery) rendered = highlightSearch(rendered, searchQuery);
+  let rendered = "";
+  if (isHuman) {
+    rendered = text ? esc(text) : "";
+    if (searchQuery) rendered = highlightSearch(rendered, searchQuery);
+  } else {
+    rendered = text ? renderMarkdown(text) : "";
+    if (searchQuery) rendered = highlightSearch(rendered, searchQuery);
+  }
+
+  const thinkingOnly = thinking && !text && !tools.length && !atts.length;
+  const isCont = !showSender;
+  const bubbleRadius = isHuman
+    ? "12px 12px 4px 12px"
+    : (isCont ? "4px 12px 12px 4px" : "12px 12px 12px 4px");
+
+  if (thinkingOnly) {
+    return (
+      <div id={id} style={{ maxWidth: "92%", marginBottom: 6 }}>
+        {showSender && (
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 3 }}>
+            {isHuman ? "小茉莉" : "小太阳"} <span style={{ opacity: 0.6 }}>#{idx + 1}</span>
+          </div>
+        )}
+        <ThinkingBlock text={thinking} />
+      </div>
+    );
+  }
 
   return (
-    <div id={id} style={{ marginBottom: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>{isHuman ? "小茉莉" : "小太阳"}</span>
-        <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>#{idx + 1}</span>
-      </div>
-      <div style={{
-        padding: "12px 16px", borderRadius: 12, lineHeight: 1.7, fontSize: 13.5,
-        background: isHuman ? "var(--bg-user-bubble)" : "var(--bg-card)",
-        boxShadow: isHuman ? "none" : "0 1px 3px rgba(0,0,0,.06)",
-        border: isHuman ? "none" : "1px solid var(--border)",
-        overflowX: "hidden", wordBreak: "break-word",
-      }}>
-        {thinking && (
-          <Collapsible label="思考过程" badge={thinking.length > 1000 ? `${Math.round(thinking.length / 1000)}k 字符` : `${thinking.length} 字符`}>
-            {thinking}
-          </Collapsible>
-        )}
-        {tools.map((t, i) => {
-          const name = t.name || "tool";
-          const display = name === "create_artifact" ? `Artifact: ${t.input?.title || t.input?.type || "unknown"}` : name;
-          let content = "";
-          if (t.input) {
-            if (typeof t.input === "string") content = t.input;
-            else if (t.input.content) content = t.input.content;
-            else content = JSON.stringify(t.input, null, 2);
-          }
-          return (
-            <Collapsible key={i} label={display}>
-              <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{content}</pre>
-            </Collapsible>
-          );
-        })}
-        {atts.map((a, i) => (
-          <div key={i} style={{
-            display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px",
-            background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 13, margin: "4px 0",
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" />
-            </svg>
-            {a.file_name || a.name || a.fileName || "attachment"}
+    <div id={id} style={{
+      display: "flex", maxWidth: "92%", marginBottom: isCont ? 6 : 8,
+      ...(isHuman ? { marginLeft: "auto", flexDirection: "row-reverse" } : {}),
+      ...(isCont && !isHuman ? { marginLeft: 0 } : {}),
+    }}>
+      <div style={{ display: "flex", flexDirection: "column", ...(isHuman ? { alignItems: "flex-end" } : {}) }}>
+        {showSender && (
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 3, ...(isHuman ? { textAlign: "right" } : {}) }}>
+            {isHuman ? "小茉莉" : "小太阳"} <span style={{ opacity: 0.6 }}>#{idx + 1}</span>
           </div>
-        ))}
-        {rendered && <div dangerouslySetInnerHTML={{ __html: rendered }} />}
-        {time && <div style={{ textAlign: "right", fontSize: 10, color: "var(--text-secondary)", marginTop: 4, opacity: 0.7 }}>{time}</div>}
+        )}
+        <div className={isHuman ? "bd-bubble me" : "bd-bubble them"} style={{
+          borderRadius: bubbleRadius, maxWidth: "none",
+          ...(isHuman ? { whiteSpace: "pre-wrap" } : {}),
+        }}>
+          {thinking && <ThinkingBlock text={thinking} />}
+          {tools.map((t, i) => {
+            const name = t.name || "tool";
+            const display = name === "create_artifact" ? `Artifact: ${t.input?.title || t.input?.type || "unknown"}` : name;
+            let content = "";
+            if (t.input) {
+              if (typeof t.input === "string") content = t.input;
+              else if (t.input.content) content = t.input.content;
+              else content = JSON.stringify(t.input, null, 2);
+            }
+            return (
+              <Collapsible key={i} label={display}>
+                <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{content}</pre>
+              </Collapsible>
+            );
+          })}
+          {atts.map((a, i) => (
+            <div key={i} style={{
+              display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px",
+              background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 13, margin: "4px 0",
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" />
+              </svg>
+              {a.file_name || a.name || a.fileName || "attachment"}
+            </div>
+          ))}
+          {rendered && <div dangerouslySetInnerHTML={{ __html: rendered }} />}
+        </div>
+        {showTime && time && <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2, opacity: 0.6, ...(isHuman ? { textAlign: "right" } : {}) }}>{time}</div>}
       </div>
     </div>
   );
 }
 
 // ── Main component ───────────────────────────────────────
+const CV_API = "https://chat.jessaminee.top/api";
+function cvFetch(url, opts = {}) {
+  const t = localStorage.getItem("memhome-auth-token") || "";
+  const headers = { ...(opts.headers || {}) };
+  if (t) headers.Authorization = "Bearer " + t;
+  return fetch(url, { ...opts, headers });
+}
+
 export default function ChatViewer({ onBack }) {
   const [conversations, setConversations] = useState([]);
   const [currentConv, setCurrentConv] = useState(null);
@@ -391,7 +449,100 @@ export default function ChatViewer({ onBack }) {
   const fileRef = useRef(null);
   const msgRef = useRef(null);
 
-  const loaded = conversations.length > 0;
+  // ── VPS sessions ──
+  const [vpsSessions, setVpsSessions] = useState([]);
+  const [vpsLoading, setVpsLoading] = useState(true);
+  const [vpsError, setVpsError] = useState(null);
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [favorites, setFavorites] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("cv_favorites") || "[]"); } catch { return []; }
+  });
+  const [renames, setRenames] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("cv_renames") || "{}"); } catch { return {}; }
+  });
+  const [favOrder, setFavOrder] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("cv_fav_order") || "[]"); } catch { return []; }
+  });
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [contextMenu, setContextMenu] = useState(null);
+  const [sidebarTab, setSidebarTab] = useState("vps");
+  const [sortMode, setSortMode] = useState("time");
+  const [vpsMatchCounts, setVpsMatchCounts] = useState({});
+  const longPressRef = useRef(null);
+  const searchTimerRef = useRef(null);
+
+  const saveFavorites = (v) => { setFavorites(v); localStorage.setItem("cv_favorites", JSON.stringify(v)); };
+  const saveRenames = (v) => { setRenames(v); localStorage.setItem("cv_renames", JSON.stringify(v)); };
+  const saveFavOrder = (v) => { setFavOrder(v); localStorage.setItem("cv_fav_order", JSON.stringify(v)); };
+
+  // VPS 搜索匹配计数（debounce）
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q || q.length < 2) { setVpsMatchCounts({}); return; }
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      cvFetch(`${CV_API}/cc/sessions/search?q=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(data => setVpsMatchCounts(data.matches || {}))
+        .catch(() => {});
+    }, 600);
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+  }, [searchQuery]);
+
+  // 加载 VPS session 列表
+  useEffect(() => {
+    setVpsLoading(true);
+    cvFetch(`${CV_API}/cc/sessions`)
+      .then(r => r.json())
+      .then(data => { setVpsSessions(data.sessions || []); setVpsError(null); })
+      .catch(e => setVpsError(e.message))
+      .finally(() => setVpsLoading(false));
+  }, []);
+
+  // 选中 VPS session 时加载消息
+  const selectVpsSession = useCallback((sid) => {
+    setActiveSessionId(sid);
+    setSessionLoading(true);
+    setMobileShowList(false);
+    cvFetch(`${CV_API}/cc/session-messages/${sid}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.messages) {
+          const msgs = [];
+          let idx = 0;
+          for (const m of data.messages) {
+            const sender = m.role === "user" ? "human" : "assistant";
+            if (m.thinking) {
+              msgs.push({ uuid: `${sid}-${idx++}`, sender, created_at: m.created_at || null, content: [{ type: "thinking", thinking: m.thinking }] });
+            }
+            if (sender === "assistant" && m.content && m.content.includes("---bubble---")) {
+              const bubbles = m.content.split(/---bubble---/).map(s => s.replace(/\n{3,}/g, "\n\n").trim()).filter(Boolean);
+              for (const b of bubbles) {
+                msgs.push({ uuid: `${sid}-${idx++}`, sender, created_at: m.created_at || null, content: b });
+              }
+            } else if (m.content && m.content.includes("\n\n")) {
+              const parts = m.content.split(/\n\n/).map(s => s.trim()).filter(Boolean);
+              for (const p of parts) {
+                msgs.push({ uuid: `${sid}-${idx++}`, sender, created_at: m.created_at || null, content: p });
+              }
+            } else {
+              msgs.push({ uuid: `${sid}-${idx++}`, sender, created_at: m.created_at || null, content: m.content });
+            }
+          }
+          const name = renames[sid] || vpsSessions.find(s => s.id === sid)?.preview || sid.slice(0, 8);
+          setCurrentConv({
+            uuid: sid, name, model: "", created_at: null,
+            updated_at: null, messages: msgs, branchedCount: 0,
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setSessionLoading(false));
+  }, [renames, vpsSessions]);
+
+  const loaded = conversations.length > 0 || vpsSessions.length > 0;
 
   // ── file load ──
   const handleFile = useCallback((file) => {
@@ -426,7 +577,9 @@ export default function ChatViewer({ onBack }) {
         }
         setConversations(result);
         setCurrentConv(null);
+        setActiveSessionId(null);
         setMobileShowList(true);
+        setSidebarTab("import");
       } catch (err) { alert("JSON 解析失败: " + err.message); }
     };
     reader.readAsText(file);
@@ -554,7 +707,99 @@ export default function ChatViewer({ onBack }) {
     setShowExport(false);
   };
 
-  // ── PanelHeader (reuse pattern) ──
+  // ── VPS session helpers ──
+  const getSessionName = (s) => renames[s.id] || s.preview || s.id.slice(0, 8);
+  const isFav = (id) => favorites.includes(id);
+
+  const toggleFav = (id) => {
+    if (isFav(id)) {
+      saveFavorites(favorites.filter(f => f !== id));
+      saveFavOrder(favOrder.filter(f => f !== id));
+    } else {
+      saveFavorites([...favorites, id]);
+      saveFavOrder([...favOrder, id]);
+    }
+  };
+
+  const moveFav = (id, dir) => {
+    const arr = [...favOrder];
+    const idx = arr.indexOf(id);
+    if (idx < 0) return;
+    const target = idx + dir;
+    if (target < 0 || target >= arr.length) return;
+    [arr[idx], arr[target]] = [arr[target], arr[idx]];
+    saveFavOrder(arr);
+  };
+
+  const startRename = (id) => {
+    setRenamingId(id);
+    setRenameValue(renames[id] || "");
+    setContextMenu(null);
+  };
+
+  const confirmRename = () => {
+    if (renamingId) {
+      const v = renameValue.trim();
+      const next = { ...renames };
+      if (v) next[renamingId] = v;
+      else delete next[renamingId];
+      saveRenames(next);
+      if (currentConv?.uuid === renamingId) {
+        const fallback = vpsSessions.find(s => s.id === renamingId)?.preview
+          || conversations.find(c => c.uuid === renamingId)?.name
+          || renamingId.slice(0, 8);
+        setCurrentConv(prev => prev ? { ...prev, name: v || fallback } : prev);
+      }
+    }
+    setRenamingId(null);
+  };
+
+  // 长按触发
+  const handleTouchStart = useCallback((id, e) => {
+    const touch = e.touches[0];
+    longPressRef.current = setTimeout(() => {
+      longPressRef.current = "fired";
+      setContextMenu({ id, x: touch.clientX, y: touch.clientY });
+    }, 500);
+  }, []);
+  const handleTouchEnd = useCallback(() => {
+    if (longPressRef.current && longPressRef.current !== "fired") clearTimeout(longPressRef.current);
+    longPressRef.current = null;
+  }, []);
+  const handleTouchClick = useCallback((id) => {
+    if (longPressRef.current === "fired") { longPressRef.current = null; return; }
+    selectVpsSession(id);
+  }, [selectVpsSession]);
+
+  // VPS sessions 过滤 + 排序
+  const vpsSorted = useMemo(() => {
+    let list = [...vpsSessions];
+    if (sortMode === "size") list.sort((a, b) => b.size - a.size);
+    else list.sort((a, b) => b.mtime - a.mtime);
+    return list;
+  }, [vpsSessions, sortMode]);
+
+  const vpsFiltered = useMemo(() => {
+    if (!query) return vpsSorted;
+    return vpsSorted.filter(s => {
+      const name = getSessionName(s).toLowerCase();
+      return name.includes(query) || s.id.includes(query) || vpsMatchCounts[s.id];
+    });
+  }, [vpsSorted, query, renames, vpsMatchCounts]);
+
+  const { favSessions, normalSessions } = useMemo(() => {
+    const favSet = new Set(favorites);
+    const fav = vpsFiltered.filter(s => favSet.has(s.id));
+    fav.sort((a, b) => {
+      const ai = favOrder.indexOf(a.id);
+      const bi = favOrder.indexOf(b.id);
+      return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
+    });
+    const normal = vpsFiltered.filter(s => !favSet.has(s.id));
+    return { favSessions: fav, normalSessions: normal };
+  }, [vpsFiltered, favorites, favOrder]);
+
+  // ── PanelHeader ──
   const header = (
     <div style={{
       flexShrink: 0, display: "flex", alignItems: "center", gap: 14,
@@ -563,181 +808,266 @@ export default function ChatViewer({ onBack }) {
     }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 20, cursor: "pointer", padding: 0, lineHeight: 1, width: 24, fontFamily: "inherit" }}>←</button>
       <span style={{ fontSize: 14, color: "var(--text-primary)", letterSpacing: "0.15em", flex: 1 }}>拾光</span>
-      {loaded && (
-        <button onClick={() => { setConversations([]); setCurrentConv(null); }} style={{
-          background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--text-secondary)", fontFamily: "inherit",
-        }}>重新导入</button>
+    </div>
+  );
+
+  // ── Tab bar ──
+  const tabBar = (
+    <div style={{ display: "flex", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+      <button onClick={() => setSidebarTab("vps")} style={{
+        flex: 1, padding: "10px 0", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "inherit",
+        background: "none", color: sidebarTab === "vps" ? "var(--accent)" : "var(--text-secondary)",
+        borderBottom: sidebarTab === "vps" ? "2px solid var(--accent)" : "2px solid transparent",
+        fontWeight: sidebarTab === "vps" ? 600 : 400,
+      }}>VPS</button>
+      <button onClick={() => setSidebarTab("import")} style={{
+        flex: 1, padding: "10px 0", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "inherit",
+        background: "none", color: sidebarTab === "import" ? "var(--accent)" : "var(--text-secondary)",
+        borderBottom: sidebarTab === "import" ? "2px solid var(--accent)" : "2px solid transparent",
+        fontWeight: sidebarTab === "import" ? 600 : 400,
+      }}>导入{conversations.length > 0 ? ` (${conversations.length})` : ""}</button>
+    </div>
+  );
+
+  // ── Search bar (shared) ──
+  const searchBar = (
+    <div style={{ padding: "10px 14px", flexShrink: 0 }}>
+      <div style={{ position: "relative" }}>
+        <input
+          type="text" placeholder="搜索…" value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          style={{
+            width: "100%", padding: "7px 12px 7px 32px", border: "1px solid var(--border)",
+            borderRadius: 8, fontSize: 13, background: "var(--bg-card)", outline: "none",
+            color: "var(--text-primary)", fontFamily: "inherit",
+          }}
+        />
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)" }}>
+          <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+        </svg>
+        {query && (
+          <button onClick={() => setSearchQuery("")} style={{
+            position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+            background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: 16, fontFamily: "inherit",
+          }}>×</button>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── Session item renderer (VPS) ──
+  const renderSessionItem = (s) => (
+    <div key={s.id} style={{ position: "relative" }}>
+      {renamingId === s.id ? (
+        <div style={{ padding: "8px 14px", display: "flex", gap: 6, alignItems: "center" }}>
+          <input
+            autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") confirmRename(); if (e.key === "Escape") setRenamingId(null); }}
+            style={{ flex: 1, padding: "5px 8px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13, background: "var(--bg-card)", outline: "none", color: "var(--text-primary)", fontFamily: "inherit" }}
+            placeholder="自定义名称…"
+          />
+          <button onClick={confirmRename} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>确定</button>
+          <button onClick={() => setRenamingId(null)} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>取消</button>
+        </div>
+      ) : (
+        <button
+          onClick={() => handleTouchClick(s.id)}
+          onTouchStart={e => handleTouchStart(s.id, e)}
+          onTouchEnd={handleTouchEnd}
+          onTouchMove={handleTouchEnd}
+          style={{
+            display: "block", width: "100%", padding: "10px 14px", borderRadius: 10, cursor: "pointer",
+            border: "none", textAlign: "left", marginBottom: 2, fontFamily: "inherit",
+            background: activeSessionId === s.id ? "var(--border)" : "transparent",
+            transition: ".15s", WebkitUserSelect: "none", userSelect: "none",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {isFav(s.id) && <span style={{ fontSize: 11, color: "var(--accent)" }}>★</span>}
+            <span style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text-primary)", flex: 1 }}>
+              {getSessionName(s)}
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3, display: "flex", gap: 8, alignItems: "center" }}>
+            <span>{fmtDate(s.mtime)}</span>
+            <span>{(s.size / 1024).toFixed(0)}KB</span>
+            {vpsMatchCounts[s.id] > 0 && <span style={{ color: "var(--accent)", fontWeight: 500 }}>{vpsMatchCounts[s.id]} 条匹配</span>}
+          </div>
+        </button>
       )}
     </div>
   );
 
-  // ── Upload screen ──
-  if (!loaded) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-        {header}
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <div style={{ textAlign: "center", maxWidth: 420, width: "100%" }}>
-            <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>Claude 对话查看器</div>
-            <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 28 }}>
-              导入从 claude.ai 导出的 JSON 文件
-            </div>
-            <div
-              onClick={() => fileRef.current?.click()}
-              onDrop={onDrop}
-              onDragOver={onDragOver}
-              style={{
-                border: "2px dashed var(--border)", borderRadius: 16, padding: "52px 32px", cursor: "pointer",
-                transition: ".2s", background: "var(--bg-card)",
-              }}
-            >
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: "var(--text-secondary)", marginBottom: 14 }}>
-                <path d="M12 16V4m0 0L8 8m4-4l4 4M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4" />
-              </svg>
-              <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>拖放 JSON 文件到这里</div>
-              <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>或点击选择文件</div>
-            </div>
-            <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }}
-              onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); }} />
-          </div>
-        </div>
+  // ── VPS tab content ──
+  const vpsTabContent = (
+    <>
+      <div style={{ display: "flex", alignItems: "center", padding: "6px 14px 0", gap: 6 }}>
+        <span style={{ fontSize: 12, color: "var(--text-secondary)", flex: 1 }}>
+          {vpsLoading ? "加载中…" : vpsError ? "连接失败" : `${vpsSessions.length} 个`}
+        </span>
+        <select
+          value={sortMode} onChange={e => setSortMode(e.target.value)}
+          style={{ fontSize: 11, border: "1px solid var(--border)", borderRadius: 6, padding: "3px 6px", background: "var(--bg-card)", color: "var(--text-secondary)", fontFamily: "inherit", outline: "none" }}
+        >
+          <option value="time">按时间</option>
+          <option value="size">按大小</option>
+        </select>
       </div>
-    );
-  }
+      <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+        {vpsLoading && <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-secondary)", fontSize: 13 }}>加载 session 列表…</div>}
+        {vpsError && <div style={{ textAlign: "center", padding: "20px", color: "var(--text-secondary)", fontSize: 12 }}>加载失败: {vpsError}</div>}
+        {favSessions.length > 0 && (
+          <div>
+            <div style={{ padding: "6px 12px", fontSize: 11, fontWeight: 600, color: "var(--accent)", marginTop: 4 }}>收藏</div>
+            {favSessions.map(s => renderSessionItem(s))}
+          </div>
+        )}
+        {normalSessions.length > 0 && (
+          <div>
+            {favSessions.length > 0 && <div style={{ padding: "6px 12px", fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginTop: 6 }}>全部</div>}
+            {normalSessions.map(s => renderSessionItem(s))}
+          </div>
+        )}
+        {!vpsLoading && !vpsError && vpsFiltered.length === 0 && (
+          <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-secondary)", fontSize: 13 }}>没有找到匹配的 session</div>
+        )}
+      </div>
+    </>
+  );
 
-  // ── Sidebar ──
-  const sidebar = (
+  // ── Import tab content ──
+  // 导入 tab 的收藏+排序列表
+  const importSorted = useMemo(() => {
+    const favSet = new Set(favorites);
+    const favItems = filtered.filter(c => favSet.has(c.uuid));
+    favItems.sort((a, b) => {
+      const ai = favOrder.indexOf(a.uuid);
+      const bi = favOrder.indexOf(b.uuid);
+      return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
+    });
+    const normalItems = filtered.filter(c => !favSet.has(c.uuid));
+    return { importFav: favItems, importNormal: normalItems };
+  }, [filtered, favorites, favOrder]);
+
+  const renderImportItem = (c) => {
+    const id = c.uuid;
+    const displayName = renames[id] || c.name;
+    if (renamingId === id) {
+      return (
+        <div key={id} style={{ padding: "8px 14px", display: "flex", gap: 6, alignItems: "center" }}>
+          <input
+            autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") confirmRename(); if (e.key === "Escape") setRenamingId(null); }}
+            style={{ flex: 1, padding: "5px 8px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13, background: "var(--bg-card)", outline: "none", color: "var(--text-primary)", fontFamily: "inherit" }}
+            placeholder="自定义名称…"
+          />
+          <button onClick={confirmRename} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>确定</button>
+          <button onClick={() => setRenamingId(null)} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>取消</button>
+        </div>
+      );
+    }
+    return (
+      <button key={id}
+        onClick={() => { if (longPressRef.current === "fired") { longPressRef.current = null; return; } selectConv(c); setActiveSessionId(null); }}
+        onTouchStart={e => handleTouchStart(id, e)}
+        onTouchEnd={handleTouchEnd}
+        onTouchMove={handleTouchEnd}
+        style={{
+          display: "block", width: "100%", padding: "10px 14px", borderRadius: 10, cursor: "pointer",
+          border: "none", textAlign: "left", marginBottom: 2, fontFamily: "inherit",
+          background: currentConv?.uuid === id && !activeSessionId ? "var(--border)" : "transparent",
+          transition: ".15s", WebkitUserSelect: "none", userSelect: "none",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {isFav(id) && <span style={{ fontSize: 11, color: "var(--accent)" }}>★</span>}
+          <span style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text-primary)", flex: 1 }}>
+            {displayName}
+          </span>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3, display: "flex", gap: 8, alignItems: "center" }}>
+          <span>{fmtDate(c.updated_at || c.created_at)}</span>
+          <span>{c.messages.length} 条</span>
+          {c.model && <span style={{ background: "rgba(107,127,212,.15)", color: "var(--accent)", padding: "1px 6px", borderRadius: 4, fontSize: 10 }}>{shortModel(c.model)}</span>}
+          {matchCounts[c.uuid] > 0 && <span style={{ color: "var(--accent)", fontWeight: 500 }}>{matchCounts[c.uuid]} 条匹配</span>}
+        </div>
+      </button>
+    );
+  };
+
+  const importTabContent = (
+    <div style={{ flex: 1, overflowY: "auto", padding: 8, display: "flex", flexDirection: "column" }}>
+      {conversations.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "40px 20px" }}>
+          <div style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 16 }}>还没有导入对话</div>
+          <button
+            onClick={() => fileRef.current?.click()}
+            style={{
+              padding: "10px 24px", border: "1px solid var(--border)", borderRadius: 10,
+              background: "var(--bg-card)", cursor: "pointer", fontSize: 13, fontFamily: "inherit",
+              color: "var(--text-primary)",
+            }}
+          >导入 JSON 文件</button>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", padding: "2px 12px 6px", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "var(--text-secondary)", flex: 1 }}>{filtered.length} 个对话</span>
+            <button onClick={() => { setConversations([]); setCurrentConv(null); setActiveSessionId(null); }} style={{
+              background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--text-secondary)", fontFamily: "inherit",
+            }}>清除</button>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto" }}>
+            {importSorted.importFav.length > 0 && (
+              <div>
+                <div style={{ padding: "6px 12px", fontSize: 11, fontWeight: 600, color: "var(--accent)", marginTop: 4 }}>收藏</div>
+                {importSorted.importFav.map(c => renderImportItem(c))}
+              </div>
+            )}
+            {importSorted.importNormal.length > 0 && (
+              <div>
+                {importSorted.importFav.length > 0 && <div style={{ padding: "6px 12px", fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginTop: 6 }}>全部</div>}
+                {importSorted.importNormal.map(c => renderImportItem(c))}
+              </div>
+            )}
+            {filtered.length === 0 && query && (
+              <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-secondary)", fontSize: 13 }}>没有找到匹配的对话</div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  // ── Desktop sidebar ──
+  const sidebarContent = (
     <div style={{
       width: 300, minWidth: 300, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column",
       background: "var(--bg-page)", height: "100%",
     }}>
-      {/* search */}
-      <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>对话</span>
-          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-            {query ? `${filtered.length}/${conversations.length}` : `${conversations.length} 个`}
-          </span>
-        </div>
-        <div style={{ position: "relative" }}>
-          <input
-            type="text" placeholder="搜索消息…" value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            style={{
-              width: "100%", padding: "7px 12px 7px 32px", border: "1px solid var(--border)",
-              borderRadius: 8, fontSize: 13, background: "var(--bg-card)", outline: "none",
-              color: "var(--text-primary)", fontFamily: "inherit",
-            }}
-          />
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-            style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)" }}>
-            <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
-          </svg>
-          {query && (
-            <button onClick={() => setSearchQuery("")} style={{
-              position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
-              background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: 16, fontFamily: "inherit",
-            }}>×</button>
-          )}
-        </div>
-      </div>
-      {/* list */}
-      <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
-        {filtered.length === 0 && (
-          <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-secondary)", fontSize: 13 }}>没有找到匹配的对话</div>
-        )}
-        {Object.entries(grouped).map(([label, items]) => (
-          <div key={label}>
-            <div style={{ padding: "6px 12px", fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginTop: 6 }}>{label}</div>
-            {items.map(c => (
-              <button key={c.uuid} onClick={() => selectConv(c)} style={{
-                display: "block", width: "100%", padding: "10px 14px", borderRadius: 10, cursor: "pointer",
-                border: "none", textAlign: "left", marginBottom: 2, fontFamily: "inherit",
-                background: currentConv?.uuid === c.uuid ? "var(--border)" : "transparent",
-                transition: ".15s",
-              }}>
-                <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text-primary)" }}>
-                  {c.name}
-                </div>
-                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3, display: "flex", gap: 8, alignItems: "center" }}>
-                  <span>{fmtDate(c.updated_at || c.created_at)}</span>
-                  <span>{c.messages.length} 条</span>
-                  {c.model && <span style={{ background: "rgba(107,127,212,.15)", color: "var(--accent)", padding: "1px 6px", borderRadius: 4, fontSize: 10 }}>{shortModel(c.model)}</span>}
-                  {matchCounts[c.uuid] > 0 && <span style={{ color: "var(--accent)", fontWeight: 500 }}>{matchCounts[c.uuid]} 条匹配</span>}
-                </div>
-              </button>
-            ))}
-          </div>
-        ))}
-      </div>
+      {tabBar}
+      {searchBar}
+      {sidebarTab === "vps" ? vpsTabContent : importTabContent}
     </div>
   );
 
   // ── Mobile list ──
   const mobileList = (
     <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-      {/* search */}
-      <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>对话</span>
-          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-            {query ? `${filtered.length}/${conversations.length}` : `${conversations.length} 个`}
-          </span>
-        </div>
-        <div style={{ position: "relative" }}>
-          <input
-            type="text" placeholder="搜索消息…" value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            style={{
-              width: "100%", padding: "7px 12px 7px 32px", border: "1px solid var(--border)",
-              borderRadius: 8, fontSize: 13, background: "var(--bg-card)", outline: "none",
-              color: "var(--text-primary)", fontFamily: "inherit",
-            }}
-          />
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-            style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)" }}>
-            <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
-          </svg>
-        </div>
-      </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
-        {filtered.length === 0 && (
-          <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-secondary)", fontSize: 13 }}>没有找到匹配的对话</div>
-        )}
-        {Object.entries(grouped).map(([label, items]) => (
-          <div key={label}>
-            <div style={{ padding: "6px 12px", fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginTop: 6 }}>{label}</div>
-            {items.map(c => (
-              <button key={c.uuid} onClick={() => selectConv(c)} style={{
-                display: "block", width: "100%", padding: "12px 14px", borderRadius: 10, cursor: "pointer",
-                border: "none", textAlign: "left", marginBottom: 2, fontFamily: "inherit",
-                background: "transparent",
-              }}>
-                <div style={{ fontSize: 14, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text-primary)" }}>
-                  {c.name}
-                </div>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 3, display: "flex", gap: 8, alignItems: "center" }}>
-                  <span>{fmtDate(c.updated_at || c.created_at)}</span>
-                  <span>{c.messages.length} 条</span>
-                  {c.model && <span style={{ background: "rgba(107,127,212,.15)", color: "var(--accent)", padding: "1px 6px", borderRadius: 4, fontSize: 10 }}>{shortModel(c.model)}</span>}
-                </div>
-              </button>
-            ))}
-          </div>
-        ))}
-      </div>
+      {tabBar}
+      {searchBar}
+      {sidebarTab === "vps" ? vpsTabContent : importTabContent}
     </div>
   );
 
   // ── Message area ──
   const messageArea = currentConv ? (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-      {/* conv header */}
       <div style={{
         padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center",
         background: "var(--bg-card)", flexShrink: 0, gap: 10,
       }}>
-        {/* mobile back */}
         <button onClick={() => setMobileShowList(true)} className="cv-mobile-back" style={{
           background: "none", border: "none", color: "var(--text-secondary)", fontSize: 18, cursor: "pointer", padding: 0, lineHeight: 1, fontFamily: "inherit",
           display: "none",
@@ -745,7 +1075,7 @@ export default function ChatViewer({ onBack }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentConv.name}</div>
           <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-            {fmtDateTime(currentConv.created_at)} · {currentConv.messages.length} 条消息 · {fmtNum(countConvChars(currentConv.messages))} 字 · ~{fmtTokens(countConvTokens(currentConv.messages))} tokens
+            {currentConv.created_at ? fmtDateTime(currentConv.created_at) + " · " : ""}{currentConv.messages.length} 条消息 · {fmtNum(countConvChars(currentConv.messages))} 字 · ~{fmtTokens(countConvTokens(currentConv.messages))} tokens
             {currentConv.branchedCount > 0 && ` · 已过滤 ${currentConv.branchedCount} 条分支消息`}
           </div>
         </div>
@@ -767,15 +1097,21 @@ export default function ChatViewer({ onBack }) {
           )}
         </div>
       </div>
-      {/* messages */}
       <div ref={msgRef} style={{ flex: 1, overflowY: "auto", padding: "20px 0" }}>
         <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 16px" }}>
-          {currentConv.messages.map((m, idx) => (
-            <Message key={m.uuid || idx} m={m} searchQuery={query} id={`msg-${idx}`} idx={idx} />
-          ))}
+          {sessionLoading ? (
+            <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--text-secondary)", fontSize: 13 }}>加载中…</div>
+          ) : (
+            currentConv.messages.map((m, idx, arr) => {
+              const prevSender = idx > 0 ? getSender(arr[idx - 1]) : null;
+              const nextSender = idx < arr.length - 1 ? getSender(arr[idx + 1]) : null;
+              const showSender = getSender(m) !== prevSender;
+              const showTime = getSender(m) !== nextSender;
+              return <Message key={m.uuid || idx} m={m} searchQuery={query} id={`msg-${idx}`} idx={idx} showSender={showSender} showTime={showTime} />;
+            })
+          )}
         </div>
       </div>
-      {/* ▲▼ 搜索导航浮条 */}
       {searchNav && (
         <div style={{
           position: "fixed", bottom: 30, left: "50%", transform: "translateX(-50%)",
@@ -815,11 +1151,52 @@ export default function ChatViewer({ onBack }) {
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: .4 }}>
         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
       </svg>
-      <span style={{ fontSize: 14 }}>从左侧选择一个对话</span>
+      <span style={{ fontSize: 14 }}>选择一个 session 查看</span>
     </div>
   );
 
-  // ── Responsive CSS (injected once) ──
+  // ── Context menu (long-press) ──
+  const ctxMenu = contextMenu && (
+    <div
+      onClick={() => setContextMenu(null)}
+      style={{ position: "fixed", inset: 0, zIndex: 1000 }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: "fixed",
+          left: Math.min(contextMenu.x, window.innerWidth - 160),
+          top: Math.min(contextMenu.y, window.innerHeight - 200),
+          background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10,
+          boxShadow: "0 4px 16px rgba(0,0,0,.15)", overflow: "hidden", minWidth: 140, zIndex: 1001,
+        }}
+      >
+        <button onClick={() => { startRename(contextMenu.id); }} style={{
+          display: "block", width: "100%", padding: "11px 16px", border: "none", background: "none",
+          cursor: "pointer", textAlign: "left", fontSize: 14, fontFamily: "inherit", color: "var(--text-primary)",
+        }}>改名</button>
+        <button onClick={() => { toggleFav(contextMenu.id); setContextMenu(null); }} style={{
+          display: "block", width: "100%", padding: "11px 16px", border: "none", background: "none",
+          cursor: "pointer", textAlign: "left", fontSize: 14, fontFamily: "inherit", color: "var(--text-primary)",
+        }}>{isFav(contextMenu.id) ? "取消收藏" : "收藏"}</button>
+        {isFav(contextMenu.id) && (
+          <>
+            <div style={{ height: 1, background: "var(--border)", margin: "2px 0" }} />
+            <button onClick={() => { moveFav(contextMenu.id, -1); setContextMenu(null); }} style={{
+              display: "block", width: "100%", padding: "11px 16px", border: "none", background: "none",
+              cursor: "pointer", textAlign: "left", fontSize: 14, fontFamily: "inherit", color: "var(--text-primary)",
+            }}>上移</button>
+            <button onClick={() => { moveFav(contextMenu.id, 1); setContextMenu(null); }} style={{
+              display: "block", width: "100%", padding: "11px 16px", border: "none", background: "none",
+              cursor: "pointer", textAlign: "left", fontSize: 14, fontFamily: "inherit", color: "var(--text-primary)",
+            }}>下移</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── Responsive CSS ──
   const responsiveStyle = (
     <style>{`
       @media(max-width:680px) {
@@ -832,25 +1209,45 @@ export default function ChatViewer({ onBack }) {
     `}</style>
   );
 
+  // ── 悬浮导入按钮 ──
+  const floatingImport = (
+    <button
+      onClick={() => fileRef.current?.click()}
+      title="导入 JSON 文件"
+      style={{
+        position: "fixed", bottom: 24, right: 24, zIndex: 800,
+        width: 44, height: 44, borderRadius: "50%",
+        background: "var(--accent)", color: "#fff", border: "none",
+        cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,.2)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 20, fontFamily: "inherit",
+      }}
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 16V4m0 0L8 8m4-4l4 4M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4" />
+      </svg>
+    </button>
+  );
+
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
       {responsiveStyle}
       {header}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        {/* Desktop sidebar */}
         <div className="cv-sidebar" style={{ display: "flex" }}>
-          {sidebar}
+          {sidebarContent}
         </div>
-        {/* Mobile: show list or messages */}
         <div className="cv-mobile-list" style={{ flex: 1, display: mobileShowList ? "flex" : "none", flexDirection: "column", minHeight: 0, minWidth: 0 }}>
           {mobileList}
         </div>
-        {/* Main content area */}
         <div style={{ flex: 1, display: mobileShowList ? "none" : "flex", flexDirection: "column", minHeight: 0, minWidth: 0, overflow: "hidden" }}>
           {messageArea}
         </div>
-        {/* Desktop: always show message area */}
       </div>
+      {floatingImport}
+      {ctxMenu}
+      <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }}
+        onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); }} />
     </div>
   );
 }
