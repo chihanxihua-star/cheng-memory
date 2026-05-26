@@ -558,12 +558,13 @@ const CSS = `
 
 /* INPUT */
 .cp-input-container {
-  background: var(--bg-primary);
   position: absolute; bottom: 0; left: 0; right: 0;
-  padding: 8px 16px 24px;
+  padding: 0 16px 24px;
   touch-action: none;
   z-index: 10;
+  pointer-events: none;
 }
+.cp-input-container > * { pointer-events: auto; }
 .cp-input-container textarea,
 .cp-input-container input,
 .cp-input-container .cp-input-wrapper { touch-action: pan-y; }
@@ -938,6 +939,8 @@ export default function ChatPanel({ onBack }) {
   const opLogUnread = useRef(false);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  const [thinkingPanelOpen, setThinkingPanelOpen] = useState(false);
+  const [thinkingInstruction, setThinkingInstruction] = useState("");
   const [currentModel, setCurrentModel] = useState("");
   const [currentEffort, setCurrentEffort] = useState("high");
   const [charCount, setCharCount] = useState(0);
@@ -1040,7 +1043,7 @@ export default function ChatPanel({ onBack }) {
       if (d.model && currentModel === "") setCurrentModel(d.model);
       if (d.effort) setCurrentEffort(d.effort);
       if (d.session) setCurrentSessionId(d.session);
-      authedFetch(API + "/thinking-toggle").then(r => r.json()).then(d => setThinkingEnabled(d.enabled)).catch(() => {});
+      authedFetch(API + "/thinking-toggle").then(r => r.json()).then(d => { setThinkingEnabled(d.enabled); if (d.instruction) setThinkingInstruction(d.instruction); }).catch(() => {});
     } catch {
       setCcStatus("down");
     }
@@ -1253,6 +1256,17 @@ export default function ChatPanel({ onBack }) {
         setIsGenerating(false);
         streamRef.current = null;
         scrollToBottom();
+        // thinking 日志
+        const hasNativeThinking = !!(s.thinking);
+        const simThink = extractThink(finalText);
+        const hasSimThinking = !!(simThink.thinking);
+        if (hasNativeThinking || hasSimThinking) {
+          const src = hasNativeThinking ? "原生 thinking" : "模拟 thinking";
+          const len = hasNativeThinking ? s.thinking.length : simThink.thinking.length;
+          pushLog(true, "Thinking 提取", `${src}，${len} 字`);
+        } else if (thinkingEnabled) {
+          pushLog(false, "Thinking 未检测", "开关已开启但 CC 未输出 thinking");
+        }
         break;
       }
       case "stopped": {
@@ -1893,12 +1907,6 @@ export default function ChatPanel({ onBack }) {
               <line x1="3" y1="18" x2="13" y2="18"/>
             </svg>
           </button>
-          <button className="cp-hamburger" onClick={() => setSearchOpen(true)} aria-label="搜索" title="搜索聊天">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="7"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-          </button>
         </div>
         <div className="center">
           <span className="cp-claude-name" onClick={() => setShowSettings(true)} title="点击编辑">
@@ -2019,11 +2027,17 @@ export default function ChatPanel({ onBack }) {
               placeholder="说点什么..." />
           </div>
           <div className="cp-input-controls">
+            <button className="cp-inline-btn" onClick={() => fileInputRef.current && fileInputRef.current.click()} title="添加图片/文件">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            <button className="cp-inline-btn" onClick={() => setSearchOpen(true)} title="搜索聊天">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
             <button
               className={"cp-inline-btn " + (ccStatus === "ready" ? "connected" : ccStatus === "down" ? "error" : "")}
               onClick={() => setPlusMenuOpen(true)}
-              title="附件">
-              <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              title="更多">
+              <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>
             </button>
             <div style={{ flex: 1 }} />
             <SendStopButton
@@ -2045,44 +2059,39 @@ export default function ChatPanel({ onBack }) {
           <div className="cp-plus-overlay" onClick={() => setPlusMenuOpen(false)} />
           <div className="cp-plus-sheet">
             <div className="cp-plus-sheet-handle" />
-            <button className="cp-plus-item" onClick={() => {
-              setPlusMenuOpen(false);
-              fileInputRef.current && fileInputRef.current.click();
-            }}>
-              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-              <span>图库</span>
-            </button>
-            <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); fileInputRef.current && (fileInputRef.current.capture = "environment", fileInputRef.current.click(), fileInputRef.current.removeAttribute("capture")); }}>
-              <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-              <span>拍照</span>
-            </button>
-            <button className="cp-plus-item" onClick={() => {
-              setPlusMenuOpen(false);
-              filePickerRef.current && filePickerRef.current.click();
-            }}>
-              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              <span>选择文件</span>
-            </button>
             <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); setOpLogOpen(true); opLogUnread.current = false; }}>
               <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
               <span>聊天日志</span>
               {opLogUnread.current && <span className="cp-plus-right"><span style={{ width: 8, height: 8, borderRadius: "50%", background: "rgba(255,120,120,0.7)", display: "inline-block" }} /></span>}
             </button>
-            <div className="cp-plus-item" onClick={() => {
-              const next = !thinkingEnabled;
-              setThinkingEnabled(next);
-              authedFetch(API + "/thinking-toggle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: next }) })
-                .then(r => r.json()).then(d => { if (d.ok) showToast(next ? "Thinking 已开启，下轮生效" : "Thinking 已关闭，下轮生效"); })
-                .catch(() => { setThinkingEnabled(!next); showToast("切换失败"); });
-            }}>
+            <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); setThinkingPanelOpen(true); }}>
               <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 3 2 5 4 6.5V17a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1.5C17 14 19 12 19 9a7 7 0 0 0-7-7z"/><line x1="9" y1="21" x2="15" y2="21"/></svg>
               <span>Thinking</span>
-              <span className="cp-plus-right"><button className={"cp-plus-toggle" + (thinkingEnabled ? " on" : "")} onClick={e => e.stopPropagation()} /></span>
-            </div>
+              {thinkingEnabled && <span className="cp-plus-right"><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#7cd47c", display: "inline-block" }} /></span>}
+            </button>
           </div>
         </>
       )}
       {opLogOpen && <OpLogPanel log={opLog} onClose={() => setOpLogOpen(false)} />}
+      {thinkingPanelOpen && <ThinkingPanel
+        instruction={thinkingInstruction}
+        enabled={thinkingEnabled}
+        onClose={() => setThinkingPanelOpen(false)}
+        onSave={(text, en) => {
+          authedFetch(API + "/thinking-toggle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: en, instruction: text }) })
+            .then(r => r.json()).then(d => {
+              if (d.ok) {
+                setThinkingEnabled(en);
+                setThinkingInstruction(en ? text : thinkingInstruction);
+                showToast(en ? "Thinking 指令已保存并开启" : "Thinking 已关闭");
+                pushLog(true, en ? "Thinking 开启" : "Thinking 关闭", "指令已写入 CLAUDE.md");
+              } else {
+                showToast("保存失败");
+                pushLog(false, "Thinking 保存", d.error || "后端返回非 ok");
+              }
+            }).catch(() => { showToast("保存失败"); pushLog(false, "Thinking 保存", "网络错误"); });
+        }}
+      />}
 
       {/* TERMINAL placeholder */}
       {terminalOpen && <TerminalPanel onClose={() => setTerminalOpen(false)} />}
@@ -2416,6 +2425,85 @@ function OpLogPanel({ log, onClose }) {
               </span>
             </div>
           ))}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function ThinkingPanel({ instruction, enabled, onClose, onSave }) {
+  const [text, setText] = useState(instruction || '');
+  const [on, setOn] = useState(enabled);
+  const can = !!(text.trim());
+  const taRef = useRef(null);
+  const autoGrow = () => {
+    const el = taRef.current; if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  };
+  useEffect(autoGrow, [text]);
+  return createPortal(
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 950,
+      background: "var(--bg-page, #1a1a1a)",
+      display: "flex", flexDirection: "column",
+      animation: "cp-slideUp 0.28s ease",
+    }}>
+      <div style={{
+        flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px",
+        borderBottom: "1px solid var(--border, #333)",
+      }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>CANCEL</button>
+        <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.22em" }}>Thinking</span>
+        <button onClick={() => { onSave(text, on); onClose(); }} disabled={on && !can} style={{
+          background: (on && can) ? "var(--text-primary)" : "transparent",
+          color: (on && can) ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
+          border: (on && can) ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
+          padding: "8px 18px", borderRadius: 4,
+          fontSize: 12, letterSpacing: "0.18em",
+          cursor: (on && !can) ? "not-allowed" : "pointer", fontFamily: "inherit",
+        }}>SAVE ✓</button>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 16px calc(28px + env(safe-area-inset-bottom, 0px))" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {["开启", "关闭"].map(label => {
+              const active = label === "开启" ? on : !on;
+              return (
+                <button key={label} onClick={() => setOn(label === "开启")} style={{
+                  background: active ? "var(--text-primary)" : "transparent",
+                  color: active ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
+                  border: active ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
+                  padding: "6px 18px", borderRadius: 4,
+                  fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
+                }}>{label}</button>
+              );
+            })}
+          </div>
+
+          <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6 }}>
+            包裹指令已固定：CC 会用 &lt;think&gt; 标签包裹思考过程。<br/>下面填写思考链引导 —— 告诉 CC 怎么想。
+          </div>
+
+          <textarea
+            ref={taRef}
+            autoFocus
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder="写点什么…"
+            style={{
+              width: "100%", resize: "none", overflow: "hidden",
+              background: "transparent", color: "var(--text-primary)",
+              border: "none", borderBottom: "1px solid var(--border, #333)", borderRadius: 0,
+              padding: "8px 0", fontSize: 14, lineHeight: 1.7,
+              fontFamily: "Georgia, 'Noto Serif SC', serif",
+              outline: "none", boxSizing: "border-box",
+            }}
+          />
         </div>
       </div>
     </div>,
