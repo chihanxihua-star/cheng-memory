@@ -63,6 +63,13 @@ function escHtml(s) {
 }
 
 // 较完整的 markdown 渲染（替代 marked）
+function extractThink(text) {
+  if (!text) return { thinking: "", content: text || "" };
+  const m = /^([\s\S]*?)<think>([\s\S]*?)<\/think>([\s\S]*)$/.exec(text);
+  if (!m) return { thinking: "", content: text };
+  return { thinking: m[2].trim(), content: (m[1] + m[3]).trim() };
+}
+
 function md(text) {
   if (!text) return "";
   // 抽出代码块
@@ -333,7 +340,7 @@ const CSS = `
   flex: 1 1 0; min-height: 0;
   overflow-y: auto; -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  padding: 14px 12px 14px;
+  padding: 14px 12px 140px;
 }
 .cp-empty {
   height: 100%; display: flex; align-items: center; justify-content: center;
@@ -551,10 +558,11 @@ const CSS = `
 
 /* INPUT */
 .cp-input-container {
-  background: var(--bg-primary); border-top: 1px solid var(--border-primary);
-  flex-shrink: 0;
-  /* iOS：在输入栏空白区域拖动不再 rubber-band */
+  background: var(--bg-primary);
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 8px 16px 24px;
   touch-action: none;
+  z-index: 10;
 }
 .cp-input-container textarea,
 .cp-input-container input,
@@ -572,23 +580,15 @@ const CSS = `
   font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1;
 }
 .cp-input-area {
-  padding: 10px 14px 12px; display: flex; gap: 8px; align-items: center;
+  background: var(--bg-input); border: 1px solid var(--border-input);
+  border-radius: 28px;
+  display: flex; flex-direction: column;
+  padding: 12px 10px 10px 18px;
 }
-.cp-inline-btn {
-  background: none; border: none; color: var(--text-placeholder); cursor: pointer;
-  padding: 0; border-radius: 4px; flex-shrink: 0;
-  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
-}
-.cp-inline-btn:hover { color: var(--text-secondary); }
-.cp-inline-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.cp-inline-btn.connected { color: var(--bg-bubble-user); }
-.cp-inline-btn.connected:hover { color: var(--bg-bubble-user); opacity: 0.8; }
-.cp-inline-btn.error { color: var(--text-placeholder); }
 .cp-input-wrapper {
-  flex: 1; min-width: 0; background: var(--bg-input); border: 1px solid var(--border-input);
-  border-radius: 22px; padding: 4px 5px 4px 16px;
-  min-height: 44px; max-height: 140px; box-sizing: border-box;
-  display: flex; align-items: center; gap: 6px;
+  width: 100%;
+  min-height: 36px; max-height: 140px;
+  display: flex; align-items: center;
 }
 .cp-input {
   flex: 1; min-width: 0; width: 100%; background: transparent; border: none;
@@ -596,19 +596,71 @@ const CSS = `
   font-family: inherit; line-height: 1.5; max-height: 120px; overflow-y: auto; padding: 6px 0;
 }
 .cp-input::placeholder { color: var(--text-placeholder); }
+.cp-input-controls {
+  display: flex; align-items: center; gap: 6px;
+}
+.cp-inline-btn {
+  background: var(--bg-sidebar); border: none; color: var(--text-secondary); cursor: pointer;
+  padding: 0; border-radius: 50%; flex-shrink: 0;
+  width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+}
+.cp-inline-btn:hover { background: var(--bg-sidebar-hover); color: var(--text-primary); }
+.cp-inline-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cp-inline-btn.connected { color: var(--text-secondary); }
+.cp-inline-btn.connected:hover { color: var(--text-primary); }
+.cp-inline-btn.error { color: var(--text-placeholder); }
 .cp-send-btn {
-  background: var(--bg-bubble-user); color: #fff; border: none; border-radius: 50%;
+  background: var(--text-primary); color: var(--bg-input); border: none; border-radius: 50%;
   padding: 0; cursor: pointer; flex-shrink: 0;
-  height: 34px; width: 34px; display: flex; align-items: center; justify-content: center;
+  height: 40px; width: 40px; display: flex; align-items: center; justify-content: center;
 }
 .cp-send-btn:hover { opacity: 0.88; }
 .cp-send-btn svg { width: 18px; height: 18px; fill: currentColor; }
 .cp-send-btn.voice {
-  background: transparent; color: var(--text-tertiary);
+  background: var(--bg-sidebar); color: var(--text-secondary);
 }
 .cp-send-btn.voice:hover { background: var(--bg-sidebar-hover); color: var(--text-primary); }
-.cp-send-btn.voice svg { fill: none; stroke: var(--text-secondary); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.cp-send-btn.voice:hover svg { stroke: var(--text-primary); }
+.cp-send-btn.voice svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* PLUS MENU (bottom sheet) */
+.cp-plus-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+  z-index: 700; animation: cp-fadeIn 0.15s ease;
+}
+.cp-plus-sheet {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 701;
+  background: var(--bg-primary); border-radius: 14px 14px 0 0;
+  padding: 10px 0 calc(env(safe-area-inset-bottom, 0px) + 12px);
+  animation: cp-slideUp 0.2s ease;
+  max-height: 60vh; overflow-y: auto;
+}
+@keyframes cp-slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.cp-plus-sheet-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: var(--border-primary); margin: 0 auto 8px;
+}
+.cp-plus-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 20px; cursor: pointer; border: none; background: none;
+  width: 100%; text-align: left; font-size: 15px; color: var(--text-primary);
+  font-family: inherit;
+}
+.cp-plus-item:hover { background: var(--bg-sidebar-hover); }
+.cp-plus-item:active { background: var(--bg-sidebar-hover); }
+.cp-plus-item svg { width: 22px; height: 22px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.cp-plus-item .cp-plus-right { margin-left: auto; display: flex; align-items: center; }
+.cp-plus-toggle {
+  width: 44px; height: 24px; border-radius: 12px; border: none; cursor: pointer;
+  background: var(--border-primary); position: relative; transition: background 0.2s;
+  flex-shrink: 0;
+}
+.cp-plus-toggle.on { background: var(--bg-bubble-user); }
+.cp-plus-toggle::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; transition: transform 0.2s;
+}
+.cp-plus-toggle.on::after { transform: translateX(20px); }
 
 /* SIDEBAR (drawer) */
 .cp-sidebar-overlay {
@@ -884,6 +936,8 @@ export default function ChatPanel({ onBack }) {
   });
   const [opLogOpen, setOpLogOpen] = useState(false);
   const opLogUnread = useRef(false);
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [currentModel, setCurrentModel] = useState("");
   const [currentEffort, setCurrentEffort] = useState("high");
   const [charCount, setCharCount] = useState(0);
@@ -943,6 +997,7 @@ export default function ChatPanel({ onBack }) {
   const typingTimerRef = useRef(null);
   const messagesScrollRef = useRef(null);
   const fileInputRef = useRef(null);
+  const filePickerRef = useRef(null);
   const inputRef = useRef(null);
   const lastDateRef = useRef(null);
   const messagesLenRef = useRef(0);
@@ -985,6 +1040,7 @@ export default function ChatPanel({ onBack }) {
       if (d.model && currentModel === "") setCurrentModel(d.model);
       if (d.effort) setCurrentEffort(d.effort);
       if (d.session) setCurrentSessionId(d.session);
+      authedFetch(API + "/thinking-toggle").then(r => r.json()).then(d => setThinkingEnabled(d.enabled)).catch(() => {});
     } catch {
       setCcStatus("down");
     }
@@ -1955,17 +2011,21 @@ export default function ChatPanel({ onBack }) {
           </div>
         )}
         <div className="cp-input-area">
-          <button
-            className={"cp-inline-btn " + (ccStatus === "ready" ? "connected" : ccStatus === "down" ? "error" : "")}
-            onClick={() => fileInputRef.current && fileInputRef.current.click()}
-            title="附件">
-            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
           <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onPickImages}/>
+          <input ref={filePickerRef} type="file" multiple style={{ display: "none" }} onChange={onPickImages}/>
           <div className="cp-input-wrapper">
             <textarea ref={inputRef} className="cp-input" rows={1}
               value={input} onChange={handleInputChange} onKeyDown={handleInputKey}
               placeholder="说点什么..." />
+          </div>
+          <div className="cp-input-controls">
+            <button
+              className={"cp-inline-btn " + (ccStatus === "ready" ? "connected" : ccStatus === "down" ? "error" : "")}
+              onClick={() => setPlusMenuOpen(true)}
+              title="附件">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            <div style={{ flex: 1 }} />
             <SendStopButton
               isGenerating={isGenerating}
               hasContent={!!input.trim() || images.length > 0}
@@ -1979,19 +2039,49 @@ export default function ChatPanel({ onBack }) {
         </div>
       </div>
 
-      {/* 操作日志悬浮图标 */}
-      <button onClick={() => { setOpLogOpen(v => !v); opLogUnread.current = false; }} style={{
-        position: "fixed", bottom: 160, right: 14, zIndex: 500,
-        width: 32, height: 32, borderRadius: "50%",
-        background: opLogUnread.current ? "rgba(255,120,120,0.35)" : "rgba(128,128,128,0.18)",
-        border: "none", color: "var(--text-tertiary)", fontSize: 14,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        cursor: "pointer", backdropFilter: "blur(4px)",
-      }} title="操作日志">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-        </svg>
-      </button>
+      {/* + 菜单底部弹窗 */}
+      {plusMenuOpen && (
+        <>
+          <div className="cp-plus-overlay" onClick={() => setPlusMenuOpen(false)} />
+          <div className="cp-plus-sheet">
+            <div className="cp-plus-sheet-handle" />
+            <button className="cp-plus-item" onClick={() => {
+              setPlusMenuOpen(false);
+              fileInputRef.current && fileInputRef.current.click();
+            }}>
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+              <span>图库</span>
+            </button>
+            <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); fileInputRef.current && (fileInputRef.current.capture = "environment", fileInputRef.current.click(), fileInputRef.current.removeAttribute("capture")); }}>
+              <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <span>拍照</span>
+            </button>
+            <button className="cp-plus-item" onClick={() => {
+              setPlusMenuOpen(false);
+              filePickerRef.current && filePickerRef.current.click();
+            }}>
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span>选择文件</span>
+            </button>
+            <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); setOpLogOpen(true); opLogUnread.current = false; }}>
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              <span>聊天日志</span>
+              {opLogUnread.current && <span className="cp-plus-right"><span style={{ width: 8, height: 8, borderRadius: "50%", background: "rgba(255,120,120,0.7)", display: "inline-block" }} /></span>}
+            </button>
+            <div className="cp-plus-item" onClick={() => {
+              const next = !thinkingEnabled;
+              setThinkingEnabled(next);
+              authedFetch(API + "/thinking-toggle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: next }) })
+                .then(r => r.json()).then(d => { if (d.ok) showToast(next ? "Thinking 已开启，下轮生效" : "Thinking 已关闭，下轮生效"); })
+                .catch(() => { setThinkingEnabled(!next); showToast("切换失败"); });
+            }}>
+              <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 3 2 5 4 6.5V17a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1.5C17 14 19 12 19 9a7 7 0 0 0-7-7z"/><line x1="9" y1="21" x2="15" y2="21"/></svg>
+              <span>Thinking</span>
+              <span className="cp-plus-right"><button className={"cp-plus-toggle" + (thinkingEnabled ? " on" : "")} onClick={e => e.stopPropagation()} /></span>
+            </div>
+          </div>
+        </>
+      )}
       {opLogOpen && <OpLogPanel log={opLog} onClose={() => setOpLogOpen(false)} />}
 
       {/* TERMINAL placeholder */}
@@ -2398,8 +2488,12 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
       )}
       <div className="cp-msg-body">
         {isHead && msg.event === "bark" && <div className="cp-bark-label">小太阳想你了</div>}
-        {/* thinking 块（仅 head 显示） */}
-        {isHead && msg.thinking && <ThinkingBlock text={msg.thinking} />}
+        {/* thinking 块（仅 head 显示，原生 + <think> 标签提取） */}
+        {isHead && (() => {
+          const extracted = !isUser ? extractThink(partText) : null;
+          const allThinking = [msg.thinking, extracted?.thinking].filter(Boolean).join("\n\n");
+          return allThinking ? <ThinkingBlock text={allThinking} /> : null;
+        })()}
         {/* tool calls 块 */}
         {isHead && msg.tool_calls && msg.tool_calls.length > 0 && (
           <ToolCallsBlock calls={msg.tool_calls} />
@@ -2434,7 +2528,7 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
               </>
             )
           ) : (
-            <div className="cp-md" dangerouslySetInnerHTML={{ __html: md(partText || "") }} />
+            <div className="cp-md" dangerouslySetInnerHTML={{ __html: md((isHead ? extractThink(partText).content : partText) || "") }} />
           )}
         </div>
         {!editing && (
@@ -2659,7 +2753,9 @@ function StreamingBubble({ snap, profile, showTyping }) {
   // 只展示 thinking / tool 调用，或后端显式发来的 bubble 事件。
   // 真正的气泡由 done 事件携 cp-msgIn 进场动画弹出。
   const bubbles = Array.isArray(snap.bubbles) && snap.bubbles.length > 0 ? snap.bubbles : [];
-  const hasInner = !!snap.thinking || (snap.tools && snap.tools.length > 0) || bubbles.length > 0;
+  const deltaThink = extractThink(snap.delta || "");
+  const allThinking = [snap.thinking, deltaThink.thinking].filter(Boolean).join("\n\n");
+  const hasInner = !!allThinking || (snap.tools && snap.tools.length > 0) || bubbles.length > 0;
 
   return (
     <>
@@ -2668,7 +2764,7 @@ function StreamingBubble({ snap, profile, showTyping }) {
           {profile.botImg ? <img src={profile.botImg} alt="" /> : profile.botEmoji}
         </div>
         <div className="cp-msg-body">
-          <ThinkingBlock text={snap.thinking || ""} isThinking={true} />
+          <ThinkingBlock text={allThinking} isThinking={!deltaThink.thinking || !/<\/think>/.test(snap.delta || "")} />
           {snap.tools && snap.tools.length > 0 && <ToolCallsBlock calls={snap.tools} />}
           {bubbles.length > 0 && (
             <div className="cp-msg-bubble assistant">
