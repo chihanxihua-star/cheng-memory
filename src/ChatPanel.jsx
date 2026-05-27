@@ -941,6 +941,9 @@ export default function ChatPanel({ onBack }) {
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [thinkingPanelOpen, setThinkingPanelOpen] = useState(false);
   const [thinkingInstruction, setThinkingInstruction] = useState("");
+  const [styleEnabled, setStyleEnabled] = useState(false);
+  const [stylePanelOpen, setStylePanelOpen] = useState(false);
+  const [styleInstruction, setStyleInstruction] = useState("");
   const [currentModel, setCurrentModel] = useState("");
   const [currentEffort, setCurrentEffort] = useState("high");
   const [charCount, setCharCount] = useState(0);
@@ -1044,6 +1047,7 @@ export default function ChatPanel({ onBack }) {
       if (d.effort) setCurrentEffort(d.effort);
       if (d.session) setCurrentSessionId(d.session);
       authedFetch(API + "/thinking-toggle").then(r => r.json()).then(d => { setThinkingEnabled(d.enabled); if (d.instruction) setThinkingInstruction(d.instruction); }).catch(() => {});
+      authedFetch(API + "/use-style").then(r => r.json()).then(d => { setStyleEnabled(d.enabled); if (d.instruction) setStyleInstruction(d.instruction); }).catch(() => {});
     } catch {
       setCcStatus("down");
     }
@@ -2069,6 +2073,11 @@ export default function ChatPanel({ onBack }) {
               <span>Thinking</span>
               {thinkingEnabled && <span className="cp-plus-right"><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#7cd47c", display: "inline-block" }} /></span>}
             </button>
+            <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); setStylePanelOpen(true); }}>
+              <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              <span>Use Style</span>
+              {styleEnabled && <span className="cp-plus-right"><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#7cd47c", display: "inline-block" }} /></span>}
+            </button>
           </div>
         </>
       )}
@@ -2084,12 +2093,31 @@ export default function ChatPanel({ onBack }) {
                 setThinkingEnabled(en);
                 setThinkingInstruction(en ? text : thinkingInstruction);
                 showToast(en ? "Thinking 指令已保存并开启" : "Thinking 已关闭");
-                pushLog(true, en ? "Thinking 开启" : "Thinking 关闭", "指令已写入 CLAUDE.md");
+                pushLog(true, en ? "Thinking 开启" : "Thinking 关闭", `指令已写入 CLAUDE.md（${text.length} 字）`);
               } else {
                 showToast("保存失败");
                 pushLog(false, "Thinking 保存", d.error || "后端返回非 ok");
               }
             }).catch(() => { showToast("保存失败"); pushLog(false, "Thinking 保存", "网络错误"); });
+        }}
+      />}
+      {stylePanelOpen && <StylePanel
+        instruction={styleInstruction}
+        enabled={styleEnabled}
+        onClose={() => setStylePanelOpen(false)}
+        onSave={(text, en) => {
+          authedFetch(API + "/use-style", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: en, instruction: text }) })
+            .then(r => r.json()).then(d => {
+              if (d.ok) {
+                setStyleEnabled(d.enabled);
+                setStyleInstruction(d.enabled ? text : styleInstruction);
+                showToast(d.enabled ? "Style 已保存并开启" : "Style 已关闭");
+                pushLog(true, d.enabled ? "Style 开启" : "Style 关闭", `指令已写入 CLAUDE.md（${text.length} 字）`);
+              } else {
+                showToast("保存失败");
+                pushLog(false, "Style 保存", d.error || "后端返回非 ok");
+              }
+            }).catch(() => { showToast("保存失败"); pushLog(false, "Style 保存", "网络错误"); });
         }}
       />}
 
@@ -2437,12 +2465,6 @@ function ThinkingPanel({ instruction, enabled, onClose, onSave }) {
   const [on, setOn] = useState(enabled);
   const can = !!(text.trim());
   const taRef = useRef(null);
-  const autoGrow = () => {
-    const el = taRef.current; if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
-  };
-  useEffect(autoGrow, [text]);
   return createPortal(
     <div style={{
       position: "fixed", inset: 0, zIndex: 950,
@@ -2468,9 +2490,9 @@ function ThinkingPanel({ instruction, enabled, onClose, onSave }) {
         }}>SAVE ✓</button>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 16px calc(28px + env(safe-area-inset-bottom, 0px))" }}>
-        <div style={{ maxWidth: 600, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden", padding: "20px 16px calc(28px + env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column" }}>
+        <div style={{ maxWidth: 600, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: 18, flex: 1, minHeight: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             {["开启", "关闭"].map(label => {
               const active = label === "开启" ? on : !on;
               return (
@@ -2485,7 +2507,7 @@ function ThinkingPanel({ instruction, enabled, onClose, onSave }) {
             })}
           </div>
 
-          <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6 }}>
+          <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6, flexShrink: 0 }}>
             包裹指令已固定：CC 会用 &lt;think&gt; 标签包裹思考过程。<br/>下面填写思考链引导 —— 告诉 CC 怎么想。
           </div>
 
@@ -2496,14 +2518,91 @@ function ThinkingPanel({ instruction, enabled, onClose, onSave }) {
             onChange={e => setText(e.target.value)}
             placeholder="写点什么…"
             style={{
-              width: "100%", resize: "none", overflow: "hidden",
+              width: "100%", resize: "none", overflowY: "auto",
               background: "transparent", color: "var(--text-primary)",
               border: "none", borderBottom: "1px solid var(--border, #333)", borderRadius: 0,
               padding: "8px 0", fontSize: 14, lineHeight: 1.7,
               fontFamily: "Georgia, 'Noto Serif SC', serif",
               outline: "none", boxSizing: "border-box",
+              flex: 1, minHeight: 120,
             }}
           />
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "right", flexShrink: 0 }}>{text.length} 字</div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function StylePanel({ instruction, enabled, onClose, onSave }) {
+  const [text, setText] = useState(instruction || '');
+  const [on, setOn] = useState(enabled);
+  const can = !!(text.trim());
+  const taRef = useRef(null);
+  return createPortal(
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 950,
+      background: "var(--bg-page, #1a1a1a)",
+      display: "flex", flexDirection: "column",
+      animation: "cp-slideUp 0.28s ease",
+    }}>
+      <div style={{
+        flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px",
+        borderBottom: "1px solid var(--border, #333)",
+      }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>CANCEL</button>
+        <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.22em" }}>Use Style</span>
+        <button onClick={() => { onSave(text, on); onClose(); }} disabled={on && !can} style={{
+          background: (on && can) ? "var(--text-primary)" : "transparent",
+          color: (on && can) ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
+          border: (on && can) ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
+          padding: "8px 18px", borderRadius: 4,
+          fontSize: 12, letterSpacing: "0.18em",
+          cursor: (on && !can) ? "not-allowed" : "pointer", fontFamily: "inherit",
+        }}>SAVE ✓</button>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden", padding: "20px 16px calc(28px + env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column" }}>
+        <div style={{ maxWidth: 600, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: 18, flex: 1, minHeight: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            {["开启", "关闭"].map(label => {
+              const active = label === "开启" ? on : !on;
+              return (
+                <button key={label} onClick={() => setOn(label === "开启")} style={{
+                  background: active ? "var(--text-primary)" : "transparent",
+                  color: active ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
+                  border: active ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
+                  padding: "6px 18px", borderRadius: 4,
+                  fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
+                }}>{label}</button>
+              );
+            })}
+          </div>
+
+          <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6, flexShrink: 0 }}>
+            写入风格指令到 CLAUDE.md，下一轮对话自动生效。<br/>描述你想要的回复风格、语气、格式等。
+          </div>
+
+          <textarea
+            ref={taRef}
+            autoFocus
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder="例：用简洁口语化的中文回复，不要用 emoji，少用术语…"
+            style={{
+              width: "100%", resize: "none", overflowY: "auto",
+              background: "transparent", color: "var(--text-primary)",
+              border: "none", borderBottom: "1px solid var(--border, #333)", borderRadius: 0,
+              padding: "8px 0", fontSize: 14, lineHeight: 1.7,
+              fontFamily: "Georgia, 'Noto Serif SC', serif",
+              outline: "none", boxSizing: "border-box",
+              flex: 1, minHeight: 120,
+            }}
+          />
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "right", flexShrink: 0 }}>{text.length} 字</div>
         </div>
       </div>
     </div>,
