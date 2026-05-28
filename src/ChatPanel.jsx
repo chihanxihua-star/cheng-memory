@@ -40,11 +40,12 @@ const EMOJI_OPTIONS = ["🦊","🐙","🐱","🐰","🐻","🐼","🦝","🐨","
 const DEFAULT_PROFILE = { userNick: "宝", userEmoji: "🦊", userImg: null, botNick: "Claude", botEmoji: "🐙", botImg: null };
 const MODEL_OPTIONS = [
   { value: "", name: "默认", desc: "跟随 CC 配置" },
-  { value: "opus", name: "Opus 4.7", desc: "Extended · 思考不可见" },
+  { value: "claude-opus-4-8", name: "Opus 4.8", desc: "Latest · 思考不可见" },
+  { value: "claude-opus-4-7", name: "Opus 4.7", desc: "Extended · 思考不可见" },
   { value: "claude-opus-4-6", name: "Opus 4.6", desc: "Extended" },
   { value: "claude-opus-4-5-20251101", name: "Opus 4.5", desc: "Legacy" },
-  { value: "sonnet", name: "Sonnet 4.6", desc: "Fast & Smart · 可见思考" },
-  { value: "haiku", name: "Haiku 4.5", desc: "Ultra Fast" },
+  { value: "claude-sonnet-4-6", name: "Sonnet 4.6", desc: "Fast & Smart · 可见思考" },
+  { value: "claude-haiku-4-5-20251001", name: "Haiku 4.5", desc: "Ultra Fast" },
   { value: "claude-sonnet-4-5-20250929", name: "Sonnet 4.5", desc: "Classic" },
 ];
 
@@ -3230,6 +3231,7 @@ function ParamsScreen({ onBack, showToast }) {
 
 /* ─────── API 设置：API key / 模型 / 缓存 ─────── */
 const API_MODEL_OPTIONS = [
+  { value: "claude-opus-4-8", label: "Opus 4.8" },
   { value: "claude-opus-4-7", label: "Opus 4.7" },
   { value: "claude-opus-4-6", label: "Opus 4.6" },
   { value: "claude-opus-4-5-20251101", label: "Opus 4.5" },
