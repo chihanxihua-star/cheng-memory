@@ -49,6 +49,7 @@ const MODEL_OPTIONS = [
 ];
 
 const EFFORT_OPTIONS = [
+  { value: "off", name: "关" },
   { value: "low", name: "Low" },
   { value: "medium", name: "Medium" },
   { value: "high", name: "High" },
@@ -1454,6 +1455,16 @@ export default function ChatPanel({ onBack }) {
     // eslint-disable-next-line
   }, []);
 
+  useEffect(() => {
+    const appName = "澄";
+    const device = /iPad/.test(navigator.userAgent) ? "iPad-web" : /iPhone/.test(navigator.userAgent) ? "iPhone-web" : "web";
+    const report = (action) => supabase.from("app_usage").insert({ app_name: action === "close" ? null : appName, action, device }).then(() => {});
+    report("open");
+    const onChange = () => report(document.visibilityState === "visible" ? "open" : "close");
+    document.addEventListener("visibilitychange", onChange);
+    return () => { document.removeEventListener("visibilitychange", onChange); report("close"); };
+  }, []);
+
   /* ─────── 发送 ─────── */
   const send = useCallback(async () => {
     const text = input.trim();
@@ -2078,6 +2089,14 @@ export default function ChatPanel({ onBack }) {
               <span>Use Style</span>
               {styleEnabled && <span className="cp-plus-right"><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#7cd47c", display: "inline-block" }} /></span>}
             </button>
+            <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); newChat(); }}>
+              <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <span>新对话（清屏）</span>
+            </button>
+            <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); amnesia(); }}>
+              <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              <span>失忆（无上下文）</span>
+            </button>
           </div>
         </>
       )}
@@ -2508,7 +2527,7 @@ function ThinkingPanel({ instruction, enabled, onClose, onSave }) {
           </div>
 
           <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6, flexShrink: 0 }}>
-            包裹指令已固定：CC 会用 &lt;think&gt; 标签包裹思考过程。<br/>下面填写思考链引导 —— 告诉 CC 怎么想。
+            这段会注入给 CC，引导它的原生思考、影响正文输出 —— 告诉 CC 怎么想。
           </div>
 
           <textarea
@@ -3016,9 +3035,7 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
       <>
         <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={() => setScreen("main")}>← 返回</button>CC窗口</div>
         <div className="cp-ps-list">
-          <SidebarItem onClick={onNewChat}>新对话（清屏）</SidebarItem>
           <SidebarItem onClick={() => onRestartCC()}>重启 CC 进程</SidebarItem>
-          <SidebarItem onClick={onAmnesia}>失忆（无上下文）</SidebarItem>
         </div>
       </>
     );
