@@ -941,6 +941,7 @@ export default function ChatPanel({ onBack }) {
   const opLogUnread = useRef(false);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  const [nativeThinkingEnabled, setNativeThinkingEnabled] = useState(false);
   const [thinkingPanelOpen, setThinkingPanelOpen] = useState(false);
   const [thinkingInstruction, setThinkingInstruction] = useState("");
   const [styleEnabled, setStyleEnabled] = useState(false);
@@ -1048,7 +1049,7 @@ export default function ChatPanel({ onBack }) {
       if (d.model && currentModel === "") setCurrentModel(d.model);
       if (d.effort) setCurrentEffort(d.effort);
       if (d.session) setCurrentSessionId(d.session);
-      authedFetch(API + "/thinking-toggle").then(r => r.json()).then(d => { setThinkingEnabled(d.enabled); if (d.instruction) setThinkingInstruction(d.instruction); }).catch(() => {});
+      authedFetch(API + "/thinking-toggle").then(r => r.json()).then(d => { setThinkingEnabled(d.enabled); setNativeThinkingEnabled(!!d.nativeThinking); if (d.instruction) setThinkingInstruction(d.instruction); }).catch(() => {});
       authedFetch(API + "/use-style").then(r => r.json()).then(d => { setStyleEnabled(d.enabled); if (d.instruction) setStyleInstruction(d.instruction); }).catch(() => {});
     } catch {
       setCcStatus("down");
@@ -2105,19 +2106,19 @@ export default function ChatPanel({ onBack }) {
       {thinkingPanelOpen && <ThinkingPanel
         instruction={thinkingInstruction}
         enabled={thinkingEnabled}
+        nativeEnabled={nativeThinkingEnabled}
         onClose={() => setThinkingPanelOpen(false)}
-        onSave={(text, en) => {
+        onSave={(text, en, native) => {
           authedFetch(API + "/thinking-toggle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: en, instruction: text }) })
             .then(r => r.json()).then(d => {
-              if (d.ok) {
-                setThinkingEnabled(en);
-                setThinkingInstruction(en ? text : thinkingInstruction);
-                showToast(en ? "Thinking 指令已保存并开启" : "Thinking 已关闭");
-                pushLog(true, en ? "Thinking 开启" : "Thinking 关闭", `指令已写入 CLAUDE.md（${text.length} 字）`);
-              } else {
-                showToast("保存失败");
-                pushLog(false, "Thinking 保存", d.error || "后端返回非 ok");
-              }
+              if (!d.ok) { showToast("保存失败"); pushLog(false, "Thinking 保存", d.error || "后端返回非 ok"); return; }
+              setThinkingEnabled(en);
+              setThinkingInstruction(en ? text : thinkingInstruction);
+              setNativeThinkingEnabled(native);
+              showToast("保存中…正在重启 CC 应用");
+              pushLog(true, "Thinking 保存", `包裹=${en ? "开" : "关"} 原生=${native ? "开" : "关"}，写入 CLAUDE.md（${text.length} 字），重启中`);
+              authedFetch(API + "/cc/restart", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nativeThinking: native }) })
+                .catch(() => { showToast("重启失败"); pushLog(false, "Thinking 重启", "重启请求失败"); });
             }).catch(() => { showToast("保存失败"); pushLog(false, "Thinking 保存", "网络错误"); });
         }}
       />}
@@ -2480,9 +2481,10 @@ function OpLogPanel({ log, onClose }) {
   );
 }
 
-function ThinkingPanel({ instruction, enabled, onClose, onSave }) {
+function ThinkingPanel({ instruction, enabled, nativeEnabled, onClose, onSave }) {
   const [text, setText] = useState(instruction || '');
   const [on, setOn] = useState(enabled);
+  const [native, setNative] = useState(nativeEnabled);
   const can = !!(text.trim());
   const taRef = useRef(null);
   return createPortal(
@@ -2500,7 +2502,7 @@ function ThinkingPanel({ instruction, enabled, onClose, onSave }) {
       }}>
         <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>CANCEL</button>
         <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.22em" }}>Thinking</span>
-        <button onClick={() => { onSave(text, on); onClose(); }} disabled={on && !can} style={{
+        <button onClick={() => { onSave(text, on, native); onClose(); }} disabled={on && !can} style={{
           background: (on && can) ? "var(--text-primary)" : "transparent",
           color: (on && can) ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
           border: (on && can) ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
@@ -2512,19 +2514,39 @@ function ThinkingPanel({ instruction, enabled, onClose, onSave }) {
 
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden", padding: "20px 16px calc(28px + env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column" }}>
         <div style={{ maxWidth: 600, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: 18, flex: 1, minHeight: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            {["开启", "关闭"].map(label => {
-              const active = label === "开启" ? on : !on;
-              return (
-                <button key={label} onClick={() => setOn(label === "开启")} style={{
-                  background: active ? "var(--text-primary)" : "transparent",
-                  color: active ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
-                  border: active ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
-                  padding: "6px 18px", borderRadius: 4,
-                  fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
-                }}>{label}</button>
-              );
-            })}
+          <div style={{ flexShrink: 0 }}>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>开启后写入「包裹指令」— CC 在正文用 &lt;think&gt; 写中文思绪</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {["开启", "关闭"].map(label => {
+                const active = label === "开启" ? on : !on;
+                return (
+                  <button key={"w" + label} onClick={() => setOn(label === "开启")} style={{
+                    background: active ? "var(--text-primary)" : "transparent",
+                    color: active ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
+                    border: active ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
+                    padding: "6px 18px", borderRadius: 4,
+                    fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
+                  }}>{label}</button>
+                );
+              })}
+            </div>
+          </div>
+          <div style={{ flexShrink: 0 }}>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>开启后实行「原生思绪」— Opus 原生摘要思考（保存即重启 · 英文）</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {["开启", "关闭"].map(label => {
+                const active = label === "开启" ? native : !native;
+                return (
+                  <button key={"n" + label} onClick={() => setNative(label === "开启")} style={{
+                    background: active ? "var(--text-primary)" : "transparent",
+                    color: active ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
+                    border: active ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
+                    padding: "6px 18px", borderRadius: 4,
+                    fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
+                  }}>{label}</button>
+                );
+              })}
+            </div>
           </div>
 
           <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6, flexShrink: 0 }}>
@@ -2695,10 +2717,10 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
       )}
       <div className="cp-msg-body">
         {isHead && msg.event === "bark" && <div className="cp-bark-label">小太阳想你了</div>}
-        {/* thinking 块（仅 head 显示，原生 + <think> 标签提取） */}
-        {isHead && (() => {
+        {/* thinking 块：head 显示原生 thinking + 本气泡 <think>；非 head 气泡也抽自己的 <think>（多步轮会有多个） */}
+        {(() => {
           const extracted = !isUser ? extractThink(partText) : null;
-          const allThinking = [msg.thinking, extracted?.thinking].filter(Boolean).join("\n\n");
+          const allThinking = [isHead ? msg.thinking : null, extracted?.thinking].filter(Boolean).join("\n\n");
           return allThinking ? <ThinkingBlock text={allThinking} /> : null;
         })()}
         {/* tool calls 块 */}
@@ -2735,7 +2757,7 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
               </>
             )
           ) : (
-            <div className="cp-md" dangerouslySetInnerHTML={{ __html: md((isHead ? extractThink(partText).content : partText) || "") }} />
+            <div className="cp-md" dangerouslySetInnerHTML={{ __html: md(extractThink(partText).content || "") }} />
           )}
         </div>
         {!editing && (
