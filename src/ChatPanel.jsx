@@ -1069,7 +1069,22 @@ export default function ChatPanel({ onBack }) {
 
   /* ─────── 加载历史 ─────── */
   const loadCurrentConversation = useCallback(async () => {
-    const saved = localStorage.getItem(CONV_KEY);
+    let saved = localStorage.getItem(CONV_KEY);
+    // 拆分后独立 /chat/(尤其 PWA)的 localStorage 是全新的、没 convId → 向后端认领"最近活跃对话",
+    // 把历史加载回来。后端 lastActiveConvId 记着最近聊的那个对话。
+    if (!saved) {
+      try {
+        const lr = await authedFetch(API + "/cc/last-conv");
+        if (lr.ok) {
+          const ld = await lr.json();
+          if (ld?.conversation_id) {
+            saved = ld.conversation_id;
+            localStorage.setItem(CONV_KEY, saved);
+            pushLog(true, "认领最近对话", saved);
+          }
+        }
+      } catch { /* 拿不到就走下面的空分支 */ }
+    }
     if (!saved) { setConvId(null); setMessages([]); pushLog(false, "加载历史", "无 convId"); return; }
     try {
       const r = await authedFetch(API + "/conversations/" + saved + "/messages");
