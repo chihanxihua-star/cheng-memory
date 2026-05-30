@@ -1002,6 +1002,7 @@ export default function ChatPanel({ onBack }) {
   // refs
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
+  const wsConnectedOnceRef = useRef(false); // 区分首连与重连：重连后补拉历史
   const streamRef = useRef(null); // 累积器
   const typingTimerRef = useRef(null);
   const messagesScrollRef = useRef(null);
@@ -1414,6 +1415,10 @@ export default function ChatPanel({ onBack }) {
       ws.onopen = () => {
         clearTimeout(reconnectTimer.current);
         setCcStatus(s => s === "down" ? "unknown" : s);
+        // 重连补拉：断线期间服务端 broadcast 的消息（DICE/Bark 唤醒）只推给在线连接、不补，
+        // 这里重连后重拉一次当前会话历史，按 id 整表替换去重，把错过的消息补回来。首连不补（生命周期已加载）。
+        if (wsConnectedOnceRef.current) loadConvRef.current?.();
+        wsConnectedOnceRef.current = true;
       };
       ws.onclose = (e) => {
         setCcStatus("down");
@@ -1442,7 +1447,8 @@ export default function ChatPanel({ onBack }) {
     const t = setInterval(checkHealth, 30000);
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      if (messagesLenRef.current === 0 && localStorage.getItem(CONV_KEY)) {
+      // 回到页面就补拉一次：不再限制"仅列表为空时"，否则非空会话错过的唤醒消息永远补不回来。
+      if (localStorage.getItem(CONV_KEY)) {
         loadConvRef.current?.();
       }
     };
