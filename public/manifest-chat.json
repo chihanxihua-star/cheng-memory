@@ -1,0 +1,8 @@
+{
+  "name": "澄 · 聊天",
+  "short_name": "澄聊天",
+  "start_url": "/chat/",
+  "display": "standalone",
+  "background_color": "#FBFAF6",
+  "theme_color": "#FBFAF6"
+}

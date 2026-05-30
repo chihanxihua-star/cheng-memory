@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
-const ChatPanel = lazy(() => import("./ChatPanel"));
+// ChatPanel 已拆为独立 web(/chat/),主壳不再内嵌；保留文件供 main-chat.jsx 入口引用
 const ChatViewer = lazy(() => import("./ChatViewer"));
 
 // ── 配置 ─────────────────────────────────────────────────
@@ -3423,7 +3423,7 @@ export default function App() {
       }}>
         {/* 首页 */}
         <div style={{ display: tab === "home" ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column" }}>
-          <HomePanel onPick={setTab}/>
+          <HomePanel onPick={(k) => k === "chat" ? (window.location.href = "/chat/") : setTab(k)}/>
         </div>
 
         {/* 各板块：统一 PanelHeader + 滚动内容 */}
@@ -3444,20 +3444,7 @@ export default function App() {
           </div>
         ))}
 
-        {/* 花信风：自管全屏布局；常驻 display:flex，只切 visibility，避免 flex 链被 hide/show 重算 */}
-        <div style={{
-          position: "absolute", inset: 0,
-          display: "flex",
-          flexDirection: "column",
-          minHeight: 0, overflow: "hidden",
-          visibility: tab === "chat" ? "visible" : "hidden",
-          pointerEvents: tab === "chat" ? "auto" : "none",
-          zIndex: tab === "chat" ? 10 : -1,
-        }}>
-          <Suspense fallback={<div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-secondary)" }}>加载中…</div>}>
-            <ChatPanel onBack={() => setTab("home")}/>
-          </Suspense>
-        </div>
+        {/* 花信风(聊天)已拆为独立 web /chat/：首页卡片 onPick 时 window.location 跳过去，这里不再内嵌 */}
 
         {/* 拾光：对话回溯查看器 */}
         {tab === "viewer" && (
