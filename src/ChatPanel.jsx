@@ -351,6 +351,8 @@ const CSS = `
 .cp-date-sep { text-align: center; color: var(--text-tertiary); font-size: 11px; margin: 14px 0 8px; }
 
 .cp-msg-wrap { display: flex; gap: 9px; margin-bottom: 8px; max-width: 92%; align-items: flex-start; animation: cp-msgIn 0.22s ease-out; }
+/* 重拉历史(整表替换)时容器临时挂 .cp-no-anim：抑制这次重挂载的进场动画，避免乐观消息切回前台"跳一下" */
+.cp-messages.cp-no-anim .cp-msg-wrap { animation: none; }
 .cp-msg-wrap.user { margin-left: auto; flex-direction: row-reverse; }
 .cp-msg-wrap.continuation { margin-left: 45px; max-width: calc(92% - 45px); margin-bottom: 6px; }
 .cp-msg-wrap.continuation .cp-avatar, .cp-msg-wrap.continuation .cp-msg-nick { display: none; }
@@ -1005,6 +1007,8 @@ export default function ChatPanel({ onBack }) {
   const wsConnectedOnceRef = useRef(false); // 区分首连与重连：重连后补拉历史
   const streamRef = useRef(null); // 累积器
   const typingTimerRef = useRef(null);
+  const bubbleTimersRef = useRef([]); // 多气泡节拍 setTimeout 句柄：重拉历史/卸载时清掉，防陈旧局部写入回退完整消息
+  const pendingStopRef = useRef(0); // 断线时按下的"停止"时间戳：重连后 5s 内补发，过期丢弃(防误伤下一轮)
   const messagesScrollRef = useRef(null);
   const fileInputRef = useRef(null);
   const filePickerRef = useRef(null);
@@ -1069,6 +1073,10 @@ export default function ChatPanel({ onBack }) {
 
   /* ─────── 加载历史 ─────── */
   const loadCurrentConversation = useCallback(async () => {
+    // 清掉未触发的多气泡节拍定时器：下面要用服务端权威历史整表替换，
+    // 若不清，切 app 期间被冻住的旧定时器解冻后会把完整消息内容回退成局部快照（3→2→3 抖动）。
+    bubbleTimersRef.current.forEach(clearTimeout);
+    bubbleTimersRef.current = [];
     let saved = localStorage.getItem(CONV_KEY);
     // 拆分后独立 /chat/(尤其 PWA)的 localStorage 是全新的、没 convId → 向后端认领"最近活跃对话",
     // 把历史加载回来。后端 lastActiveConvId 记着最近聊的那个对话。
@@ -1094,6 +1102,10 @@ export default function ChatPanel({ onBack }) {
       setConvId(saved);
       const total = ms.reduce((s, m) => s + ((m.content || "").length || 0), 0);
       setCharCount(total);
+      // 整表替换前给容器挂 .cp-no-anim：服务端 id 会替掉乐观插入消息的 local-* id → key 变 → 重挂载，
+      // 不抑制的话 cp-msgIn 会重播（切回前台"跳一下"）。挂载完(下一帧)再摘掉，不影响后续实时消息进场动画。
+      const scroller = messagesScrollRef.current;
+      if (scroller) scroller.classList.add("cp-no-anim");
       setMessages(ms.map(m => {
         const msg = {
           id: m.id,
@@ -1123,9 +1135,12 @@ export default function ChatPanel({ onBack }) {
       }));
       pushLog(true, "加载历史", `${ms.length} 条`);
       setTimeout(scrollToBottom, 50);
+      // 替换已提交、新气泡已挂载，摘掉抑制标记，恢复后续实时消息的进场动画
+      if (scroller) setTimeout(() => scroller.classList.remove("cp-no-anim"), 80);
     } catch (e) {
       console.warn("加载历史失败", e);
       pushLog(false, "加载历史", e.message || "网络错误");
+      messagesScrollRef.current?.classList.remove("cp-no-anim"); // 兜底：异常时别把动画永久抑制
     }
   }, [scrollToBottom, pushLog]);
 
@@ -1264,15 +1279,29 @@ export default function ChatPanel({ onBack }) {
               cache_creation: msg.usage.cache_creation_input_tokens || 0,
             } : null,
           };
-          setMessages(prev => [...prev, baseMsg]);
+          // 先提交首气泡——但按 id 去重升级：切 app 回来时 loadConv 重拉可能已把整条(完整内容)
+          // 补进来了，这里若盲目 [...prev, baseMsg] 会追出重复条；改为"已存在则保留更完整的那条"。
+          setMessages(prev => {
+            const idx = prev.findIndex(m => m.id === baseId);
+            if (idx < 0) return [...prev, baseMsg];
+            if ((prev[idx].content || "").length >= (baseMsg.content || "").length) return prev; // 现有更完整,不回退
+            const next = [...prev]; next[idx] = baseMsg; return next;
+          });
           // 多气泡按 1500ms 节拍依次追加（每条气泡触发 cp-msgIn 进场动画）
           for (let i = 1; i < useBubbles.length; i++) {
             const partsSoFar = useBubbles.slice(0, i + 1);
             const newContent = partsSoFar.join("\n---bubble---\n");
-            setTimeout(() => {
-              setMessages(prev => prev.map(m => m.id === baseId ? { ...m, content: newContent } : m));
+            const h = setTimeout(() => {
+              // 只增不减：refetch 已把整条补成完整内容时，别让这个迟到的节拍把它回退成局部快照
+              // (切 app 回来 done 与 loadConv 竞态时的 3→2→3 抖动根因)
+              setMessages(prev => prev.map(m => {
+                if (m.id !== baseId) return m;
+                if ((m.content || "").length >= newContent.length) return m;
+                return { ...m, content: newContent };
+              }));
               scrollToBottom();
             }, i * 1500);
+            bubbleTimersRef.current.push(h);
           }
         }
         setStreamSnap(null);
@@ -1340,7 +1369,7 @@ export default function ChatPanel({ onBack }) {
         const kind = msg.kind || null;
         const detail = msg.detail || null;
         const sysId = msg.id || ("sys-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6));
-        const sys = { id: sysId, role: "system", content, kind, detail };
+        const sys = { id: sysId, role: "system", content, kind, detail, state: msg.state || null };
         // forge_done 意味着 CC 已经被重启到新 session，基础 / 上下文 tokens 都需要重新捕获
         if (kind === "forge_done") {
           setBaseTokens(0);
@@ -1349,8 +1378,9 @@ export default function ChatPanel({ onBack }) {
           localStorage.removeItem(CONTEXT_TOKENS_KEY);
           baseCaptureNeededRef.current = true;
         }
-        // forge_done 带 id：替换之前那条 forge_pending（同 id），实现"思绪 → 折叠"原地切换
-        if (kind === "forge_done" && msg.id) {
+        // forge_done / watchdog 带 id：替换之前那条同 id 的消息，原地切换
+        //（forge：思绪→折叠；watchdog：正在唤醒→再次唤醒→已经睡着了）
+        if ((kind === "forge_done" || kind === "watchdog") && msg.id) {
           setMessages(prev => {
             const idx = prev.findIndex(m => m.id === msg.id);
             if (idx >= 0) {
@@ -1434,6 +1464,11 @@ export default function ChatPanel({ onBack }) {
         // 这里重连后重拉一次当前会话历史，按 id 整表替换去重，把错过的消息补回来。首连不补（生命周期已加载）。
         if (wsConnectedOnceRef.current) loadConvRef.current?.();
         wsConnectedOnceRef.current = true;
+        // 补发断线期间按下的"停止"：仅 5s 内有效，过期丢弃，免得重连太慢把下一轮误打断
+        if (pendingStopRef.current && Date.now() - pendingStopRef.current < 5000) {
+          try { ws.send(JSON.stringify({ type: "stop" })); } catch { /* ignore */ }
+        }
+        pendingStopRef.current = 0;
       };
       ws.onclose = (e) => {
         setCcStatus("down");
@@ -1474,6 +1509,8 @@ export default function ChatPanel({ onBack }) {
       clearTimeout(reconnectTimer.current);
       if (wsRef.current) try { wsRef.current.close(); } catch {}
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      bubbleTimersRef.current.forEach(clearTimeout);
+      bubbleTimersRef.current = [];
     };
     // eslint-disable-next-line
   }, []);
@@ -1553,8 +1590,12 @@ export default function ChatPanel({ onBack }) {
 
   const stop = useCallback(() => {
     const ws = wsRef.current;
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "stop" }));
-  }, []);
+    if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: "stop" })); return; }
+    // WS 断了：别再静默丢掉(以前的"按了没反应")。记下时间戳→重连后 5s 内补发，并提示 + 催重连。
+    pendingStopRef.current = Date.now();
+    showToast("连接断开了，重连后会自动重试停止");
+    connectWS();
+  }, [connectWS, showToast]);
 
   const flush = useCallback(() => {
     const ws = wsRef.current;
@@ -1854,7 +1895,7 @@ export default function ChatPanel({ onBack }) {
         if (m.kind === "amnesia" || m.kind === "forge_done") sessionTotal = 0;
         items.push({
           kind: "system", id: m.id, content: m.content,
-          sysKind: m.kind || null, detail: m.detail || null,
+          sysKind: m.kind || null, detail: m.detail || null, state: m.state || null,
         });
         continue;
       }
@@ -2011,6 +2052,13 @@ export default function ChatPanel({ onBack }) {
             }
             if (it.sysKind === "inject_done") {
               return <InjectDoneRow key={it.id} content={it.content} detail={it.detail} />;
+            }
+            if (it.sysKind === "watchdog") {
+              // 唤醒中=复用 forge 呼吸动画(活动色)；睡死=黑字。都居中。
+              if (it.state === "asleep") {
+                return <div key={it.id} className="cp-date-sep" style={{ color: "#000", fontWeight: 600 }}>{it.content}</div>;
+              }
+              return <ForgePendingRow key={it.id} content={it.content} />;
             }
             return <div key={it.id} className="cp-date-sep" style={{ color: "#888" }}>{it.content}</div>;
           }
