@@ -948,6 +948,7 @@ export default function ChatPanel({ onBack }) {
   const [thinkingInstruction, setThinkingInstruction] = useState("");
   const [styleEnabled, setStyleEnabled] = useState(false);
   const [stylePanelOpen, setStylePanelOpen] = useState(false);
+  const [styleThinkPanelOpen, setStyleThinkPanelOpen] = useState(false);
   const [styleInstruction, setStyleInstruction] = useState("");
   const [currentModel, setCurrentModel] = useState("");
   const [currentEffort, setCurrentEffort] = useState("high");
@@ -1768,7 +1769,7 @@ export default function ChatPanel({ onBack }) {
     return () => document.removeEventListener("click", onDoc);
   }, [showModelDropdown]);
 
-  const selectModel = useCallback(async (value, name, effort) => {
+  const selectModel = useCallback(async (value, name, effort, native) => {
     setShowModelDropdown(false);
     const prevModel = currentModel;
     const prevEffort = currentEffort;
@@ -1784,6 +1785,7 @@ export default function ChatPanel({ onBack }) {
         model_label: label,
       };
       if (effort) body.effort = effort;
+      if (native !== undefined) body.nativeThinking = !!native;
       const r = await authedFetch(API + "/cc/restart", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1801,11 +1803,13 @@ export default function ChatPanel({ onBack }) {
   }, [currentModel, currentEffort, convId, showToast]);
 
   /* ─────── 失忆：清 forge marker + 新 random UUID 启动 CC（不 --resume） ─────── */
-  const amnesia = useCallback(async (effort) => {
+  const amnesia = useCallback(async (effort, model, native) => {
     if (!window.confirm("失忆后从干净的新 session 开始（不保留任何上文）。确定？")) return;
     try {
       const amnesiaBody = { conversation_id: convId };
       if (typeof effort === "string" && effort) amnesiaBody.effort = effort;
+      if (model !== undefined) amnesiaBody.model = model;
+      if (native !== undefined) amnesiaBody.nativeThinking = !!native;
       const r = await authedFetch(API + "/cc/amnesia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2150,15 +2154,10 @@ export default function ChatPanel({ onBack }) {
               <span>聊天日志</span>
               {opLogUnread.current && <span className="cp-plus-right"><span style={{ width: 8, height: 8, borderRadius: "50%", background: "rgba(255,120,120,0.7)", display: "inline-block" }} /></span>}
             </button>
-            <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); setThinkingPanelOpen(true); }}>
-              <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 3 2 5 4 6.5V17a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1.5C17 14 19 12 19 9a7 7 0 0 0-7-7z"/><line x1="9" y1="21" x2="15" y2="21"/></svg>
-              <span>Thinking</span>
-              {thinkingEnabled && <span className="cp-plus-right"><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#7cd47c", display: "inline-block" }} /></span>}
-            </button>
-            <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); setStylePanelOpen(true); }}>
+            <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); setStyleThinkPanelOpen(true); }}>
               <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              <span>Use Style</span>
-              {styleEnabled && <span className="cp-plus-right"><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#7cd47c", display: "inline-block" }} /></span>}
+              <span>风格 · 思考</span>
+              {(styleEnabled || thinkingEnabled) && <span className="cp-plus-right"><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#7cd47c", display: "inline-block" }} /></span>}
             </button>
             <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); newChat(); }}>
               <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -2172,43 +2171,29 @@ export default function ChatPanel({ onBack }) {
         </>
       )}
       {opLogOpen && <OpLogPanel log={opLog} onClose={() => setOpLogOpen(false)} />}
-      {thinkingPanelOpen && <ThinkingPanel
-        instruction={thinkingInstruction}
-        enabled={thinkingEnabled}
+      {styleThinkPanelOpen && <StyleThinkPanel
+        styleInstruction={styleInstruction}
+        styleEnabled={styleEnabled}
+        thinkInstruction={thinkingInstruction}
+        thinkEnabled={thinkingEnabled}
         nativeEnabled={nativeThinkingEnabled}
-        onClose={() => setThinkingPanelOpen(false)}
-        onSave={(text, en, native) => {
-          authedFetch(API + "/thinking-toggle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: en, instruction: text }) })
-            .then(r => r.json()).then(d => {
-              if (!d.ok) { showToast("保存失败"); pushLog(false, "Thinking 保存", d.error || "后端返回非 ok"); return; }
-              setThinkingEnabled(en);
-              setThinkingInstruction(en ? text : thinkingInstruction);
-              setNativeThinkingEnabled(native);
-              showToast("保存中…正在重启 CC 应用");
-              pushLog(true, "Thinking 保存", `包裹=${en ? "开" : "关"} 原生=${native ? "开" : "关"}，写入 CLAUDE.md（${text.length} 字），重启中`);
-              authedFetch(API + "/cc/restart", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nativeThinking: native }) })
-                .catch(() => { showToast("重启失败"); pushLog(false, "Thinking 重启", "重启请求失败"); });
-            }).catch(() => { showToast("保存失败"); pushLog(false, "Thinking 保存", "网络错误"); });
+        currentModel={currentModel}
+        currentEffort={currentEffort}
+        onClose={() => setStyleThinkPanelOpen(false)}
+        onSaveOnly={({ styleText, styleOn, thinkText, thinkOn, native }) => {
+          // 保存只写 CLAUDE.md 两段、不重启（重启交给保存后的激活弹窗）
+          authedFetch(API + "/use-style", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: styleOn, instruction: styleText }) })
+            .then(r => r.json()).then(d => { if (d?.ok) { setStyleEnabled(d.enabled); setStyleInstruction(styleText); } })
+            .catch(() => { showToast("Style 保存失败"); });
+          authedFetch(API + "/thinking-toggle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: thinkOn, instruction: thinkText }) })
+            .then(r => r.json()).then(d => { if (d?.ok) { setThinkingEnabled(thinkOn); setThinkingInstruction(thinkText); } })
+            .catch(() => { showToast("Thinking 保存失败"); });
+          setNativeThinkingEnabled(native);
+          showToast("已保存，选激活方式");
+          pushLog(true, "风格·思考 保存", `style=${styleOn ? "开" : "关"} think=${thinkOn ? "开" : "关"} 原生=${native ? "开" : "关"}，只写 CLAUDE.md 未重启`);
         }}
-      />}
-      {stylePanelOpen && <StylePanel
-        instruction={styleInstruction}
-        enabled={styleEnabled}
-        onClose={() => setStylePanelOpen(false)}
-        onSave={(text, en) => {
-          authedFetch(API + "/use-style", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: en, instruction: text }) })
-            .then(r => r.json()).then(d => {
-              if (d.ok) {
-                setStyleEnabled(d.enabled);
-                setStyleInstruction(d.enabled ? text : styleInstruction);
-                showToast(d.enabled ? "Style 已保存并开启" : "Style 已关闭");
-                pushLog(true, d.enabled ? "Style 开启" : "Style 关闭", `指令已写入 CLAUDE.md（${text.length} 字）`);
-              } else {
-                showToast("保存失败");
-                pushLog(false, "Style 保存", d.error || "后端返回非 ok");
-              }
-            }).catch(() => { showToast("保存失败"); pushLog(false, "Style 保存", "网络错误"); });
-        }}
+        onAmnesia={(effort, native) => amnesia(effort, currentModel, native)}
+        onSelectModel={(value, name, effort, native) => selectModel(value, name, effort, native)}
       />}
 
       {/* TERMINAL placeholder */}
@@ -2714,6 +2699,163 @@ function StylePanel({ instruction, enabled, onClose, onSave }) {
             }}
           />
           <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "right", flexShrink: 0 }}>{text.length} 字</div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// 合并面板：use-style + thinking包裹 + 原生思绪 一个 SAVE；保存只写 CLAUDE.md 不重启，
+// 保存后切到"激活态"(effort + 失忆重启 / 选择模型重启)，激活才把 model/effort/native 随重启传。
+function StyleThinkPanel({
+  styleInstruction, styleEnabled,
+  thinkInstruction, thinkEnabled, nativeEnabled,
+  currentModel, currentEffort,
+  onClose, onSaveOnly, onAmnesia, onSelectModel,
+}) {
+  const [styleText, setStyleText] = useState(styleInstruction || '');
+  const [styleOn, setStyleOn] = useState(styleEnabled);
+  const [thinkText, setThinkText] = useState(thinkInstruction || '');
+  const [thinkOn, setThinkOn] = useState(thinkEnabled);
+  const [native, setNative] = useState(nativeEnabled);
+  const [saved, setSaved] = useState(false);
+  const [selectedEffort, setSelectedEffort] = useState(currentEffort || 'off');
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  // 三个开关各管各的：SAVE 永远可点，文本照填的存、开关只管各自启用，互不牵连
+  const saveDisabled = false;
+
+  const toggleRow = (val, set, kp) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      {["开启", "关闭"].map(label => {
+        const active = label === "开启" ? val : !val;
+        return (
+          <button key={kp + label} onClick={() => set(label === "开启")} style={{
+            background: active ? "var(--text-primary)" : "transparent",
+            color: active ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
+            border: active ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
+            padding: "6px 18px", borderRadius: 4,
+            fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
+          }}>{label}</button>
+        );
+      })}
+    </div>
+  );
+  const taStyle = {
+    width: "100%", resize: "none", overflowY: "auto",
+    background: "transparent", color: "var(--text-primary)",
+    border: "none", borderBottom: "1px solid var(--border, #333)", borderRadius: 0,
+    padding: "8px 0", fontSize: 14, lineHeight: 1.7,
+    fontFamily: "Georgia, 'Noto Serif SC', serif",
+    outline: "none", boxSizing: "border-box", minHeight: 90,
+  };
+  const secLabel = { fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 };
+
+  return createPortal(
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 950,
+      background: "var(--bg-page, #1a1a1a)",
+      display: "flex", flexDirection: "column",
+      animation: "cp-slideUp 0.28s ease",
+    }}>
+      <div style={{
+        flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px",
+        borderBottom: "1px solid var(--border, #333)",
+      }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>CANCEL</button>
+        <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.22em" }}>风格 · 思考</span>
+        <button onClick={() => { onSaveOnly({ styleText, styleOn, thinkText, thinkOn, native }); setSaved(true); }} disabled={saveDisabled} style={{
+          background: !saveDisabled ? "var(--text-primary)" : "transparent",
+          color: !saveDisabled ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
+          border: !saveDisabled ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
+          padding: "8px 18px", borderRadius: 4,
+          fontSize: 12, letterSpacing: "0.18em",
+          cursor: saveDisabled ? "not-allowed" : "pointer", fontFamily: "inherit",
+        }}>SAVE ✓</button>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 16px calc(28px + env(safe-area-inset-bottom, 0px))" }}>
+        <div style={{ maxWidth: 600, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: 22 }}>
+
+          <div>
+            <div style={secLabel}>Use Style 风格指令 — 写入 CLAUDE.md，下一轮生效</div>
+            {toggleRow(styleOn, setStyleOn, 's')}
+            <textarea value={styleText} onChange={e => setStyleText(e.target.value)}
+              placeholder="例：用简洁口语化的中文回复，不要用 emoji…"
+              style={{ ...taStyle, marginTop: 12 }} />
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>{styleText.length} 字</div>
+          </div>
+
+          <div>
+            <div style={secLabel}>Thinking — 下面两个开关都读这一段指令，可一开一关</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 11, color: "var(--text-tertiary)", minWidth: 64 }}>包裹指令</span>
+                {toggleRow(thinkOn, setThinkOn, 't')}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 11, color: "var(--text-tertiary)", minWidth: 64 }}>原生思绪</span>
+                {toggleRow(native, setNative, 'n')}
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.6 }}>包裹 = CC 正文用 &lt;think&gt; 写中文思绪 · 原生 = Claude 原生摘要思考（英文 · 激活时随重启生效）</div>
+            <textarea value={thinkText} onChange={e => setThinkText(e.target.value)}
+              placeholder="引导 CC 怎么想…（包裹 / 原生共用这段）"
+              style={{ ...taStyle, marginTop: 8 }} />
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>{thinkText.length} 字</div>
+          </div>
+
+          {saved && (
+            <div style={{ borderTop: "1px solid var(--border, #333)", paddingTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>已保存到 CLAUDE.md（未重启）。选激活方式让 CC 读到新配置：</div>
+              <div>
+                <div style={secLabel}>思考深度 effort</div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {EFFORT_OPTIONS.map(e => (
+                    <button key={e.value} onClick={() => setSelectedEffort(e.value)} style={{
+                      flex: 1, padding: "6px 0", fontSize: 12, borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
+                      background: selectedEffort === e.value ? "var(--text-primary)" : "transparent",
+                      color: selectedEffort === e.value ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
+                      border: selectedEffort === e.value ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
+                    }}>{e.name}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => { onAmnesia && onAmnesia(selectedEffort, native); onClose(); }} style={{
+                  flex: 1, padding: "10px 0", fontSize: 12, borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
+                  background: "transparent", color: "var(--text-primary)", border: "1px solid var(--border, #333)",
+                }}>失忆重启</button>
+                <div style={{ flex: 1, position: "relative" }}>
+                  <button onClick={() => setShowModelPicker(p => !p)} style={{
+                    width: "100%", padding: "10px 0", fontSize: 12, borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
+                    background: "transparent", color: "var(--text-primary)", border: "1px solid var(--border, #333)",
+                  }}>选择模型重启 ▾</button>
+                  {showModelPicker && (
+                    <div style={{
+                      position: "absolute", bottom: "100%", left: 0, right: 0, marginBottom: 4,
+                      background: "var(--bg-page, #1a1a1a)", border: "1px solid var(--border, #333)", borderRadius: 8,
+                      overflow: "hidden", zIndex: 10,
+                    }}>
+                      {MODEL_OPTIONS.map(m => (
+                        <div key={m.value || "default"} onClick={() => { setShowModelPicker(false); onSelectModel && onSelectModel(m.value, m.name, selectedEffort, native); onClose(); }}
+                          style={{ padding: "8px 12px", cursor: "pointer", fontSize: 13,
+                            color: currentModel === m.value ? "var(--accent, #a89fd8)" : "var(--text-primary)" }}>
+                          <div style={{ fontWeight: 500 }}>{m.name}</div>
+                          <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>{m.desc}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.6 }}>
+                失忆 = 清空上下文从零开始 · 选择模型 = forge 保留对话记忆
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>,
