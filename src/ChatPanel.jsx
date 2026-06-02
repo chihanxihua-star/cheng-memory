@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
-import TerminalPanel from "./TerminalPanel";
 import SessionPanel from "./SessionPanel";
 import WakePanel from "./WakePanel";
 
@@ -975,7 +974,6 @@ export default function ChatPanel({ onBack }) {
 
   // UI 开关
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [terminalOpen, setTerminalOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [psScreen, setPsScreen] = useState("main");
   const [showSettings, setShowSettings] = useState(false);
@@ -2196,8 +2194,6 @@ export default function ChatPanel({ onBack }) {
         onSelectModel={(value, name, effort, native) => selectModel(value, name, effort, native)}
       />}
 
-      {/* TERMINAL placeholder */}
-      {terminalOpen && <TerminalPanel onClose={() => setTerminalOpen(false)} />}
       {sessionOpen && (
         <SessionPanel
           onClose={() => setSessionOpen(false)}
@@ -2290,7 +2286,6 @@ export default function ChatPanel({ onBack }) {
                 onSelectModel={selectModel}
                 currentModel={currentModel}
                 currentEffort={currentEffort}
-                onOpenTerminal={() => { setTerminalOpen(true); setSidebarOpen(false); }}
                 onOpenSession={() => { setSessionOpen(true); setSidebarOpen(false); }}
                 onOpenWake={() => { setWakeOpen(true); setSidebarOpen(false); }}
                 showToast={showToast}
@@ -3026,44 +3021,6 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
 
 // 思绪展开状态按 text 持久化：StreamingBubble unmount 后历史块重新挂载也能保留 open
 const thinkingOpenStore = new Map();
-function TerminalPlaceholder({ onClose }) {
-  return createPortal(
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 70,
-      background: "rgba(0, 0, 0, 0.72)",
-      backdropFilter: "blur(8px)",
-      WebkitBackdropFilter: "blur(8px)",
-      display: "flex", flexDirection: "column",
-      paddingTop: "env(safe-area-inset-top, 0px)",
-      paddingBottom: "env(safe-area-inset-bottom, 0px)",
-    }}>
-      <div style={{
-        display: "flex", alignItems: "center",
-        padding: "14px 20px",
-        color: "rgba(255,255,255,0.7)", fontSize: 13, letterSpacing: "0.1em",
-      }}>
-        <span>终端</span>
-        <button onClick={onClose} style={{
-          marginLeft: "auto", background: "none", border: "none",
-          color: "rgba(255,255,255,0.7)", fontSize: 22, lineHeight: 1, cursor: "pointer",
-        }}>×</button>
-      </div>
-      <div style={{
-        flex: 1, margin: "0 20px 20px",
-        background: "#0d0d0d",
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 8,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        color: "#888",
-        fontFamily: "Menlo, Monaco, 'Courier New', monospace", fontSize: 13,
-        textAlign: "center", padding: "0 20px",
-      }}>
-        终端（xterm.js 待接入）
-      </div>
-    </div>,
-    document.body
-  );
-}
 
 function ThinkingBlock({ text, isThinking }) {
   const [open, setOpen] = useState(() => thinkingOpenStore.get(text) === true);
@@ -3227,7 +3184,7 @@ function StreamingBubble({ snap, profile, showTyping }) {
 }
 
 /* ─────── Sidebar 多屏 ─────── */
-function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, onAmnesia, onSelectModel, currentModel, currentEffort, onOpenTerminal, onOpenSession, onOpenWake, showToast, convId }) {
+function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, onAmnesia, onSelectModel, currentModel, currentEffort, onOpenSession, onOpenWake, showToast, convId }) {
   if (screen === "main") {
     return (
       <>
@@ -3236,7 +3193,6 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
           <SidebarItem onClick={() => setScreen("window")}>CC窗口</SidebarItem>
           <SidebarItem onClick={onOpenSession}>Session</SidebarItem>
           <SidebarItem onClick={() => setScreen("voice")}>语音服务</SidebarItem>
-          <SidebarItem onClick={onOpenTerminal}>终端</SidebarItem>
           <SidebarItem onClick={onOpenWake}>唤醒</SidebarItem>
         </div>
         <div className="cp-ps-section-title">管理</div>

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { supabase } from "./lib/supabase";
 
 // ── Helpers ──────────────────────────────────────────────
 function esc(s) {
@@ -437,6 +438,7 @@ function Message({ m, searchQuery, id, idx, showSender = true, showTime = false 
 
 // ── Main component ───────────────────────────────────────
 const CV_API = "https://chat.jessaminee.top/api";
+const CV_PROJECT_ID = "b5e5d83a-0c17-4421-a0e2-217519ed62fb";
 function cvFetch(url, opts = {}) {
   const t = localStorage.getItem("memhome-auth-token") || "";
   const headers = { ...(opts.headers || {}) };
@@ -489,10 +491,14 @@ export default function ChatViewer({ onBack }) {
     if (!q || q.length < 2) { setVpsMatchCounts({}); return; }
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => {
-      cvFetch(`${CV_API}/cc/sessions/search?q=${encodeURIComponent(q)}`)
-        .then(r => r.json())
-        .then(data => setVpsMatchCounts(data.matches || {}))
-        .catch(() => {});
+      supabase.from("messages")
+        .select("conversation_id")
+        .ilike("content", "%" + q + "%")
+        .then(({ data }) => {
+          const counts = {};
+          for (const r of (data || [])) counts[r.conversation_id] = (counts[r.conversation_id] || 0) + 1;
+          setVpsMatchCounts(counts);
+        });
     }, 600);
     return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
   }, [searchQuery]);
@@ -500,11 +506,25 @@ export default function ChatViewer({ onBack }) {
   // 加载 VPS session 列表
   useEffect(() => {
     setVpsLoading(true);
-    cvFetch(`${CV_API}/cc/sessions`)
-      .then(r => r.json())
-      .then(data => { setVpsSessions(data.sessions || []); setVpsError(null); })
-      .catch(e => setVpsError(e.message))
-      .finally(() => setVpsLoading(false));
+    supabase.from("conversations")
+      .select("id, title, created_at, updated_at")
+      .or("project_id.eq." + CV_PROJECT_ID + ",project_id.is.null")
+      .order("updated_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) { setVpsError(error.message); }
+        else {
+          const sessions = (data || []).map(c => ({
+            id: c.id,
+            mtime: c.updated_at ? new Date(c.updated_at).getTime() : (c.created_at ? new Date(c.created_at).getTime() : 0),
+            created_at: c.created_at,
+            updated_at: c.updated_at,
+            preview: c.title || "未命名对话",
+          }));
+          setVpsSessions(sessions);
+          setVpsError(null);
+        }
+        setVpsLoading(false);
+      });
   }, []);
 
   // 选中 VPS session 时加载消息
@@ -512,10 +532,14 @@ export default function ChatViewer({ onBack }) {
     setActiveSessionId(sid);
     setSessionLoading(true);
     setMobileShowList(false);
-    cvFetch(`${CV_API}/cc/session-messages/${sid}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.messages) {
+    supabase.from("messages")
+      .select("role, content, thinking, created_at")
+      .eq("conversation_id", sid)
+      .in("role", ["user", "assistant"])
+      .order("created_at", { ascending: true })
+      .then(({ data: rows }) => {
+        if (rows) {
+          const data = { messages: rows };
           const msgs = [];
           let idx = 0;
           for (const m of data.messages) {
@@ -825,7 +849,7 @@ export default function ChatViewer({ onBack }) {
         background: "none", color: sidebarTab === "vps" ? "var(--accent)" : "var(--text-secondary)",
         borderBottom: sidebarTab === "vps" ? "2px solid var(--accent)" : "2px solid transparent",
         fontWeight: sidebarTab === "vps" ? 600 : 400,
-      }}>VPS</button>
+      }}>对话</button>
       <button onClick={() => setSidebarTab("import")} style={{
         flex: 1, padding: "10px 0", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "inherit",
         background: "none", color: sidebarTab === "import" ? "var(--accent)" : "var(--text-secondary)",
