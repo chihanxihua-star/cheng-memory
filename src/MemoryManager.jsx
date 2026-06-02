@@ -74,6 +74,7 @@ const TABS = [
   { key: "chat", label: "花信风" },
   { key: "console", label: "控制台" },
   { key: "viewer", label: "拾光" },
+  { key: "memograph", label: "流年" },
 ];
 
 const PANEL_NAME = Object.fromEntries(TABS.map(t => [t.key, t.label]));
@@ -390,7 +391,7 @@ function MemoryCard({ mem, onEdit, onDelete, onMarkRead }) {
   );
 }
 
-function MemoryPanel() {
+function MemoryPanel({ onNavigate }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -450,7 +451,10 @@ function MemoryPanel() {
         <div>
           {stats && <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {stats.total} 条 · 均强度 {stats.avgStr}</p>}
         </div>
-        <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <button onClick={() => onNavigate?.("memograph")} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>流年</button>
+          <button onClick={reload} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)" }}>{loading ? "…" : "刷新"}</button>
+        </div>
       </div>
 
       {/* 搜索条：横线 + 清空 */}
@@ -3304,6 +3308,270 @@ function PanelHeader({ name, onBack }) {
   );
 }
 
+// ════════════════════════════════════════════════════════════
+//  流年：记忆热图日历（密度 + 自动四象限心情）
+//  颜色 = 当天澄记忆的情绪象限（valence 开心↔伤心 × arousal 激烈↔平静 的平均）
+//  深浅 = 当天记忆条数（写得越多越深）。数据来自 memories_cheng，只读、不编辑、不建表。
+// ════════════════════════════════════════════════════════════
+const VAL_MID = 0.5;  // valence 中线（数据 0~1，>0.5 开心 / <0.5 伤心）；记忆普遍偏高，想让伤心更敏感就调高这个
+const ARO_MID = 0.5;  // arousal 中线（>0.5 激烈 / <0.5 平静）
+const MOOD_QUADRANTS = {
+  hi_pos: { label: "雀跃", hint: "激烈的开心", rgb: [224, 182, 198] }, // 雾粉（降饱和，跟绿/蓝同档）
+  lo_pos: { label: "恬然", hint: "平静的开心", rgb: [201, 215, 167] }, // 柔绿
+  hi_neg: { label: "郁结", hint: "激烈的伤心", rgb: [150, 154, 158] }, // 灰
+  lo_neg: { label: "怅然", hint: "平静的伤心", rgb: [157, 180, 206] }, // 黛蓝
+};
+function quadrantKey(v, a) {
+  const pos = v >= VAL_MID, hi = a >= ARO_MID;
+  return pos ? (hi ? "hi_pos" : "lo_pos") : (hi ? "hi_neg" : "lo_neg");
+}
+function dayMood(entries) {
+  let sv = 0, nv = 0, sa = 0, na = 0;
+  for (const r of entries) {
+    if (r.valence != null) { sv += r.valence; nv++; }
+    if (r.arousal != null) { sa += r.arousal; na++; }
+  }
+  const v = nv ? sv / nv : null, a = na ? sa / na : null;
+  const q = (v != null && a != null) ? quadrantKey(v, a) : null;
+  return { count: entries.length, v, a, q };
+}
+
+function MemoGraphPanel() {
+  const today = useState(() => new Date())[0];
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerYear, setPickerYear] = useState(viewYear);
+  const [drawer, setDrawer] = useState(null);
+
+  useEffect(() => { setPickerYear(viewYear); }, [viewYear, pickerOpen]);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/memories_cheng?select=id,created_at,valence,arousal,strength,content,summary,author&order=created_at.asc`, { headers: hdr() });
+      if (!r.ok) throw new Error(await r.text());
+      setRows(await r.json());
+    } catch(e) { setError(e.message); } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  // 按本地日期聚合
+  const byDate = {};
+  for (const r of rows) {
+    if (!r.created_at) continue;
+    const d = ymdLocal(new Date(r.created_at));
+    (byDate[d] = byDate[d] || []).push(r);
+  }
+
+  // 当月每天条数上限 → 深浅相对基准
+  let monthMax = 1;
+  for (let d = 1; d <= 31; d++) {
+    const ds = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    if (byDate[ds]) monthMax = Math.max(monthMax, byDate[ds].length);
+  }
+
+  // 连续打卡（全部历史）
+  const allDays = Object.keys(byDate).sort();
+  const streak = (() => {
+    if (!allDays.length) return { current: 0, longest: 0, total: 0 };
+    const toNum = s => { const [y,m,d] = s.split("-").map(Number); return Date.UTC(y, m-1, d) / 86400000; };
+    const nums = allDays.map(toNum);
+    let longest = 1, run = 1;
+    for (let i = 1; i < nums.length; i++) {
+      if (nums[i] === nums[i-1] + 1) run++; else { longest = Math.max(longest, run); run = 1; }
+    }
+    longest = Math.max(longest, run);
+    let current = 1;
+    for (let i = nums.length - 1; i > 0; i--) {
+      if (nums[i] === nums[i-1] + 1) current++; else break;
+    }
+    return { current, longest, total: allDays.length };
+  })();
+
+  // 那年今日（相对真实今天）
+  const onThisDay = (() => {
+    const mk = (base, fn) => { const x = new Date(base); fn(x); return ymdLocal(x); };
+    const targets = [
+      { label: "一周前", date: mk(today, x => x.setDate(x.getDate() - 7)) },
+      { label: "一月前", date: mk(today, x => x.setMonth(x.getMonth() - 1)) },
+      { label: "一年前", date: mk(today, x => x.setFullYear(x.getFullYear() - 1)) },
+    ];
+    return targets.map(t => ({ ...t, items: byDate[t.date] || [] })).filter(t => t.items.length);
+  })();
+
+  const cells = (() => {
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+    const lastDate = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const out = [];
+    for (let i = 0; i < firstDay; i++) out.push(null);
+    for (let d = 1; d <= lastDate; d++) out.push(d);
+    return out;
+  })();
+
+  const prev = () => { if (viewMonth === 0) { setViewYear(y=>y-1); setViewMonth(11); } else setViewMonth(m=>m-1); };
+  const next = () => { if (viewMonth === 11) { setViewYear(y=>y+1); setViewMonth(0); } else setViewMonth(m=>m+1); };
+  const topRef = useRef(null);
+  const touchStartX = useRef(null), touchStartY = useRef(null);
+  const onTouchStart = e => { touchStartX.current = e.touches[0].clientX; touchStartY.current = e.touches[0].clientY; };
+  const onTouchEnd = e => {
+    if (touchStartX.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx > 0) prev(); else next(); }
+  };
+
+  // 那年今日点一条 → 日历跳到那天 + 展开当天详情 + 滚回顶部
+  const jumpTo = (date) => {
+    const [y, m] = date.split("-").map(Number);
+    setViewYear(y); setViewMonth(m - 1); setPickerOpen(false); setDrawer(date);
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const todayStr = ymdLocal(new Date());
+  const cellColor = (mood) => {
+    if (!mood || !mood.q) return null;
+    const { rgb } = MOOD_QUADRANTS[mood.q];
+    const alpha = 0.30 + 0.70 * Math.min(mood.count / monthMax, 1);
+    return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha.toFixed(2)})`;
+  };
+
+  const arrowStyle = { background: "none", border: "none", color: "var(--text-secondary)", fontSize: 18, padding: "4px 14px", cursor: "pointer", fontFamily: "inherit" };
+
+  return (
+    <div ref={topRef} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <ErrorBar error={error} onClose={() => setError(null)}/>
+
+      {/* 连续打卡统计 */}
+      <div style={{ display:"flex", gap:18, marginBottom:14, fontSize:11, color:"var(--text-tertiary)" }}>
+        <span>连续打卡 <b style={{ color:"var(--text-secondary)", fontSize:13 }}>{streak.current}</b> 天</span>
+        <span>最长 <b style={{ color:"var(--text-secondary)", fontSize:13 }}>{streak.longest}</b> 天</span>
+        <span>共 <b style={{ color:"var(--text-secondary)", fontSize:13 }}>{streak.total}</b> 天有记忆</span>
+      </div>
+
+      {/* 月份导航 */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+        <button onClick={pickerOpen ? () => setPickerYear(y=>y-1) : prev} style={arrowStyle}>‹</button>
+        <button onClick={() => setPickerOpen(o=>!o)} style={{ background:"none", border:"none", padding:"4px 8px", cursor:"pointer", fontFamily:"inherit", fontSize:13, letterSpacing:"0.22em", color:"var(--text-primary)" }}>
+          {pickerOpen ? `${pickerYear} 年` : `${viewYear} 年 ${String(viewMonth+1).padStart(2,'0')} 月`}
+        </button>
+        <button onClick={pickerOpen ? () => setPickerYear(y=>y+1) : next} style={arrowStyle}>›</button>
+      </div>
+
+      {pickerOpen ? (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:6, animation:"fadeUp 0.18s ease both" }}>
+          {Array.from({ length: 12 }, (_, m) => {
+            const isCur = pickerYear === viewYear && m === viewMonth;
+            return (
+              <button key={m} onClick={() => { setViewYear(pickerYear); setViewMonth(m); setPickerOpen(false); }} style={{
+                padding:"16px 0", background: isCur ? "var(--text-primary)" : "var(--bg-card)",
+                color: isCur ? "var(--bg-page)" : "var(--text-primary)",
+                border:`1px ${isCur ? "solid" : "dashed"} var(--border)`, borderRadius:4,
+                fontSize:13, letterSpacing:"0.15em", cursor:"pointer", fontFamily:"inherit",
+              }}>{String(m+1).padStart(2,'0')} 月</button>
+            );
+          })}
+        </div>
+      ) : (
+        <>
+          {/* 星期表头 */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:4, marginBottom:6 }}>
+            {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d => (
+              <div key={d} style={{ textAlign:"center", fontSize:9, color:"var(--text-tertiary)", letterSpacing:"0.13em" }}>{d}</div>
+            ))}
+          </div>
+          {/* 日期格 */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:4 }}>
+            {cells.map((d, i) => {
+              if (d === null) return <div key={"e"+i}/>;
+              const date = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+              const entries = byDate[date];
+              const mood = entries ? dayMood(entries) : null;
+              const bg = cellColor(mood);
+              const isToday = date === todayStr;
+              return (
+                <button key={d} onClick={() => entries && setDrawer(date)} style={{
+                  aspectRatio:"1 / 1", borderRadius:4, cursor: entries ? "pointer" : "default",
+                  border:`1px ${isToday ? "solid" : "dashed"} var(--border)`,
+                  background: bg || "var(--bg-card)", padding:0, position:"relative",
+                  display:"flex", alignItems:"flex-start", justifyContent:"flex-start", fontFamily:"inherit",
+                }}>
+                  <span style={{ fontSize:9, color: bg ? "rgba(0,0,0,0.45)" : "var(--text-tertiary)", padding:"3px 0 0 4px", lineHeight:1 }}>{d}</span>
+                  {entries && entries.length > 1 && (
+                    <span style={{ position:"absolute", right:3, bottom:2, fontSize:8, color:"rgba(0,0,0,0.4)" }}>{entries.length}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* 选中某天：列出当天记忆 */}
+      {drawer && byDate[drawer] && (() => {
+        const entries = byDate[drawer];
+        const mood = dayMood(entries);
+        const q = mood.q ? MOOD_QUADRANTS[mood.q] : null;
+        return (
+          <div style={{ marginTop:16, background:"var(--bg-card)", border:"1px solid var(--border)", borderRadius:8, padding:"14px 16px", animation:"fadeUp 0.22s ease both" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+              <span style={{ fontSize:12, color:"var(--text-secondary)", letterSpacing:"0.12em" }}>
+                {drawer} · {entries.length} 条{q ? ` · ${q.label}` : ""}
+              </span>
+              <button onClick={() => setDrawer(null)} style={{ background:"none", border:"none", color:"var(--text-secondary)", cursor:"pointer", fontSize:18, lineHeight:1, padding:0 }}>×</button>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {entries.map(r => (
+                <div key={r.id} style={{ fontSize:12.5, color:"var(--text-secondary)", lineHeight:1.6, paddingLeft:10, borderLeft:`2px solid ${q ? `rgb(${q.rgb.join(",")})` : "var(--border)"}` }}>
+                  {r.summary || r.content || "（无摘要）"}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 那年今日 */}
+      {onThisDay.length > 0 && (
+        <div style={{ marginTop:20 }}>
+          <div style={{ fontSize:11, color:"var(--text-tertiary)", letterSpacing:"0.18em", marginBottom:10 }}>那年今日</div>
+          {onThisDay.map(t => (
+            <div key={t.label} style={{ marginBottom:12 }}>
+              <div style={{ fontSize:11, color:"var(--text-secondary)", marginBottom:4 }}>{t.label} · {t.date}</div>
+              {t.items.map(r => (
+                <button key={r.id} onClick={() => jumpTo(t.date)} style={{ display:"block", width:"100%", textAlign:"left", background:"none", cursor:"pointer", fontFamily:"inherit", fontSize:12.5, color:"var(--text-secondary)", lineHeight:1.6, padding:"2px 0 2px 10px", border:"none", borderLeft:"2px solid var(--border)", marginBottom:3 }}>
+                  {r.summary || r.content || "（无摘要）"}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 心情象限图例 */}
+      <div style={{ marginTop:22 }}>
+        <div style={{ fontSize:11, color:"var(--text-tertiary)", letterSpacing:"0.18em", marginBottom:10 }}>心情象限</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+          {["hi_pos","lo_pos","lo_neg","hi_neg"].map(k => {
+            const q = MOOD_QUADRANTS[k];
+            return (
+              <div key={k} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", border:"1px dashed var(--border)", borderRadius:4 }}>
+                <span style={{ width:14, height:14, borderRadius:3, background:`rgb(${q.rgb.join(",")})`, flexShrink:0 }}/>
+                <span style={{ fontSize:11, color:"var(--text-secondary)" }}>{q.label}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ fontSize:10, color:"var(--text-tertiary)", marginTop:8, lineHeight:1.6 }}>颜色＝当天澄记忆的情绪平均落点；越深＝当天写得越多。</div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState("home");
 
@@ -3429,16 +3697,17 @@ export default function App() {
         {/* 各板块：统一 PanelHeader + 滚动内容 */}
         {[
           { key: "memory", Comp: MemoryPanel },
+          { key: "memograph", Comp: MemoGraphPanel },
           { key: "diary", Comp: DiaryPanel },
           { key: "milestones", Comp: MilestonesPanel },
           { key: "board", Comp: BoardPanel },
           { key: "console", Comp: ConsolePanel },
         ].map(({ key, Comp }) => (
           <div key={key} style={{ display: tab === key ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column" }}>
-            <PanelHeader name={PANEL_NAME[key]} onBack={() => setTab("home")}/>
+            <PanelHeader name={PANEL_NAME[key]} onBack={() => setTab(key === "memograph" ? "memory" : "home")}/>
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}>
               <div style={{ maxWidth: 860, margin: "0 auto", padding: "16px 16px 24px", width: "100%" }}>
-                <Comp/>
+                <Comp onNavigate={setTab}/>
               </div>
             </div>
           </div>
