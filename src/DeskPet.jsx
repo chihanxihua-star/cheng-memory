@@ -7,11 +7,12 @@
  *
  * 原版逻辑（照 tick.js / state.js / theme.json）：
  *  · 状态(澄): idle/thinking/typing/building/carrying/juggling/conducting/error/notification/sweeping/happy
- *      其中 happy=4s, error=5s, notification=5s, sweeping=5.5s, carrying=3s 最短显示后自动回落
+ *      happy=4s, error=5s, notification=5s, sweeping=5.5s 最短显示后自动回落
  *  · 睡眠(鼠标静止计时，动一下重置)：20s→随机播一次 idle动作(张望/冒泡/看书) · 60s→哈欠(3s)→犯困 · 10min→深睡
  *      鼠标一动 → 醒(wake 1.5s)→idle
  *  · 点击彩蛋(仅 idle)：戳2~3下→50%不耐烦/否则朝戳侧歪头(2.5s)；连戳4下+→蹦跳(3.5s)；拖→被拎起
- *  · 极简：拖到屏幕边→贴边；hover→探头招手；按澄状态变(干活/完成/睡/提醒/进场)；闲着随机沿边溜达
+ *  · 极简模式：拖到屏幕边→贴边藏；hover→探头招手；按澄状态变(干活/完成/睡/提醒)。
+ *      crabwalk = 进极简时螃蟹横着挪到边的「进场螃蟹步」(照 doc「右键进入时的螃蟹步」)，非随机溜达。
  *  · 眼球追踪未做：平面 <img> 无法追鼠标(原版靠分层 SVG + JS)，与"直接用原版图"二选一。
  *
  * 接入：<DeskPet signals={{ isGenerating, streamSnap, ccStatus }} />
@@ -45,16 +46,13 @@ const TOOL_STATE = {
   Edit: "typing", Write: "typing", MultiEdit: "typing", NotebookEdit: "typing",
   Task: "juggling",
 };
-// 一次性状态 → 最短显示/自动回落时长（照 theme.json autoReturn）
 const ONESHOT_DUR = { happy: 4000, error: 5000, notification: 5000, sweeping: 5500 };
 const ONESHOT = new Set(Object.keys(ONESHOT_DUR));
 const WORKING = new Set(["thinking", "typing", "building", "carrying", "juggling", "conducting", "sweeping"]);
 
-// 睡眠计时（照 theme.json timings：mouseIdle 20s / mouseSleep 60s / yawn 3s / deepSleep 10min / wake 1.5s）
 const MOUSE_IDLE = 20_000, MOUSE_SLEEP = 60_000, YAWN_MS = 3000, DEEP_SLEEP = 600_000, WAKE_MS = 1500;
-const SIZE = 128;
-const SNAP = 26, TUCK = 58, MINI_SCALE = 1.25, ENTER_MS = 520;
-const WALK_EVERY = 5200, WALK_CHANCE = 0.45, WALK_MS = 2600;
+const SIZE = 150;
+const SNAP = 26, TUCK = 40, MINI_SCALE = 1.25, ENTER_MS = 520, CRABWALK_MS = 850;
 const CLICK_WINDOW = 400;
 const POS_KEY = "deskpet-pos", MINI_KEY = "deskpet-mini";
 
@@ -77,11 +75,10 @@ function clampPos(x, y) {
   const W = window.innerWidth || 360, H = window.innerHeight || 640;
   return { x: Math.max(0, Math.min(W - SIZE, x)), y: Math.max(0, Math.min(H - SIZE, y)) };
 }
-function nearestEdge(x) { return (x + SIZE / 2 > (window.innerWidth || 360) / 2) ? "right" : "left"; }
-function miniArt({ state, hovering, walking, entering }) {
+function miniArt({ state, hovering, crabwalking, entering }) {
+  if (crabwalking) return "/pet/mini-crabwalk.svg";  // 进场螃蟹步
   if (entering) return "/pet/mini-enter.svg";
   if (hovering) return "/pet/mini-peek.svg";
-  if (walking) return "/pet/mini-crabwalk.svg";
   if (state === "sleeping" || state === "offline") return "/pet/mini-sleep.svg";
   if (state === "dozing") return "/pet/mini-enter-sleep.svg";
   if (state === "notification" || state === "error") return "/pet/mini-alert.svg";
@@ -97,7 +94,7 @@ export default function DeskPet({ signals }) {
   });
   const [peeking, setPeeking] = useState(false);
   const [hovering, setHovering] = useState(false);
-  const [walking, setWalking] = useState(false);
+  const [crabwalking, setCrabwalking] = useState(false);
   const [entering, setEntering] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [reaction, setReaction] = useState(null);
@@ -108,8 +105,8 @@ export default function DeskPet({ signals }) {
     return null;
   });
 
-  const mouseStillRef = useRef(Date.now());     // 用户鼠标最后活动时刻（睡眠计时基准）
-  const idleAnimPlayedRef = useRef(false);      // 本次静止已播过随机 idle 动作
+  const mouseStillRef = useRef(Date.now());
+  const idleAnimPlayedRef = useRef(false);
   const idleAnimTimerRef = useRef(null);
   const wasAsleepRef = useRef(false);
   const wakingUntilRef = useRef(0);
@@ -117,7 +114,7 @@ export default function DeskPet({ signals }) {
   const oneshotStateRef = useRef(null);
   const prevGenRef = useRef(false);
   const peekTimerRef = useRef(null);
-  const enterTimerRef = useRef(null);
+  const enterSeqRef = useRef([]);    // 进场序列定时器
   const dragRef = useRef(null);
   const posRef = useRef(pos);
   const stateRef = useRef(state);
@@ -126,16 +123,24 @@ export default function DeskPet({ signals }) {
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef(null);
   const firstDirRef = useRef(null);
+  const hoveringRef = useRef(false);
+  const wasPeekingRef = useRef(false);   // 本次按下「之前」是否已探头（判断点一下=招手还是收回）
+  const miniTapTimerRef = useRef(null);
   useEffect(() => { posRef.current = pos; }, [pos]);
   useEffect(() => { stateRef.current = state; }, [state]);
+  useEffect(() => { hoveringRef.current = hovering; }, [hovering]);
 
   const setMiniPersist = useCallback((m) => {
     setMini(m); localStorage.setItem(MINI_KEY, m || "");
+    enterSeqRef.current.forEach(clearTimeout); enterSeqRef.current = [];
     if (m) {
-      setEntering(true);
-      clearTimeout(enterTimerRef.current);
-      enterTimerRef.current = setTimeout(() => setEntering(false), ENTER_MS);
-    } else { setEntering(false); }
+      // 进场：螃蟹步(横挪到边) → mini-enter 过场 → 贴边歇
+      setCrabwalking(true); setEntering(false);
+      enterSeqRef.current.push(setTimeout(() => {
+        setCrabwalking(false); setEntering(true);
+        enterSeqRef.current.push(setTimeout(() => setEntering(false), ENTER_MS));
+      }, CRABWALK_MS));
+    } else { setCrabwalking(false); setEntering(false); }
   }, []);
   const setPosPersist = useCallback((p) => {
     setPos(p); if (p) localStorage.setItem(POS_KEY, JSON.stringify(p));
@@ -147,7 +152,6 @@ export default function DeskPet({ signals }) {
     clearTimeout(reactTimerRef.current);
     reactTimerRef.current = setTimeout(() => { reactingRef.current = false; setReaction(null); }, dur);
   }, []);
-  /* 用户鼠标/触摸活动 → 重置睡眠计时（动一下就醒） */
   const bumpActivity = useCallback(() => {
     mouseStillRef.current = Date.now();
     idleAnimPlayedRef.current = false;
@@ -158,7 +162,6 @@ export default function DeskPet({ signals }) {
     setPos(clampPos((window.innerWidth || 360) - SIZE - 14, (window.innerHeight || 640) - SIZE - 88));
   }, [pos]);
 
-  /* 全局鼠标活动监听（睡眠计时基准；只写 ref，不触发渲染） */
   useEffect(() => {
     window.addEventListener("pointermove", bumpActivity, { passive: true });
     window.addEventListener("pointerdown", bumpActivity, { passive: true });
@@ -168,7 +171,6 @@ export default function DeskPet({ signals }) {
     };
   }, [bumpActivity]);
 
-  /* 澄的信号 → 活跃状态 + 一次性状态锁定；澄活动也算"清醒" */
   useEffect(() => {
     const now = Date.now();
     const active = deriveActive(signals);
@@ -179,7 +181,7 @@ export default function DeskPet({ signals }) {
     if (active && ONESHOT.has(active)) {
       oneshotStateRef.current = active; oneshotUntilRef.current = now + (ONESHOT_DUR[active] || 3000);
     }
-    if (active && active !== "offline") mouseStillRef.current = now;  // 干活时不睡
+    if (active && active !== "offline") mouseStillRef.current = now;
     if (mini && active && active !== "offline") {
       setPeeking(true);
       clearTimeout(peekTimerRef.current);
@@ -187,29 +189,22 @@ export default function DeskPet({ signals }) {
     }
   }, [signals, mini]);
 
-  /* 主循环：决定显示状态（一次性 > 澄活跃 > 醒来 > 睡眠序列 > idle） */
   useEffect(() => {
     const tick = () => {
       const now = Date.now();
-      // 一次性状态（happy/error/...）锁定显示
       if (now < oneshotUntilRef.current && oneshotStateRef.current) { setState(oneshotStateRef.current); return; }
       if (signals.ccStatus === "down") { setState("offline"); return; }
       const active = deriveActive(signals);
       if (active) { setState(active); return; }
 
-      // —— 睡眠序列（鼠标静止计时）——
       const still = now - mouseStillRef.current;
-      const asleep = still >= MOUSE_SLEEP + YAWN_MS;   // 犯困/深睡算"睡着"，用于醒来动画
-      if (!asleep && wasAsleepRef.current) wakingUntilRef.current = now + WAKE_MS; // 刚被叫醒
+      const asleep = still >= MOUSE_SLEEP + YAWN_MS;
+      if (!asleep && wasAsleepRef.current) wakingUntilRef.current = now + WAKE_MS;
       wasAsleepRef.current = asleep;
       if (now < wakingUntilRef.current) { setState("waking"); return; }
 
-      if (still < MOUSE_IDLE) {
-        if (idleAnim) setIdleAnim(null);
-        setState("idle"); return;
-      }
+      if (still < MOUSE_IDLE) { if (idleAnim) setIdleAnim(null); setState("idle"); return; }
       if (still < MOUSE_SLEEP) {
-        // 静止满 20s：随机播一次 idle 动作（张望/冒泡/看书），播完回 idle
         if (!idleAnimPlayedRef.current) {
           idleAnimPlayedRef.current = true;
           const a = IDLE_ANIMS[Math.floor(Math.random() * IDLE_ANIMS.length)];
@@ -229,28 +224,19 @@ export default function DeskPet({ signals }) {
     return () => clearInterval(h);
   }, [signals, idleAnim]);
 
-  /* 极简模式下闲着 → 随机沿边溜达 */
-  useEffect(() => {
-    if (!mini) return;
-    const id = setInterval(() => {
-      if (hovering || peeking || walking || dragRef.current) return;
-      const st = stateRef.current;
-      if (st !== "idle" && st !== "yawning") return;
-      if (Math.random() > WALK_CHANCE) return;
-      const H = window.innerHeight || 640;
-      const cur = posRef.current; if (!cur) return;
-      const dir = Math.random() < 0.5 ? -1 : 1;
-      const ny = Math.max(0, Math.min(H - SIZE, cur.y + dir * (50 + Math.random() * 90)));
-      setWalking(true);
-      setPosPersist({ x: cur.x, y: ny });
-      setTimeout(() => setWalking(false), WALK_MS);
-    }, WALK_EVERY);
-    return () => clearInterval(id);
-  }, [mini, hovering, peeking, walking, setPosPersist]);
-
-  /* 点击：正常模式=彩蛋累加（仅 idle）；极简模式=弹回正常 */
   const handleTap = useCallback((clientX) => {
-    if (mini) { setMiniPersist(""); return; }
+    if (mini) {
+      // 手机没 hover：点一下贴边的它 → 探头招手；正探着头时再点 → 收回正常
+      if (wasPeekingRef.current) {
+        clearTimeout(miniTapTimerRef.current);
+        setHovering(false); setMiniPersist("");
+      } else {
+        setHovering(true);
+        clearTimeout(miniTapTimerRef.current);
+        miniTapTimerRef.current = setTimeout(() => setHovering(false), 2800);
+      }
+      return;
+    }
     clickCountRef.current++;
     if (clickCountRef.current === 1 && posRef.current) {
       firstDirRef.current = (clientX - posRef.current.x) < SIZE / 2 ? "left" : "right";
@@ -278,17 +264,16 @@ export default function DeskPet({ signals }) {
     if (!pos) return;
     e.currentTarget.setPointerCapture?.(e.pointerId);
     dragRef.current = { sx: e.clientX, sy: e.clientY, ox: pos.x, oy: pos.y, moved: false };
-    if (mini) setHovering(true);
-  }, [pos, mini]);
+    wasPeekingRef.current = hoveringRef.current;  // 记住按下前是否已探头
+  }, [pos]);
 
   const onPointerMove = useCallback((e) => {
     const d = dragRef.current; if (!d) return;
     const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
     if (!d.moved && Math.hypot(dx, dy) < 5) return;
-    if (!d.moved) { d.moved = true; setDragging(true); if (walking) setWalking(false); }
-    if (mini) setHovering(true);
+    if (!d.moved) { d.moved = true; setDragging(true); if (mini) setHovering(true); } // 拖动时探出来好抓
     setPos(clampPos(d.ox + dx, d.oy + dy));
-  }, [mini, walking]);
+  }, [mini]);
 
   const onPointerUp = useCallback((e) => {
     const d = dragRef.current; dragRef.current = null;
@@ -301,27 +286,33 @@ export default function DeskPet({ signals }) {
     let m = "";
     if (fin.x <= SNAP) { m = "left"; fin.x = 0; }
     else if (fin.x >= W - SIZE - SNAP) { m = "right"; fin.x = W - SIZE; }
+    setHovering(false);
+    // 进极简序列(在 setMiniPersist 里)：正面朝前原地左右晃(crabwalk·svg自带) → mini-enter → 贴边缩
     setMiniPersist(m);
     setPosPersist(fin);
-    setHovering(false);
   }, [handleTap, setMiniPersist, setPosPersist]);
 
   if (hidden || !pos) return null;
 
   const offline = state === "offline";
-  const out = !!mini && (hovering || peeking || walking || entering);
+  // 进场(螃蟹步/mini-enter) 与 hover/活动 时滑出可见
+  const out = !!mini && (hovering || peeking || crabwalking || entering);
 
   let src;
-  if (mini) src = miniArt({ state, hovering, walking, entering });
+  if (mini) src = miniArt({ state, hovering, crabwalking, entering });
   else if (dragging) src = REACT.drag;
   else if (reaction) src = reaction;
   else if (idleAnim && state === "idle") src = idleAnim;
   else src = ART[state] || ART.idle;
 
-  const cls = ["deskpet", mini ? "mini" : "", out ? "out" : "", walking ? "walking" : "", offline ? "offline" : ""]
+  const cls = ["deskpet", mini ? "mini" : "", out ? "out" : "", offline ? "offline" : ""]
     .filter(Boolean).join(" ");
   let transform = "";
-  if (mini) {
+  if (mini && crabwalking) {
+    // 进场：正面朝前、原地左右晃（svg 自带 body-hunch），不镜像不横移
+    transform = `scale(${MINI_SCALE})`;
+  } else if (mini) {
+    // 贴边歇/探头：脸朝屏幕里（左边→镜像朝右）；out 时滑出、否则 translateX 缩到边外
     const mir = mini === "left" ? " scaleX(-1)" : "";
     const tuck = out ? "" : `translateX(${mini === "right" ? TUCK : -TUCK}%) `;
     transform = `${tuck}scale(${MINI_SCALE})${mir}`;
@@ -334,9 +325,9 @@ export default function DeskPet({ signals }) {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerEnter={() => { if (mini) setHovering(true); }}
-      onPointerLeave={() => { if (mini && !dragRef.current) setHovering(false); }}
-      title={offline ? "澄断线了…" : "拖动移动 · 拖到屏幕边贴边藏 · 戳两下/连戳有彩蛋 · 鼠标动一下叫醒"}
+      onPointerEnter={(e) => { if (mini && e.pointerType === "mouse") setHovering(true); }}
+      onPointerLeave={(e) => { if (mini && e.pointerType === "mouse" && !dragRef.current) setHovering(false); }}
+      title={offline ? "澄断线了…" : "拖动移动 · 拖到屏幕边贴边藏 · 点一下探头招手/再点收回 · 戳两下有彩蛋"}
       role="img"
       aria-label={`桌宠 状态:${state}`}
     >
@@ -350,13 +341,12 @@ export default function DeskPet({ signals }) {
 
 const PET_CSS = `
 .deskpet {
-  position: fixed; width: 128px; height: 128px; z-index: 50;
+  position: fixed; width: ${SIZE}px; height: ${SIZE}px; z-index: 50;
   cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none;
   transition: transform .3s cubic-bezier(.34,1.56,.64,1), opacity .25s;
   transform-origin: center center;
 }
 .deskpet:active { cursor: grabbing; }
-.deskpet.walking { transition: top 2.5s ease-in-out, transform .3s cubic-bezier(.34,1.56,.64,1), opacity .25s; }
 .deskpet .dp-frame { position: relative; width: 100%; height: 100%; }
 .deskpet .dp-gif {
   display: block; width: 100%; height: 100%; object-fit: contain;
