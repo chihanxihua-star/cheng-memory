@@ -125,6 +125,7 @@ export default function DeskPet({ signals }) {
   const oneshotUntilRef = useRef(0);
   const oneshotStateRef = useRef(null);
   const prevGenRef = useRef(false);
+  const prevSweepRef = useRef(0);
   const peekTimerRef = useRef(null);
   const enterSeqRef = useRef([]);
   const dragRef = useRef(null);
@@ -195,6 +196,11 @@ export default function DeskPet({ signals }) {
       oneshotStateRef.current = "happy"; oneshotUntilRef.current = now + ONESHOT_DUR.happy;
     }
     prevGenRef.current = signals.isGenerating;
+    // 失忆/清屏 → 扫地（优先级高于上面的 happy，因为常跟在一轮结束后触发）
+    if (signals.sweepAt && signals.sweepAt !== prevSweepRef.current) {
+      prevSweepRef.current = signals.sweepAt;
+      oneshotStateRef.current = "sweeping"; oneshotUntilRef.current = now + ONESHOT_DUR.sweeping;
+    }
     if (active && ONESHOT.has(active)) {
       oneshotStateRef.current = active; oneshotUntilRef.current = now + (ONESHOT_DUR[active] || 3000);
     }

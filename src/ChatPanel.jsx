@@ -964,6 +964,7 @@ export default function ChatPanel({ onBack }) {
   const [bufferCount, setBufferCount] = useState(0);
   const [showTyping, setShowTyping] = useState(false);
   const [ccStatus, setCcStatus] = useState("unknown"); // ready / down / unknown
+  const [sweepAt, setSweepAt] = useState(0); // 失忆/清屏 时戳一下，桌宠播"扫地"
   const [opLog, setOpLog] = useState(() => {
     try { return JSON.parse(localStorage.getItem("memhome-oplog") || "[]"); } catch { return []; }
   });
@@ -1652,6 +1653,7 @@ export default function ChatPanel({ onBack }) {
     localStorage.removeItem(CONTEXT_TOKENS_KEY);
     lastDateRef.current = null;
     setSidebarOpen(false);
+    setSweepAt(Date.now()); // 清屏 → 桌宠扫地
   }, [isGenerating, stop]);
 
   const restartCC = useCallback(async (opts = {}) => {
@@ -1852,6 +1854,7 @@ export default function ChatPanel({ onBack }) {
       localStorage.removeItem(BASE_TOKENS_KEY);
       baseCaptureNeededRef.current = true;
       setSessionOpen(false);
+      setSweepAt(Date.now()); // 失忆 → 桌宠扫地
     } catch (e) {
       showToast("失忆失败：" + e.message);
     }
@@ -2060,7 +2063,7 @@ export default function ChatPanel({ onBack }) {
       <style>{CSS}</style>
 
       {/* 桌宠（澄小螃蟹）—— 纯前端，状态从现成 WS 信号推导 */}
-      <DeskPet signals={{ isGenerating, streamSnap, ccStatus }} />
+      <DeskPet signals={{ isGenerating, streamSnap, ccStatus, sweepAt }} />
 
       {/* TOP BAR */}
       <div className="cp-top">
