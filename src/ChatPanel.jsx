@@ -2015,6 +2015,19 @@ export default function ChatPanel({ onBack }) {
     setFavPending({ items, isStory: items.length > 1 });
   }, [renderItems, selectedIds, showToast]);
 
+  // 进对话/切对话时，从库里拉回这个对话已收藏的消息 id → 心持久填实心（刷新/重进也在）
+  useEffect(() => {
+    if (!convId) { setFavedIds(new Set()); return; }
+    let cancel = false;
+    (async () => {
+      const { data, error } = await supabase.from("favorites_cheng")
+        .select("source_message_id").eq("source_conversation_id", convId);
+      if (cancel || error || !data) return;
+      setFavedIds(new Set(data.map(r => String(r.source_message_id)).filter(k => k && k !== "null")));
+    })();
+    return () => { cancel = true; };
+  }, [convId]);
+
   /* ─────── 自动滚动 ─────── */
   useEffect(() => {
     if (isNearBottom()) scrollToBottom();
