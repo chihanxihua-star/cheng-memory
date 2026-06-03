@@ -433,11 +433,12 @@ const CSS = `
 }
 .cp-action-btn:hover { background: var(--bg-sidebar-hover); }
 .cp-action-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.cp-fav-btn:hover svg { stroke: #e0738a; }
+.cp-fav-btn:hover svg { stroke: var(--text-secondary); }
+.cp-fav-btn.cp-fav-on svg { fill: var(--text-primary); stroke: var(--text-primary); }
 /* 低语：故事多选选中态 */
 .cp-msg-wrap.cp-selectable .cp-msg-bubble { cursor: pointer; }
-.cp-msg-wrap.cp-selected .cp-msg-bubble { outline: 2px solid #e0738a; outline-offset: 1px; }
-.cp-sel-mark { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-right: 6px; border-radius: 50%; border: 1.5px solid #e0738a; color: #e0738a; font-size: 11px; vertical-align: middle; }
+.cp-msg-wrap.cp-selected .cp-msg-bubble { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+.cp-sel-mark { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-right: 6px; border-radius: 50%; border: 1.5px solid var(--text-primary); color: var(--text-primary); font-size: 11px; vertical-align: middle; }
 .cp-select-bar {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   z-index: 950; display: flex; align-items: center; gap: 10px; width: min(92%, 430px);
@@ -445,15 +446,15 @@ const CSS = `
   padding: 10px 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); color: var(--text-primary); font-size: 13px;
 }
 .cp-select-cancel { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 13px; padding: 6px 10px; }
-.cp-select-fav { background: #e0738a; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 7px 14px; border-radius: 8px; }
-.cp-select-fav:disabled { opacity: 0.45; cursor: default; }
+.cp-select-fav { background: #2b2b2b; border: 1px solid #2b2b2b; color: #f5f2ec; cursor: pointer; font-size: 12px; letter-spacing: 0.16em; padding: 8px 16px; border-radius: 8px; font-family: inherit; }
+.cp-select-fav:disabled { background: transparent; border-color: var(--border-card); color: var(--text-tertiary); cursor: default; }
 /* 低语：选合集面板 */
 .cp-fav-collist { display: flex; flex-direction: column; gap: 8px; }
 .cp-fav-colrow { text-align: left; background: var(--bg-bubble-bot); border: 1px solid var(--border-card); border-radius: 10px; padding: 12px 14px; color: var(--text-primary); font-size: 13px; cursor: pointer; font-family: inherit; }
-.cp-fav-colrow:hover { border-color: #e0738a; }
+.cp-fav-colrow:hover { border-color: var(--text-primary); }
 .cp-fav-colrow:disabled { opacity: 0.5; cursor: default; }
-.cp-fav-new { background: #e0738a; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 7px 12px; border-radius: 8px; white-space: nowrap; }
-.cp-fav-new:disabled { opacity: 0.45; cursor: default; }
+.cp-fav-new { background: #2b2b2b; border: 1px solid #2b2b2b; color: #f5f2ec; cursor: pointer; font-size: 12px; letter-spacing: 0.16em; padding: 8px 16px; border-radius: 8px; white-space: nowrap; font-family: inherit; }
+.cp-fav-new:disabled { background: transparent; border-color: var(--border-card); color: var(--text-tertiary); cursor: default; }
 .cp-edit-area { width: 100%; background: var(--bg-input); border: 1px solid var(--border-input-focus); border-radius: 6px; padding: 7px 9px; color: var(--text-primary); font-size: 13px; outline: none; resize: vertical; min-height: 60px; margin-top: 6px; }
 .cp-edit-actions { display: flex; gap: 6px; margin-top: 6px; }
 .cp-edit-save, .cp-edit-cancel { padding: 6px 14px; border: none; border-radius: 5px; font-size: 12px; cursor: pointer; }
@@ -952,9 +953,9 @@ export default function ChatPanel({ onBack }) {
   // 低语收藏：favPending = 待存的收藏（单条或故事多段），非空时弹合集面板
   const [favPending, setFavPending] = useState(null); // { items: [{sender,content,source_message_id,original_created_at}], isStory }
   const [selectMode, setSelectMode] = useState(false); // 故事多选模式
-  const [selectAnchor, setSelectAnchor] = useState(null); // 首尾框选的起点 item.id（用于高亮起点）
-  const selectAnchorRef = useRef(null); // 同一个起点，用 ref 读，避免 toggleSelect 闭包取到旧值
+  const selectAnchorRef = useRef(null); // 首尾框选起点 item.id，用 ref 读避免 toggleSelect 闭包取到旧值
   const [selectedIds, setSelectedIds] = useState(() => new Set()); // 选中的气泡 item.id
+  const [favedIds, setFavedIds] = useState(() => new Set()); // 本会话内已收藏的 msg.id → 心填实心
   const [input, setInput] = useState("");
   const [images, setImages] = useState([]); // dataURL 数组
   const [streamSnap, setStreamSnap] = useState(null); // 流式快照（null/对象）
@@ -1975,17 +1976,17 @@ export default function ChatPanel({ onBack }) {
   // 进入故事多选模式（不预选任何条）：用户随后点第一条=起点、第二条=终点，中间自动填
   const enterSelect = useCallback(() => {
     selectAnchorRef.current = null;
-    setSelectMode(true); setSelectAnchor(null); setSelectedIds(new Set());
+    setSelectMode(true); setSelectedIds(new Set());
   }, []);
   const exitSelect = useCallback(() => {
     selectAnchorRef.current = null;
-    setSelectMode(false); setSelectAnchor(null); setSelectedIds(new Set());
+    setSelectMode(false); setSelectedIds(new Set());
   }, []);
   // 首尾框选：第一次点=起点；之后点未选的→选中“起点→此处”连续段（含中间澄的回复，故事才完整）；点已选的中间条→剔除
   const toggleSelect = useCallback((id) => {
     const anchor = selectAnchorRef.current;
     if (anchor == null) { // 第一次点 = 起点
-      selectAnchorRef.current = id; setSelectAnchor(id); setSelectedIds(new Set([id])); return;
+      selectAnchorRef.current = id; setSelectedIds(new Set([id])); return;
     }
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -2149,6 +2150,7 @@ export default function ChatPanel({ onBack }) {
               selectMode={selectMode}
               selected={selectedIds.has(it.id)}
               onToggleSelect={toggleSelect}
+              faved={favedIds.has(String(it.msg.id))}
             />
           );
         })}
@@ -2265,7 +2267,11 @@ export default function ChatPanel({ onBack }) {
           convId={convId}
           showToast={showToast}
           onClose={() => setFavPending(null)}
-          onDone={() => { setFavPending(null); exitSelect(); }}
+          onDone={() => {
+            const keys = (favPending?.items || []).map(i => String(i.source_message_id)).filter(k => k && k !== "null");
+            setFavedIds(s => new Set([...s, ...keys]));
+            setFavPending(null); exitSelect();
+          }}
         />
       )}
       {styleThinkPanelOpen && <StyleThinkPanel
@@ -3041,7 +3047,7 @@ function CollectionPicker({ pending, convId, showToast, onClose, onDone }) {
 
   return (
     <div className="cp-overlay bottom" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="cp-modal bottom" onClick={e => e.stopPropagation()}>
+      <div className="cp-modal bottom" style={{ borderRadius: 0 }} onClick={e => e.stopPropagation()}>
         <h3>{n > 1 ? `收藏故事 · ${n} 段` : "收藏到低语"} <button onClick={onClose}>✕</button></h3>
         <div className="cp-row" style={{ marginBottom: 16 }}>
           <input type="text" placeholder="新建合集…" value={newName}
@@ -3064,7 +3070,7 @@ function CollectionPicker({ pending, convId, showToast, onClose, onDone }) {
   );
 }
 
-function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit, onRegen, onDelete, onFav, onStartSelect, selectMode, selected, onToggleSelect }) {
+function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit, onRegen, onDelete, onFav, onStartSelect, selectMode, selected, onToggleSelect, faved }) {
   const { msg, partText, isHead, isTail, continuation, turnTotal, turnDelta } = item;
   const role = msg.role;
   const [showActions, setShowActions] = useState(false);
@@ -3179,7 +3185,7 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
               })()}
             </span>
             {realId && favText.trim() && (
-              <button className="cp-action-btn cp-fav-btn" title="收藏到低语" onClick={doFav}>
+              <button className={"cp-action-btn cp-fav-btn" + (faved ? " cp-fav-on" : "")} title={faved ? "已收藏" : "收藏到低语"} onClick={doFav}>
                 <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
               </button>
             )}

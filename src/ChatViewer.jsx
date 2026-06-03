@@ -348,7 +348,7 @@ function ThinkingBlock({ text }) {
   );
 }
 
-function Message({ m, searchQuery, id, idx, showSender = true, showTime = false, onFav, onStartSel, selMode, selected, onToggleSel }) {
+function Message({ m, searchQuery, id, idx, showSender = true, showTime = false, onFav, onStartSel, selMode, selected, onToggleSel, faved }) {
   const sender = getSender(m);
   const isHuman = sender === "human";
   const time = fmtMsgTime(m.created_at);
@@ -403,9 +403,9 @@ function Message({ m, searchQuery, id, idx, showSender = true, showTime = false,
             borderRadius: bubbleRadius, maxWidth: "none",
             ...(isHuman ? { whiteSpace: "pre-wrap" } : {}),
             ...(selMode ? { cursor: "pointer" } : {}),
-            ...(selected ? { outline: "2px solid #e0738a", outlineOffset: 1 } : {}),
+            ...(selected ? { outline: "2px solid var(--text-primary)", outlineOffset: 1 } : {}),
           }}>
-          {selMode && <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, marginRight: 6, borderRadius: "50%", border: "1.5px solid #e0738a", color: "#e0738a", fontSize: 11 }}>{selected ? "✓" : ""}</span>}
+          {selMode && <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, marginRight: 6, borderRadius: "50%", border: "1.5px solid var(--text-primary)", color: "var(--text-primary)", fontSize: 11 }}>{selected ? "✓" : ""}</span>}
           {thinking && <ThinkingBlock text={thinking} />}
           {tools.map((t, i) => {
             const name = t.name || "tool";
@@ -436,15 +436,16 @@ function Message({ m, searchQuery, id, idx, showSender = true, showTime = false,
           {rendered && <div dangerouslySetInnerHTML={{ __html: rendered }} />}
         </div>
         {!selMode && text && text.trim() && (
-          <div style={{ marginTop: 2, display: "flex", gap: 2, ...(isHuman ? { justifyContent: "flex-end" } : {}) }}>
-            <button onClick={() => onFav?.({ sender, content: text, original_created_at: m.created_at || null })}
-              title="收藏到低语"
-              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", padding: "2px 6px", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              <span style={{ fontSize: 11 }}>收藏</span>
+          <div style={{ marginTop: 3, display: "flex", gap: 8, ...(isHuman ? { justifyContent: "flex-end" } : {}) }}>
+            <button onClick={() => onFav?.({ sender, content: text, original_created_at: m.created_at || null, uuid: m.uuid })}
+              title={faved ? "已收藏" : "收藏到低语"}
+              style={{ background: "none", border: "none", cursor: "pointer", color: faved ? "var(--text-primary)" : "var(--text-tertiary)", padding: "2px 4px", display: "inline-flex", alignItems: "center" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill={faved ? "var(--text-primary)" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
             </button>
             <button onClick={() => onStartSel?.(m.uuid)} title="选段收藏为故事"
-              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", padding: "2px 6px", fontSize: 11, fontFamily: "inherit" }}>选段</button>
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", padding: "2px 4px", display: "inline-flex", alignItems: "center" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            </button>
           </div>
         )}
         {showTime && time && <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2, opacity: 0.6, ...(isHuman ? { textAlign: "right" } : {}) }}>{time}</div>}
@@ -462,6 +463,11 @@ function cvFetch(url, opts = {}) {
   if (t) headers.Authorization = "Bearer " + t;
   return fetch(url, { ...opts, headers });
 }
+
+// 思考面板/参考图那种分段按钮：可用=深底浅字、禁用=描边透明；直角无圆角
+const segBtn = (on) => on
+  ? { background: "#2b2b2b", border: "1px solid #2b2b2b", color: "#f5f2ec", cursor: "pointer", fontSize: 12, letterSpacing: "0.16em", padding: "8px 16px", borderRadius: 8, fontFamily: "inherit", whiteSpace: "nowrap" }
+  : { background: "transparent", border: "1px solid var(--border)", color: "var(--text-tertiary)", cursor: "default", fontSize: 12, letterSpacing: "0.16em", padding: "8px 16px", borderRadius: 8, fontFamily: "inherit", whiteSpace: "nowrap" };
 
 // 低语：拾光里的选合集面板（自包含；source_message_id 存 null，因拾光消息无真实行 id）
 function CVCollectionPicker({ pending, convUuid, toast, onClose, onDone }) {
@@ -505,12 +511,11 @@ function CVCollectionPicker({ pending, convUuid, toast, onClose, onDone }) {
   };
 
   const inputStyle = { flex: 1, background: "transparent", border: "none", borderBottom: "1px solid var(--border)", padding: "7px 0", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "inherit" };
-  const pinkBtn = (on) => ({ background: "#e0738a", border: "none", color: "#fff", cursor: "pointer", fontSize: 12, padding: "7px 12px", borderRadius: 8, opacity: on ? 1 : 0.45 });
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: "fixed", inset: 0, zIndex: 1100, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ width: "100%", maxWidth: 430, maxHeight: "80vh", overflowY: "auto", background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: "14px 14px 0 0", padding: "20px 22px 30px", color: "var(--text-primary)" }}>
+        style={{ width: "100%", maxWidth: 430, maxHeight: "80vh", overflowY: "auto", background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: 0, padding: "20px 22px 30px", color: "var(--text-primary)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, fontSize: 15 }}>
           <span>{n > 1 ? `收藏故事 · ${n} 段` : "收藏到低语"}</span>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer", fontSize: 18 }}>✕</button>
@@ -518,7 +523,7 @@ function CVCollectionPicker({ pending, convUuid, toast, onClose, onDone }) {
         <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
           <input type="text" placeholder="新建合集…" value={newName} onChange={e => setNewName(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") createAndSave(); }} style={inputStyle} />
-          <button disabled={!newName.trim() || saving} onClick={createAndSave} style={pinkBtn(!!newName.trim() && !saving)}>建并存</button>
+          <button disabled={!newName.trim() || saving} onClick={createAndSave} style={segBtn(!!newName.trim() && !saving)}>建并存</button>
         </div>
         <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>选个合集</div>
         {loading ? <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>加载中…</div>
@@ -570,19 +575,18 @@ export default function ChatViewer({ onBack }) {
   // ── 低语收藏（把消息文字快照存进 supabase favorites_cheng；跟上面 localStorage 星标整段对话是两回事）──
   const [diyuPending, setDiyuPending] = useState(null); // { items:[{sender,content,original_created_at}], isStory }
   const [selMode, setSelMode] = useState(false);        // 故事多选模式
-  const [selAnchor, setSelAnchor] = useState(null);     // 首尾框选起点 m.uuid（高亮用）
-  const selAnchorRef = useRef(null);                    // 同起点，用 ref 读避免闭包旧值
+  const selAnchorRef = useRef(null);                    // 首尾框选起点 m.uuid，用 ref 读避免闭包旧值
   const [selIds, setSelIds] = useState(() => new Set());// 选中的 m.uuid
+  const [favedUuids, setFavedUuids] = useState(() => new Set()); // 本会话内已收藏的 m.uuid → 心填实心
   const [toast, setToast] = useState(null);
   const cvToast = useCallback((msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); }, []);
-  const isUuid = (s) => typeof s === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
   const openDiyu = useCallback((payload) => setDiyuPending({ items: [payload], isStory: false }), []);
-  const enterSel = useCallback(() => { selAnchorRef.current = null; setSelMode(true); setSelAnchor(null); setSelIds(new Set()); }, []);
-  const exitSel = useCallback(() => { selAnchorRef.current = null; setSelMode(false); setSelAnchor(null); setSelIds(new Set()); }, []);
+  const enterSel = useCallback(() => { selAnchorRef.current = null; setSelMode(true); setSelIds(new Set()); }, []);
+  const exitSel = useCallback(() => { selAnchorRef.current = null; setSelMode(false); setSelIds(new Set()); }, []);
   const toggleSel = useCallback((uuid) => {
     const anchor = selAnchorRef.current;
-    if (anchor == null) { selAnchorRef.current = uuid; setSelAnchor(uuid); setSelIds(new Set([uuid])); return; }
+    if (anchor == null) { selAnchorRef.current = uuid; setSelIds(new Set([uuid])); return; }
     setSelIds(prev => {
       const next = new Set(prev);
       if (next.has(uuid) && uuid !== anchor) { next.delete(uuid); return next; }
@@ -598,7 +602,7 @@ export default function ChatViewer({ onBack }) {
   const diyuFromSel = useCallback(() => {
     const items = (currentConv?.messages || [])
       .filter(m => selIds.has(m.uuid))
-      .map(m => ({ sender: getSender(m), content: getMsgText(m) || "", original_created_at: m.created_at || null }))
+      .map(m => ({ sender: getSender(m), content: getMsgText(m) || "", original_created_at: m.created_at || null, uuid: m.uuid }))
       .filter(x => x.content.trim());
     if (!items.length) { cvToast("没选到可收藏的内容"); return; }
     setDiyuPending({ items, isStory: items.length > 1 });
@@ -1261,7 +1265,7 @@ export default function ChatViewer({ onBack }) {
               const showSender = getSender(m) !== prevSender;
               const showTime = getSender(m) !== nextSender;
               return <Message key={m.uuid || idx} m={m} searchQuery={query} id={`msg-${idx}`} idx={idx} showSender={showSender} showTime={showTime}
-                onFav={openDiyu} onStartSel={enterSel} selMode={selMode} selected={selIds.has(m.uuid)} onToggleSel={toggleSel} />;
+                onFav={openDiyu} onStartSel={enterSel} selMode={selMode} selected={selIds.has(m.uuid)} onToggleSel={toggleSel} faved={favedUuids.has(m.uuid)} />;
             })
           )}
         </div>
@@ -1408,12 +1412,17 @@ export default function ChatViewer({ onBack }) {
           <span>{selIds.size ? `已选 ${selIds.size} 条` : "点第一条和最后一条"}</span>
           <div style={{ flex: 1 }} />
           <button onClick={exitSel} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer", fontSize: 13, padding: "6px 10px" }}>取消</button>
-          <button disabled={!selIds.size} onClick={diyuFromSel} style={{ background: "#e0738a", border: "none", color: "#fff", cursor: "pointer", fontSize: 13, padding: "7px 14px", borderRadius: 8, opacity: !selIds.size ? 0.45 : 1 }}>收藏为故事</button>
+          <button disabled={!selIds.size} onClick={diyuFromSel} style={segBtn(!!selIds.size)}>收藏为故事</button>
         </div>
       )}
       {diyuPending && (
         <CVCollectionPicker pending={diyuPending} convUuid={currentConv?.uuid} toast={cvToast}
-          onClose={() => setDiyuPending(null)} onDone={() => { setDiyuPending(null); exitSel(); }} />
+          onClose={() => setDiyuPending(null)}
+          onDone={() => {
+            const keys = (diyuPending?.items || []).map(i => i.uuid).filter(Boolean);
+            setFavedUuids(s => new Set([...s, ...keys]));
+            setDiyuPending(null); exitSel();
+          }} />
       )}
       <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }}
         onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); }} />
