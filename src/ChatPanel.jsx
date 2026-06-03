@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
 import SessionPanel from "./SessionPanel";
 import WakePanel from "./WakePanel";
+import DeskPet from "./DeskPet";
 
 /* ════════════════════════════════════════════════════════════
    配置
@@ -2057,6 +2058,9 @@ export default function ChatPanel({ onBack }) {
   return (
     <div className="cp-root" data-theme={resolved}>
       <style>{CSS}</style>
+
+      {/* 桌宠（澄小螃蟹）—— 纯前端，状态从现成 WS 信号推导 */}
+      <DeskPet signals={{ isGenerating, streamSnap, ccStatus }} />
 
       {/* TOP BAR */}
       <div className="cp-top">
