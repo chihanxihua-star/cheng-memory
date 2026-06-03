@@ -348,7 +348,7 @@ function ThinkingBlock({ text }) {
   );
 }
 
-function Message({ m, searchQuery, id, idx, showSender = true, showTime = false }) {
+function Message({ m, searchQuery, id, idx, showSender = true, showTime = false, onFav, onStartSel, selMode, selected, onToggleSel }) {
   const sender = getSender(m);
   const isHuman = sender === "human";
   const time = fmtMsgTime(m.created_at);
@@ -397,10 +397,15 @@ function Message({ m, searchQuery, id, idx, showSender = true, showTime = false 
             {isHuman ? "小茉莉" : "小太阳"} <span style={{ opacity: 0.6 }}>#{idx + 1}</span>
           </div>
         )}
-        <div className={isHuman ? "bd-bubble me" : "bd-bubble them"} style={{
-          borderRadius: bubbleRadius, maxWidth: "none",
-          ...(isHuman ? { whiteSpace: "pre-wrap" } : {}),
-        }}>
+        <div className={isHuman ? "bd-bubble me" : "bd-bubble them"}
+          onClick={selMode ? () => onToggleSel?.(m.uuid) : undefined}
+          style={{
+            borderRadius: bubbleRadius, maxWidth: "none",
+            ...(isHuman ? { whiteSpace: "pre-wrap" } : {}),
+            ...(selMode ? { cursor: "pointer" } : {}),
+            ...(selected ? { outline: "2px solid #e0738a", outlineOffset: 1 } : {}),
+          }}>
+          {selMode && <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, marginRight: 6, borderRadius: "50%", border: "1.5px solid #e0738a", color: "#e0738a", fontSize: 11 }}>{selected ? "✓" : ""}</span>}
           {thinking && <ThinkingBlock text={thinking} />}
           {tools.map((t, i) => {
             const name = t.name || "tool";
@@ -430,6 +435,18 @@ function Message({ m, searchQuery, id, idx, showSender = true, showTime = false 
           ))}
           {rendered && <div dangerouslySetInnerHTML={{ __html: rendered }} />}
         </div>
+        {!selMode && text && text.trim() && (
+          <div style={{ marginTop: 2, display: "flex", gap: 2, ...(isHuman ? { justifyContent: "flex-end" } : {}) }}>
+            <button onClick={() => onFav?.({ sender, content: text, original_created_at: m.created_at || null })}
+              title="收藏到低语"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", padding: "2px 6px", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              <span style={{ fontSize: 11 }}>收藏</span>
+            </button>
+            <button onClick={() => onStartSel?.(m.uuid)} title="选段收藏为故事"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", padding: "2px 6px", fontSize: 11, fontFamily: "inherit" }}>选段</button>
+          </div>
+        )}
         {showTime && time && <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2, opacity: 0.6, ...(isHuman ? { textAlign: "right" } : {}) }}>{time}</div>}
       </div>
     </div>
@@ -444,6 +461,75 @@ function cvFetch(url, opts = {}) {
   const headers = { ...(opts.headers || {}) };
   if (t) headers.Authorization = "Bearer " + t;
   return fetch(url, { ...opts, headers });
+}
+
+// 低语：拾光里的选合集面板（自包含；source_message_id 存 null，因拾光消息无真实行 id）
+function CVCollectionPicker({ pending, convUuid, toast, onClose, onDone }) {
+  const [cols, setCols] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const n = pending.items.length;
+  const convId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(convUuid || "") ? convUuid : null;
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      const { data, error } = await supabase.from("favorite_collections_cheng")
+        .select("id,name").order("created_at", { ascending: false });
+      if (cancel) return;
+      if (error) toast("加载合集失败：" + error.message); else setCols(data || []);
+      setLoading(false);
+    })();
+    return () => { cancel = true; };
+  }, [toast]);
+
+  const saveInto = async (collectionId) => {
+    if (saving) return; setSaving(true);
+    const rows = pending.items.map(it => ({
+      collection_id: collectionId, sender: it.sender, content: it.content,
+      source_conversation_id: convId, source_message_id: null,
+      original_created_at: it.original_created_at || null,
+    }));
+    const { error } = await supabase.from("favorites_cheng").insert(rows);
+    setSaving(false);
+    if (error) { toast("收藏失败：" + error.message); return; }
+    toast(n > 1 ? `已收藏故事（${n} 段）` : "已收藏到低语"); onDone();
+  };
+  const createAndSave = async () => {
+    const nm = newName.trim(); if (!nm || saving) return; setSaving(true);
+    const { data, error } = await supabase.from("favorite_collections_cheng")
+      .insert({ name: nm }).select("id").single();
+    if (error || !data) { setSaving(false); toast("建合集失败：" + (error?.message || "")); return; }
+    setSaving(false); saveInto(data.id);
+  };
+
+  const inputStyle = { flex: 1, background: "transparent", border: "none", borderBottom: "1px solid var(--border)", padding: "7px 0", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "inherit" };
+  const pinkBtn = (on) => ({ background: "#e0738a", border: "none", color: "#fff", cursor: "pointer", fontSize: 12, padding: "7px 12px", borderRadius: 8, opacity: on ? 1 : 0.45 });
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, zIndex: 1100, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 430, maxHeight: "80vh", overflowY: "auto", background: "var(--bg-page)", border: "1px solid var(--border)", borderRadius: "14px 14px 0 0", padding: "20px 22px 30px", color: "var(--text-primary)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, fontSize: 15 }}>
+          <span>{n > 1 ? `收藏故事 · ${n} 段` : "收藏到低语"}</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer", fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+          <input type="text" placeholder="新建合集…" value={newName} onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") createAndSave(); }} style={inputStyle} />
+          <button disabled={!newName.trim() || saving} onClick={createAndSave} style={pinkBtn(!!newName.trim() && !saving)}>建并存</button>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>选个合集</div>
+        {loading ? <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>加载中…</div>
+          : cols.length === 0 ? <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>还没有合集，上面新建一个吧</div>
+          : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {cols.map(c => <button key={c.id} disabled={saving} onClick={() => saveInto(c.id)}
+                style={{ textAlign: "left", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 14px", color: "var(--text-primary)", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>{c.name}</button>)}
+            </div>}
+      </div>
+    </div>
+  );
 }
 
 export default function ChatViewer({ onBack }) {
@@ -480,6 +566,43 @@ export default function ChatViewer({ onBack }) {
   const [vpsMatchCounts, setVpsMatchCounts] = useState({});
   const longPressRef = useRef(null);
   const searchTimerRef = useRef(null);
+
+  // ── 低语收藏（把消息文字快照存进 supabase favorites_cheng；跟上面 localStorage 星标整段对话是两回事）──
+  const [diyuPending, setDiyuPending] = useState(null); // { items:[{sender,content,original_created_at}], isStory }
+  const [selMode, setSelMode] = useState(false);        // 故事多选模式
+  const [selAnchor, setSelAnchor] = useState(null);     // 首尾框选起点 m.uuid（高亮用）
+  const selAnchorRef = useRef(null);                    // 同起点，用 ref 读避免闭包旧值
+  const [selIds, setSelIds] = useState(() => new Set());// 选中的 m.uuid
+  const [toast, setToast] = useState(null);
+  const cvToast = useCallback((msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); }, []);
+  const isUuid = (s) => typeof s === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
+  const openDiyu = useCallback((payload) => setDiyuPending({ items: [payload], isStory: false }), []);
+  const enterSel = useCallback(() => { selAnchorRef.current = null; setSelMode(true); setSelAnchor(null); setSelIds(new Set()); }, []);
+  const exitSel = useCallback(() => { selAnchorRef.current = null; setSelMode(false); setSelAnchor(null); setSelIds(new Set()); }, []);
+  const toggleSel = useCallback((uuid) => {
+    const anchor = selAnchorRef.current;
+    if (anchor == null) { selAnchorRef.current = uuid; setSelAnchor(uuid); setSelIds(new Set([uuid])); return; }
+    setSelIds(prev => {
+      const next = new Set(prev);
+      if (next.has(uuid) && uuid !== anchor) { next.delete(uuid); return next; }
+      const order = (currentConv?.messages || []).map(m => m.uuid);
+      const ai = order.indexOf(anchor);
+      const bi = order.indexOf(uuid);
+      if (ai === -1 || bi === -1) { next.add(uuid); return next; }
+      const [lo, hi] = ai < bi ? [ai, bi] : [bi, ai];
+      for (let k = lo; k <= hi; k++) next.add(order[k]);
+      return next;
+    });
+  }, [currentConv]);
+  const diyuFromSel = useCallback(() => {
+    const items = (currentConv?.messages || [])
+      .filter(m => selIds.has(m.uuid))
+      .map(m => ({ sender: getSender(m), content: getMsgText(m) || "", original_created_at: m.created_at || null }))
+      .filter(x => x.content.trim());
+    if (!items.length) { cvToast("没选到可收藏的内容"); return; }
+    setDiyuPending({ items, isStory: items.length > 1 });
+  }, [currentConv, selIds, cvToast]);
 
   const saveFavorites = (v) => { setFavorites(v); localStorage.setItem("cv_favorites", JSON.stringify(v)); };
   const saveRenames = (v) => { setRenames(v); localStorage.setItem("cv_renames", JSON.stringify(v)); };
@@ -1137,7 +1260,8 @@ export default function ChatViewer({ onBack }) {
               const nextSender = idx < arr.length - 1 ? getSender(arr[idx + 1]) : null;
               const showSender = getSender(m) !== prevSender;
               const showTime = getSender(m) !== nextSender;
-              return <Message key={m.uuid || idx} m={m} searchQuery={query} id={`msg-${idx}`} idx={idx} showSender={showSender} showTime={showTime} />;
+              return <Message key={m.uuid || idx} m={m} searchQuery={query} id={`msg-${idx}`} idx={idx} showSender={showSender} showTime={showTime}
+                onFav={openDiyu} onStartSel={enterSel} selMode={selMode} selected={selIds.has(m.uuid)} onToggleSel={toggleSel} />;
             })
           )}
         </div>
@@ -1276,6 +1400,21 @@ export default function ChatViewer({ onBack }) {
       </div>
       {floatingImport}
       {ctxMenu}
+      {toast && (
+        <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", zIndex: 1200, background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 16px", fontSize: 13, color: "var(--text-primary)", boxShadow: "0 4px 16px rgba(0,0,0,.18)" }}>{toast}</div>
+      )}
+      {selMode && !diyuPending && (
+        <div style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: "calc(16px + env(safe-area-inset-bottom,0px))", zIndex: 1050, display: "flex", alignItems: "center", gap: 10, width: "min(92%,430px)", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, padding: "10px 14px", boxShadow: "0 6px 24px rgba(0,0,0,0.18)", color: "var(--text-primary)", fontSize: 13 }}>
+          <span>{selIds.size ? `已选 ${selIds.size} 条` : "点第一条和最后一条"}</span>
+          <div style={{ flex: 1 }} />
+          <button onClick={exitSel} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer", fontSize: 13, padding: "6px 10px" }}>取消</button>
+          <button disabled={!selIds.size} onClick={diyuFromSel} style={{ background: "#e0738a", border: "none", color: "#fff", cursor: "pointer", fontSize: 13, padding: "7px 14px", borderRadius: 8, opacity: !selIds.size ? 0.45 : 1 }}>收藏为故事</button>
+        </div>
+      )}
+      {diyuPending && (
+        <CVCollectionPicker pending={diyuPending} convUuid={currentConv?.uuid} toast={cvToast}
+          onClose={() => setDiyuPending(null)} onDone={() => { setDiyuPending(null); exitSel(); }} />
+      )}
       <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }}
         onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); }} />
     </div>

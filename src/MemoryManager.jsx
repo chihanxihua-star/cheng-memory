@@ -75,6 +75,7 @@ const TABS = [
   { key: "console", label: "控制台" },
   { key: "viewer", label: "拾光" },
   { key: "memograph", label: "流年" },
+  { key: "diyu", label: "低语" },
 ];
 
 const PANEL_NAME = Object.fromEntries(TABS.map(t => [t.key, t.label]));
@@ -3248,6 +3249,256 @@ function PasswordGate({ children }) {
 }
 
 // ════════════════════════════════════════════════════════════
+//  低语板块：收藏夹（合集 = 命名容器；收藏 = 消息文字快照）
+// ════════════════════════════════════════════════════════════
+const DIYU_SENDER_NAME = { human: "小茉莉", user: "小茉莉", assistant: "澄" };
+const DIYU_PAGE = 50;
+function favSenderName(s) { return DIYU_SENDER_NAME[s] || (s || ""); }
+function fmtDiyuTime(iso) {
+  try {
+    const d = new Date(iso); const z = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}/${z(d.getMonth() + 1)}/${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`;
+  } catch { return ""; }
+}
+const diyuBtn = { background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", padding: "8px 14px", fontSize: 12, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" };
+// 思考面板那种素文字按钮 + 扁平列表行
+const diyuTextBtn = { background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "var(--text-tertiary)", letterSpacing: "0.1em", whiteSpace: "nowrap" };
+const diyuRow = { display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", borderBottom: "1px solid var(--border)", padding: "14px 2px", cursor: "pointer", fontFamily: "inherit", textAlign: "left" };
+const diyuMini = { background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 11, cursor: "pointer", fontFamily: "inherit", padding: "2px 4px" };
+const diyuTag = { fontSize: 11, color: "var(--text-secondary)", background: "rgba(128,128,128,0.12)", border: "1px solid var(--border)", borderRadius: 10, padding: "2px 8px" };
+
+function DiyuEmpty({ text }) {
+  return <div style={{ textAlign: "center", padding: "48px 0", color: "var(--text-tertiary)", fontSize: 13 }}>{text}</div>;
+}
+
+function DiyuFavCard({ fav, onEdit, onDelete }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, borderLeft: "2px solid var(--border)", padding: "2px 0 16px 14px", marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 11, color: fav.sender === "assistant" ? "var(--accent)" : "var(--text-secondary)" }}>{favSenderName(fav.sender)}</span>
+        {fav.original_created_at && <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{fmtDiyuTime(fav.original_created_at)}</span>}
+        <div style={{ flex: 1 }} />
+        <button onClick={onEdit} style={diyuMini}>标签/备注</button>
+        <button onClick={onDelete} style={{ ...diyuMini, color: "#d98a8a" }}>删</button>
+      </div>
+      <div style={{ fontSize: 14, color: "var(--text-primary)", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "Georgia, 'Noto Serif SC', serif" }}>{fav.content}</div>
+      {fav.tags && fav.tags.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{fav.tags.map(t => <span key={t} style={diyuTag}>{t}</span>)}</div>
+      )}
+      {fav.note && <div style={{ fontSize: 12, color: "var(--text-tertiary)", fontStyle: "italic" }}>{fav.note}</div>}
+    </div>
+  );
+}
+
+function DiyuFavEditor({ fav, onClose, onSaved, onError }) {
+  const [tags, setTags] = useState((fav.tags || []).join(", "));
+  const [note, setNote] = useState(fav.note || "");
+  const save = async () => {
+    const patch = { tags: tags.split(",").map(s => s.trim()).filter(Boolean), note: note.trim() || null };
+    try { await sbPatch("favorites_cheng", fav.id, patch); onSaved(patch); }
+    catch (e) { onError(e.message); }
+  };
+  return (
+    <Drawer title="标签 / 备注" onClose={onClose} footer={<button onClick={save} style={{ ...diyuBtn, width: "100%" }}>保存</button>}>
+      <div style={{ marginBottom: 14 }}>
+        <label style={labelStyle}>标签（逗号分隔）</label>
+        <input style={inputStyle} value={tags} onChange={e => setTags(e.target.value)} placeholder="故事, 甜, 雪夜" />
+      </div>
+      <div>
+        <label style={labelStyle}>备注</label>
+        <textarea rows={3} style={inputStyle} value={note} onChange={e => setNote(e.target.value)} placeholder="给这条收藏写点什么…" />
+      </div>
+    </Drawer>
+  );
+}
+
+// 全局搜索：跨合集按 内容/标签 找收藏
+function DiyuSearch({ q, onError }) {
+  const [rows, setRows] = useState([]);
+  const [cols, setCols] = useState({});
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const enc = encodeURIComponent(`*${q}*`);
+        const r = await sbGet("favorites_cheng", `&or=(content.ilike.${enc},tags.cs.{${encodeURIComponent(q)}})&order=created_at.desc&limit=30`);
+        const colList = await sbGet("favorite_collections_cheng", "&select=id,name");
+        if (cancel) return;
+        const cm = {}; for (const c of colList) cm[c.id] = c.name;
+        setRows(r); setCols(cm);
+      } catch (e) { if (!cancel) onError(e.message); } finally { if (!cancel) setLoading(false); }
+    })();
+    return () => { cancel = true; };
+  }, [q, onError]);
+  if (loading) return <div style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "6px 0 14px" }}>搜索中…</div>;
+  if (!rows.length) return null;
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 8 }}>匹配的收藏 {rows.length}</div>
+      {rows.map(it => (
+        <div key={it.id} style={{ display: "flex", flexDirection: "column", gap: 6, borderLeft: "2px solid var(--border)", padding: "2px 0 14px 14px", marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{favSenderName(it.sender)} · 合集「{cols[it.collection_id] || "?"}」</div>
+          <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "Georgia, 'Noto Serif SC', serif" }}>{it.content}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// 合集详情：按对话原始时间排序的收藏列表 + 分页 + 改名/删合集
+function DiyuCollection({ collection, onBack, onError }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(0);
+  const [done, setDone] = useState(false);
+  const [q, setQ] = useState("");
+  const [name, setName] = useState(collection.name);
+  const [editingName, setEditingName] = useState(false);
+  const [edit, setEdit] = useState(null);
+
+  const load = useCallback(async (pg) => {
+    setLoading(true);
+    try {
+      const rows = await sbGet("favorites_cheng",
+        `&collection_id=eq.${collection.id}&order=original_created_at.asc.nullslast,created_at.asc&offset=${pg * DIYU_PAGE}&limit=${DIYU_PAGE}`);
+      setItems(prev => pg === 0 ? rows : [...prev, ...rows]);
+      setDone(rows.length < DIYU_PAGE);
+      setPage(pg);
+    } catch (e) { onError(e.message); } finally { setLoading(false); }
+  }, [collection.id, onError]);
+
+  useEffect(() => { load(0); }, [load]);
+
+  const filtered = q.trim()
+    ? items.filter(it => (it.content || "").includes(q.trim()) || (it.tags || []).some(t => t.includes(q.trim())))
+    : items;
+
+  const renameCollection = async () => {
+    const n = name.trim();
+    if (!n || n === collection.name) { setName(collection.name); setEditingName(false); return; }
+    try { await sbPatch("favorite_collections_cheng", collection.id, { name: n }); collection.name = n; setEditingName(false); }
+    catch (e) { onError(e.message); }
+  };
+  const delCollection = async () => {
+    if (!window.confirm(`删除合集「${collection.name}」？里面的收藏会一起删掉。`)) return;
+    try { await sbDelete("favorite_collections_cheng", collection.id); onBack(); }
+    catch (e) { onError(e.message); }
+  };
+  const delFav = async (id) => {
+    try { await sbDelete("favorites_cheng", id); setItems(arr => arr.filter(x => x.id !== id)); }
+    catch (e) { onError(e.message); }
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
+        <button onClick={onBack} style={diyuTextBtn}>← 合集</button>
+        {editingName
+          ? <input autoFocus value={name} onChange={e => setName(e.target.value)} onBlur={renameCollection}
+              onKeyDown={e => { if (e.key === "Enter") renameCollection(); }} style={{ ...underlineStyle, flex: 1 }} />
+          : <span onClick={() => setEditingName(true)} style={{ flex: 1, fontSize: 15, color: "var(--text-primary)", cursor: "text", fontFamily: "Georgia, 'Noto Serif SC', serif", letterSpacing: "0.04em" }}>{collection.name}</span>}
+        <button onClick={() => load(0)} style={diyuTextBtn}>{loading ? "…" : "刷新"}</button>
+        <button onClick={delCollection} style={{ ...diyuTextBtn, color: "#d98a8a" }}>删</button>
+      </div>
+      <div style={{ marginBottom: 16, position: "relative" }}>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="在这个合集里搜…" style={{ ...underlineStyle, fontSize: 13, padding: "6px 24px 6px 0" }} />
+        {q && (
+          <button onClick={() => setQ("")} aria-label="清空" style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 18, lineHeight: 1, cursor: "pointer", padding: "4px 6px", fontFamily: "inherit" }}>×</button>
+        )}
+      </div>
+      {filtered.length === 0 && !loading ? <DiyuEmpty text={q.trim() ? "没找到" : "空空的"} />
+        : filtered.map(it => <DiyuFavCard key={it.id} fav={it} onEdit={() => setEdit(it)} onDelete={() => delFav(it.id)} />)}
+      {!done && !q.trim() && items.length > 0 && (
+        <button onClick={() => load(page + 1)} style={{ ...diyuTextBtn, display: "block", margin: "14px auto 0" }}>{loading ? "…" : "加载更多"}</button>
+      )}
+      {edit && <DiyuFavEditor fav={edit} onClose={() => setEdit(null)} onError={onError}
+        onSaved={(patch) => { setItems(arr => arr.map(x => x.id === edit.id ? { ...x, ...patch } : x)); setEdit(null); }} />}
+    </div>
+  );
+}
+
+function DiyuPanel() {
+  const [collections, setCollections] = useState([]);
+  const [counts, setCounts] = useState({});
+  const [active, setActive] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [q, setQ] = useState("");
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const loadCollections = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const [cols, favIds] = await Promise.all([
+        sbGet("favorite_collections_cheng", "&order=created_at.desc"),
+        sbGet("favorites_cheng", "&select=collection_id"),
+      ]);
+      const c = {};
+      for (const f of favIds) c[f.collection_id] = (c[f.collection_id] || 0) + 1;
+      setCollections(cols); setCounts(c);
+    } catch (e) { setError(e.message); } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { if (!active) loadCollections(); }, [active, loadCollections]);
+
+  const createCollection = async () => {
+    const nm = newName.trim(); if (!nm) return;
+    try { await sbPost("favorite_collections_cheng", { name: nm }); setNewName(""); setCreating(false); loadCollections(); }
+    catch (e) { setError(e.message); }
+  };
+
+  if (active) return <DiyuCollection collection={active} onBack={() => setActive(null)} onError={setError} />;
+
+  const shown = q.trim() ? collections.filter(c => c.name.includes(q.trim())) : collections;
+  return (
+    <div>
+      {/* 顶部：统计 + 新建 / 刷新（思考面板那种素文字按钮） */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-tertiary)" }}>共 {collections.length} 个合集</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <button onClick={() => setCreating(v => !v)} style={diyuTextBtn}>{creating ? "收起" : "+ 新建"}</button>
+          <button onClick={loadCollections} style={diyuTextBtn}>{loading ? "…" : "刷新"}</button>
+        </div>
+      </div>
+
+      {creating && (
+        <div style={{ display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-end" }}>
+          <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") createCollection(); }} placeholder="新合集名字…" style={{ ...underlineStyle, flex: 1, fontSize: 14 }} />
+          <button onClick={createCollection} style={diyuTextBtn}>建</button>
+        </div>
+      )}
+
+      {/* 搜索：下划线 + 清空 */}
+      <div style={{ marginBottom: 16, position: "relative" }}>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="搜合集名 / 收藏内容…" style={{ ...underlineStyle, fontSize: 13, padding: "6px 24px 6px 0" }} />
+        {q && (
+          <button onClick={() => setQ("")} aria-label="清空" style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 18, lineHeight: 1, cursor: "pointer", padding: "4px 6px", fontFamily: "inherit" }}>×</button>
+        )}
+      </div>
+
+      <ErrorBar error={error} onClose={() => setError(null)} />
+      {q.trim() && <DiyuSearch q={q.trim()} onError={setError} />}
+      {loading ? <DiyuEmpty text="加载中…" />
+        : shown.length === 0 ? <DiyuEmpty text={q.trim() ? "没有同名合集" : "还没有合集 — 去聊天或拾光里 ♥ 收藏澄的话吧"} />
+        : (
+          <div>
+            {shown.map(c => (
+              <button key={c.id} onClick={() => setActive(c)} style={diyuRow}>
+                <span style={{ fontSize: 15, color: "var(--text-primary)", letterSpacing: "0.04em", fontFamily: "Georgia, 'Noto Serif SC', serif" }}>{c.name}</span>
+                <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{counts[c.id] || 0} 条</span>
+              </button>
+            ))}
+          </div>
+        )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
 //  主应用
 // ════════════════════════════════════════════════════════════
 function HomePanel({ onPick }) {
@@ -3258,6 +3509,7 @@ function HomePanel({ onPick }) {
     { key: "milestones", icon: "🌱", name: "逢春", sub: "时间轴", span: 1 },
     { key: "board", icon: "🎧", name: "回音", sub: "留言板", span: 1 },
     { key: "viewer", icon: "🎞️", name: "拾光", sub: "对话回溯", span: 1 },
+    { key: "diyu", icon: "🖼", name: "低语", sub: "珍藏的话", span: 1 },
     { key: "console", icon: "🖤", name: "控制台", sub: "工具箱", span: 1 },
   ];
   return (
@@ -3701,6 +3953,7 @@ export default function App() {
           { key: "diary", Comp: DiaryPanel },
           { key: "milestones", Comp: MilestonesPanel },
           { key: "board", Comp: BoardPanel },
+          { key: "diyu", Comp: DiyuPanel },
           { key: "console", Comp: ConsolePanel },
         ].map(({ key, Comp }) => (
           <div key={key} style={{ display: tab === key ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column" }}>

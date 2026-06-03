@@ -433,6 +433,27 @@ const CSS = `
 }
 .cp-action-btn:hover { background: var(--bg-sidebar-hover); }
 .cp-action-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cp-fav-btn:hover svg { stroke: #e0738a; }
+/* 低语：故事多选选中态 */
+.cp-msg-wrap.cp-selectable .cp-msg-bubble { cursor: pointer; }
+.cp-msg-wrap.cp-selected .cp-msg-bubble { outline: 2px solid #e0738a; outline-offset: 1px; }
+.cp-sel-mark { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-right: 6px; border-radius: 50%; border: 1.5px solid #e0738a; color: #e0738a; font-size: 11px; vertical-align: middle; }
+.cp-select-bar {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 950; display: flex; align-items: center; gap: 10px; width: min(92%, 430px);
+  background: var(--bg-panel); border: 1px solid var(--border-card); border-radius: 12px;
+  padding: 10px 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); color: var(--text-primary); font-size: 13px;
+}
+.cp-select-cancel { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 13px; padding: 6px 10px; }
+.cp-select-fav { background: #e0738a; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 7px 14px; border-radius: 8px; }
+.cp-select-fav:disabled { opacity: 0.45; cursor: default; }
+/* 低语：选合集面板 */
+.cp-fav-collist { display: flex; flex-direction: column; gap: 8px; }
+.cp-fav-colrow { text-align: left; background: var(--bg-bubble-bot); border: 1px solid var(--border-card); border-radius: 10px; padding: 12px 14px; color: var(--text-primary); font-size: 13px; cursor: pointer; font-family: inherit; }
+.cp-fav-colrow:hover { border-color: #e0738a; }
+.cp-fav-colrow:disabled { opacity: 0.5; cursor: default; }
+.cp-fav-new { background: #e0738a; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 7px 12px; border-radius: 8px; white-space: nowrap; }
+.cp-fav-new:disabled { opacity: 0.45; cursor: default; }
 .cp-edit-area { width: 100%; background: var(--bg-input); border: 1px solid var(--border-input-focus); border-radius: 6px; padding: 7px 9px; color: var(--text-primary); font-size: 13px; outline: none; resize: vertical; min-height: 60px; margin-top: 6px; }
 .cp-edit-actions { display: flex; gap: 6px; margin-top: 6px; }
 .cp-edit-save, .cp-edit-cancel { padding: 6px 14px; border: none; border-radius: 5px; font-size: 12px; cursor: pointer; }
@@ -928,6 +949,12 @@ export default function ChatPanel({ onBack }) {
 
   const [convId, setConvId] = useState(() => localStorage.getItem(CONV_KEY) || null);
   const [messages, setMessages] = useState([]); // 已落库消息
+  // 低语收藏：favPending = 待存的收藏（单条或故事多段），非空时弹合集面板
+  const [favPending, setFavPending] = useState(null); // { items: [{sender,content,source_message_id,original_created_at}], isStory }
+  const [selectMode, setSelectMode] = useState(false); // 故事多选模式
+  const [selectAnchor, setSelectAnchor] = useState(null); // 首尾框选的起点 item.id（用于高亮起点）
+  const selectAnchorRef = useRef(null); // 同一个起点，用 ref 读，避免 toggleSelect 闭包取到旧值
+  const [selectedIds, setSelectedIds] = useState(() => new Set()); // 选中的气泡 item.id
   const [input, setInput] = useState("");
   const [images, setImages] = useState([]); // dataURL 数组
   const [streamSnap, setStreamSnap] = useState(null); // 流式快照（null/对象）
@@ -1940,6 +1967,53 @@ export default function ChatPanel({ onBack }) {
     return items;
   }, [messages]);
 
+  /* ─────── 低语收藏 ─────── */
+  // 单条：MessageBubble 把算好的 payload 传上来 → 弹合集面板
+  const openFav = useCallback((payload) => {
+    setFavPending({ items: [payload], isStory: false });
+  }, []);
+  // 进入故事多选模式（不预选任何条）：用户随后点第一条=起点、第二条=终点，中间自动填
+  const enterSelect = useCallback(() => {
+    selectAnchorRef.current = null;
+    setSelectMode(true); setSelectAnchor(null); setSelectedIds(new Set());
+  }, []);
+  const exitSelect = useCallback(() => {
+    selectAnchorRef.current = null;
+    setSelectMode(false); setSelectAnchor(null); setSelectedIds(new Set());
+  }, []);
+  // 首尾框选：第一次点=起点；之后点未选的→选中“起点→此处”连续段（含中间澄的回复，故事才完整）；点已选的中间条→剔除
+  const toggleSelect = useCallback((id) => {
+    const anchor = selectAnchorRef.current;
+    if (anchor == null) { // 第一次点 = 起点
+      selectAnchorRef.current = id; setSelectAnchor(id); setSelectedIds(new Set([id])); return;
+    }
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id) && id !== anchor) { next.delete(id); return next; }
+      const order = renderItems.filter(it => it.kind === "msg").map(it => it.id);
+      const ai = order.indexOf(anchor);
+      const bi = order.indexOf(id);
+      if (ai === -1 || bi === -1) { next.add(id); return next; }
+      const [lo, hi] = ai < bi ? [ai, bi] : [bi, ai];
+      for (let k = lo; k <= hi; k++) next.add(order[k]);
+      return next;
+    });
+  }, [renderItems]);
+  // 把选中的气泡打包成待存收藏（按对话原始顺序，即 renderItems 顺序）
+  const favSelected = useCallback(() => {
+    const items = renderItems
+      .filter(it => it.kind === "msg" && selectedIds.has(it.id) && !String(it.msg.id).startsWith("local-"))
+      .map(it => ({
+        sender: it.msg.role,
+        content: it.msg.role === "assistant" ? (extractThink(it.partText).content || "") : (it.partText || ""),
+        source_message_id: String(it.msg.id),
+        original_created_at: it.msg.created_at || null,
+      }))
+      .filter(x => x.content.trim());
+    if (!items.length) { showToast("没选到可收藏的内容"); return; }
+    setFavPending({ items, isStory: items.length > 1 });
+  }, [renderItems, selectedIds, showToast]);
+
   /* ─────── 自动滚动 ─────── */
   useEffect(() => {
     if (isNearBottom()) scrollToBottom();
@@ -2070,6 +2144,11 @@ export default function ChatPanel({ onBack }) {
               onEdit={editMessage}
               onRegen={regenerateMessage}
               onDelete={deleteMessage}
+              onFav={openFav}
+              onStartSelect={enterSelect}
+              selectMode={selectMode}
+              selected={selectedIds.has(it.id)}
+              onToggleSelect={toggleSelect}
             />
           );
         })}
@@ -2167,6 +2246,28 @@ export default function ChatPanel({ onBack }) {
         </>
       )}
       {opLogOpen && <OpLogPanel log={opLog} onClose={() => setOpLogOpen(false)} />}
+
+      {/* 低语：故事多选浮条（合集面板打开时隐藏，避免盖在弹层上） */}
+      {selectMode && !favPending && (
+        <div className="cp-select-bar">
+          <span>{selectedIds.size ? `已选 ${selectedIds.size} 条` : "点第一条和最后一条"}</span>
+          <div style={{ flex: 1 }} />
+          <button className="cp-select-cancel" onClick={exitSelect}>取消</button>
+          <button className="cp-select-fav" disabled={!selectedIds.size}
+            onClick={() => favSelected()}>收藏为故事</button>
+        </div>
+      )}
+
+      {/* 低语：选合集面板（抖音式：选已有 / 新建 → 存入快照） */}
+      {favPending && (
+        <CollectionPicker
+          pending={favPending}
+          convId={convId}
+          showToast={showToast}
+          onClose={() => setFavPending(null)}
+          onDone={() => { setFavPending(null); exitSelect(); }}
+        />
+      )}
       {styleThinkPanelOpen && <StyleThinkPanel
         styleInstruction={styleInstruction}
         styleEnabled={styleEnabled}
@@ -2887,7 +2988,83 @@ function SendStopButton({ isGenerating, hasContent, bufferCount, onSend, onStop,
   );
 }
 
-function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit, onRegen, onDelete }) {
+// 低语：选合集面板。pending.items = 待存的收藏（单条 1 个 / 故事多个，已按对话顺序）。
+// 抖音式：选已有合集 / 新建一个 → 把文字快照写进 favorites_cheng。
+function CollectionPicker({ pending, convId, showToast, onClose, onDone }) {
+  const [cols, setCols] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const n = pending.items.length;
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      const { data, error } = await supabase.from("favorite_collections_cheng")
+        .select("id,name").order("created_at", { ascending: false });
+      if (cancel) return;
+      if (error) showToast("加载合集失败：" + error.message);
+      else setCols(data || []);
+      setLoading(false);
+    })();
+    return () => { cancel = true; };
+  }, [showToast]);
+
+  const saveInto = async (collectionId) => {
+    if (saving) return;
+    setSaving(true);
+    const rows = pending.items.map(it => ({
+      collection_id: collectionId,
+      sender: it.sender,
+      content: it.content,
+      source_conversation_id: convId || null,
+      source_message_id: it.source_message_id || null,
+      original_created_at: it.original_created_at || null,
+    }));
+    const { error } = await supabase.from("favorites_cheng").insert(rows);
+    setSaving(false);
+    if (error) { showToast("收藏失败：" + error.message); return; }
+    showToast(n > 1 ? `已收藏故事（${n} 段）` : "已收藏到低语");
+    onDone();
+  };
+
+  const createAndSave = async () => {
+    const nm = newName.trim();
+    if (!nm || saving) return;
+    setSaving(true);
+    const { data, error } = await supabase.from("favorite_collections_cheng")
+      .insert({ name: nm }).select("id").single();
+    if (error || !data) { setSaving(false); showToast("建合集失败：" + (error?.message || "")); return; }
+    setSaving(false);
+    saveInto(data.id);
+  };
+
+  return (
+    <div className="cp-overlay bottom" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="cp-modal bottom" onClick={e => e.stopPropagation()}>
+        <h3>{n > 1 ? `收藏故事 · ${n} 段` : "收藏到低语"} <button onClick={onClose}>✕</button></h3>
+        <div className="cp-row" style={{ marginBottom: 16 }}>
+          <input type="text" placeholder="新建合集…" value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") createAndSave(); }} />
+          <button className="cp-fav-new" disabled={!newName.trim() || saving} onClick={createAndSave}>建并存</button>
+        </div>
+        <div className="cp-section-title">选个合集</div>
+        {loading ? <div className="cp-hint">加载中…</div>
+          : cols.length === 0 ? <div className="cp-hint">还没有合集，上面新建一个吧</div>
+          : (
+            <div className="cp-fav-collist">
+              {cols.map(c => (
+                <button key={c.id} className="cp-fav-colrow" disabled={saving} onClick={() => saveInto(c.id)}>{c.name}</button>
+              ))}
+            </div>
+          )}
+      </div>
+    </div>
+  );
+}
+
+function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit, onRegen, onDelete, onFav, onStartSelect, selectMode, selected, onToggleSelect }) {
   const { msg, partText, isHead, isTail, continuation, turnTotal, turnDelta } = item;
   const role = msg.role;
   const [showActions, setShowActions] = useState(false);
@@ -2896,9 +3073,19 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
   const [showCacheDetail, setShowCacheDetail] = useState(false);
 
   const isUser = role === "user";
-  const wrap = "cp-msg-wrap " + role + (continuation ? " continuation" : "") + (showActions ? " show-actions" : "");
+  const realId = msg.id && !String(msg.id).startsWith("local-");
+  // 收藏用的可见正文：澄的去掉 <think> 块，你的原样
+  const favText = isUser ? (partText || "") : (extractThink(partText).content || "");
+  const wrap = "cp-msg-wrap " + role + (continuation ? " continuation" : "")
+    + (showActions ? " show-actions" : "")
+    + (selectMode ? " cp-selectable" : "") + (selected ? " cp-selected" : "");
 
   const ts = msg.created_at ? new Date(msg.created_at) : new Date();
+
+  const doFav = (e) => {
+    e.stopPropagation();
+    onFav?.({ sender: role, content: favText, source_message_id: String(msg.id), original_created_at: msg.created_at || null });
+  };
 
   const startEdit = () => { setEditing(true); setEditText(partText); };
   const saveEdit = () => {
@@ -2930,8 +3117,10 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
         )}
         <div className={"cp-msg-bubble " + role} onClick={(e) => {
           if (e.target.tagName === "IMG" || e.target.tagName === "A") return;
+          if (selectMode) { if (realId) onToggleSelect?.(item.id); return; }
           setShowActions(s => !s);
         }}>
+          {selectMode && <span className="cp-sel-mark">{selected ? "✓" : ""}</span>}
           {isHead && msg.images && msg.images.length > 0 && (
             <div className="cp-msg-images">
               {msg.images.map((src, i) => (
@@ -2989,6 +3178,16 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
                 </>);
               })()}
             </span>
+            {realId && favText.trim() && (
+              <button className="cp-action-btn cp-fav-btn" title="收藏到低语" onClick={doFav}>
+                <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              </button>
+            )}
+            {realId && (
+              <button className="cp-action-btn" title="选段收藏为故事" onClick={(e) => { e.stopPropagation(); onStartSelect?.(item.id); }}>
+                <svg viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              </button>
+            )}
             <button className="cp-action-btn" title="复制" onClick={(e) => { e.stopPropagation(); onCopy(partText || ""); }}>
               <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
