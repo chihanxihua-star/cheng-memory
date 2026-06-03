@@ -1,19 +1,18 @@
 /*
- * DeskPet —— 澄的桌宠（clawd 小螃蟹）。照 clawd-on-desk 原版行为做。
+ * DeskPet —— 澄的桌宠（clawd 小螃蟹）。行为照 clawd-on-desk 原版，外加自定义「沿页面四边巡逻」。
  *
  * 美术：clawd 官方 SVG（public/pet/*.svg，见 ART-LICENSE.txt 署名）。
  *   ⚠️ 仅本人个人·非商用·密码门内使用，勿公开宣传/商用。SVG 自带 CSS 动画、矢量、体积小。
  * 机制：澄的活动从 ChatPanel 现成 WS 信号推导；睡眠/醒靠"用户鼠标静止/活动"计时。纯前端、不碰后端。
  *
- * 原版逻辑（照 tick.js / state.js / theme.json）：
- *  · 状态(澄): idle/thinking/typing/building/carrying/juggling/conducting/error/notification/sweeping/happy
- *      happy=4s, error=5s, notification=5s, sweeping=5.5s 最短显示后自动回落
- *  · 睡眠(鼠标静止计时，动一下重置)：20s→随机播一次 idle动作(张望/冒泡/看书) · 60s→哈欠(3s)→犯困 · 10min→深睡
- *      鼠标一动 → 醒(wake 1.5s)→idle
- *  · 点击彩蛋(仅 idle)：戳2~3下→50%不耐烦/否则朝戳侧歪头(2.5s)；连戳4下+→蹦跳(3.5s)；拖→被拎起
- *  · 极简模式：拖到屏幕边→贴边藏；hover→探头招手；按澄状态变(干活/完成/睡/提醒)。
- *      crabwalk = 进极简时螃蟹横着挪到边的「进场螃蟹步」(照 doc「右键进入时的螃蟹步」)，非随机溜达。
- *  · 眼球追踪未做：平面 <img> 无法追鼠标(原版靠分层 SVG + JS)，与"直接用原版图"二选一。
+ * 原版行为（照 tick.js/state.js/theme.json）：
+ *  · 状态(澄)：idle/thinking/typing/building/carrying/juggling/conducting/error/notification/sweeping/happy
+ *      happy=4s error=5s notification=5s sweeping=5.5s 最短显示
+ *  · 睡眠(鼠标静止)：20s随机播一次idle动作(张望/冒泡/看书)·60s哈欠(3s)→犯困·10min深睡；鼠标动→醒(wake 1.5s)
+ *  · 点击彩蛋(仅idle)：戳2~3下→不耐烦/歪头(2.5s)；连戳4下→蹦跳(3.5s)；拖→被拎起
+ *  · 极简：拖到屏幕边→贴边藏(藏半身~原版 offsetRatio0.486)；探头→举太阳花打招呼(mini-happy)；
+ *      进场→正面左右扭(crabwalk)→贴边；点一下探头/再点收回；手机点叫醒。
+ * 自定义(clawd 无)：**沿四边佛系巡逻**——偶尔沿当前边走一段，到角拐到相邻边(左→下那种)，竖边爬墙。
  *
  * 接入：<DeskPet signals={{ isGenerating, streamSnap, ccStatus }} />
  */
@@ -49,10 +48,13 @@ const TOOL_STATE = {
 const ONESHOT_DUR = { happy: 4000, error: 5000, notification: 5000, sweeping: 5500 };
 const ONESHOT = new Set(Object.keys(ONESHOT_DUR));
 const WORKING = new Set(["thinking", "typing", "building", "carrying", "juggling", "conducting", "sweeping"]);
+const EDGES = new Set(["left", "right", "top", "bottom"]);
 
 const MOUSE_IDLE = 20_000, MOUSE_SLEEP = 60_000, YAWN_MS = 3000, DEEP_SLEEP = 600_000, WAKE_MS = 1500;
 const SIZE = 150;
-const SNAP = 26, TUCK = 40, MINI_SCALE = 1.25, ENTER_MS = 520, CRABWALK_MS = 850;
+const SNAP = 26, TUCK = 50, PEEK = 33, MINI_SCALE = 1, ENTER_MS = 520, CRABWALK_MS = 850;
+// 佛系巡逻：隔久才走、走得慢
+const PATROL_EVERY = 12000, PATROL_CHANCE = 0.55, PATROL_SPEED = 0.085, PATROL_MIN = 70, PATROL_RANGE = 110;
 const CLICK_WINDOW = 400;
 const POS_KEY = "deskpet-pos", MINI_KEY = "deskpet-mini";
 
@@ -75,10 +77,19 @@ function clampPos(x, y) {
   const W = window.innerWidth || 360, H = window.innerHeight || 640;
   return { x: Math.max(0, Math.min(W - SIZE, x)), y: Math.max(0, Math.min(H - SIZE, y)) };
 }
-function miniArt({ state, hovering, crabwalking, entering }) {
-  if (crabwalking) return "/pet/mini-crabwalk.svg";  // 进场螃蟹步
+const isVert = (e) => e === "left" || e === "right";
+// 拐角：edge 当前边，end 0=低端(竖边的上/横边的左) 1=高端 → 返回 [新边, x, y]
+function cornerTurn(edge, end, W, H) {
+  const M = W - SIZE, N = H - SIZE;
+  if (edge === "left") return end === 0 ? ["top", 0, 0] : ["bottom", 0, N];
+  if (edge === "right") return end === 0 ? ["top", M, 0] : ["bottom", M, N];
+  if (edge === "top") return end === 0 ? ["left", 0, 0] : ["right", M, 0];
+  return end === 0 ? ["left", 0, N] : ["right", M, N]; // bottom
+}
+function miniArt({ state, hovering, crabwalking, walking, entering }) {
+  if (crabwalking || walking) return "/pet/mini-crabwalk.svg";  // 进场螃蟹步 / 巡逻
   if (entering) return "/pet/mini-enter.svg";
-  if (hovering) return "/pet/mini-peek.svg";
+  if (hovering) return "/pet/mini-happy.svg";                    // 探头打招呼：^^笑眼+举太阳花(照原版图)
   if (state === "sleeping" || state === "offline") return "/pet/mini-sleep.svg";
   if (state === "dozing") return "/pet/mini-enter-sleep.svg";
   if (state === "notification" || state === "error") return "/pet/mini-alert.svg";
@@ -90,11 +101,12 @@ function miniArt({ state, hovering, crabwalking, entering }) {
 export default function DeskPet({ signals }) {
   const [state, setState] = useState("idle");
   const [mini, setMini] = useState(() => {
-    const v = localStorage.getItem(MINI_KEY); return (v === "left" || v === "right") ? v : "";
+    const v = localStorage.getItem(MINI_KEY); return EDGES.has(v) ? v : "";
   });
   const [peeking, setPeeking] = useState(false);
   const [hovering, setHovering] = useState(false);
   const [crabwalking, setCrabwalking] = useState(false);
+  const [walking, setWalking] = useState(false);
   const [entering, setEntering] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [reaction, setReaction] = useState(null);
@@ -114,34 +126,39 @@ export default function DeskPet({ signals }) {
   const oneshotStateRef = useRef(null);
   const prevGenRef = useRef(false);
   const peekTimerRef = useRef(null);
-  const enterSeqRef = useRef([]);    // 进场序列定时器
+  const enterSeqRef = useRef([]);
   const dragRef = useRef(null);
   const posRef = useRef(pos);
   const stateRef = useRef(state);
+  const miniRef = useRef(mini);
   const reactingRef = useRef(false);
   const reactTimerRef = useRef(null);
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef(null);
   const firstDirRef = useRef(null);
   const hoveringRef = useRef(false);
-  const wasPeekingRef = useRef(false);   // 本次按下「之前」是否已探头（判断点一下=招手还是收回）
+  const wasPeekingRef = useRef(false);
   const miniTapTimerRef = useRef(null);
+  const walkFlipRef = useRef(false);   // 巡逻横走朝左时镜像
+  const walkDurRef = useRef(0);        // 当前这段巡逻的滑动时长(ms)
+  const walkTimerRef = useRef(null);
   useEffect(() => { posRef.current = pos; }, [pos]);
   useEffect(() => { stateRef.current = state; }, [state]);
+  useEffect(() => { miniRef.current = mini; }, [mini]);
   useEffect(() => { hoveringRef.current = hovering; }, [hovering]);
 
+  const persistMini = useCallback((m) => { setMini(m); localStorage.setItem(MINI_KEY, m || ""); }, []);
   const setMiniPersist = useCallback((m) => {
-    setMini(m); localStorage.setItem(MINI_KEY, m || "");
+    persistMini(m);
     enterSeqRef.current.forEach(clearTimeout); enterSeqRef.current = [];
     if (m) {
-      // 进场：螃蟹步(横挪到边) → mini-enter 过场 → 贴边歇
       setCrabwalking(true); setEntering(false);
       enterSeqRef.current.push(setTimeout(() => {
         setCrabwalking(false); setEntering(true);
         enterSeqRef.current.push(setTimeout(() => setEntering(false), ENTER_MS));
       }, CRABWALK_MS));
     } else { setCrabwalking(false); setEntering(false); }
-  }, []);
+  }, [persistMini]);
   const setPosPersist = useCallback((p) => {
     setPos(p); if (p) localStorage.setItem(POS_KEY, JSON.stringify(p));
   }, []);
@@ -224,13 +241,45 @@ export default function DeskPet({ signals }) {
     return () => clearInterval(h);
   }, [signals, idleAnim]);
 
+  /* 沿四边佛系巡逻：偶尔沿当前边走一段，到角拐到相邻边 */
+  useEffect(() => {
+    if (!mini) return;
+    const id = setInterval(() => {
+      if (hovering || peeking || walking || crabwalking || entering || dragRef.current) return;
+      const st = stateRef.current;
+      if (st !== "idle" && st !== "yawning") return;
+      if (Math.random() > PATROL_CHANCE) return;
+      const W = window.innerWidth || 360, H = window.innerHeight || 640;
+      const cur = posRef.current; if (!cur) return;
+      const e = miniRef.current; const vert = isVert(e);
+      const coord = vert ? cur.y : cur.x;
+      const max = vert ? (H - SIZE) : (W - SIZE);
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      const target = coord + dir * (PATROL_MIN + Math.random() * PATROL_RANGE);
+      let ne = e, np;
+      if (target < 0 || target > max) {                       // 到角 → 拐弯
+        const [te, tx, ty] = cornerTurn(e, target < 0 ? 0 : 1, W, H);
+        ne = te; np = { x: tx, y: ty }; walkFlipRef.current = false;
+      } else {
+        np = vert ? { x: cur.x, y: target } : { x: target, y: cur.y };
+        walkFlipRef.current = (!vert && dir < 0);             // 横走朝左 → 镜像
+      }
+      const dist = Math.hypot(np.x - cur.x, np.y - cur.y);
+      if (dist < 2) return;
+      walkDurRef.current = Math.max(500, Math.round(dist / PATROL_SPEED));
+      setWalking(true);
+      if (ne !== e) persistMini(ne);
+      setPosPersist(np);
+      clearTimeout(walkTimerRef.current);
+      walkTimerRef.current = setTimeout(() => setWalking(false), walkDurRef.current);
+    }, PATROL_EVERY);
+    return () => clearInterval(id);
+  }, [mini, hovering, peeking, walking, crabwalking, entering, persistMini, setPosPersist]);
+
   const handleTap = useCallback((clientX) => {
     if (mini) {
-      // 手机没 hover：点一下贴边的它 → 探头招手；正探着头时再点 → 收回正常
-      if (wasPeekingRef.current) {
-        clearTimeout(miniTapTimerRef.current);
-        setHovering(false); setMiniPersist("");
-      } else {
+      if (wasPeekingRef.current) { clearTimeout(miniTapTimerRef.current); setHovering(false); setMiniPersist(""); }
+      else {
         setHovering(true);
         clearTimeout(miniTapTimerRef.current);
         miniTapTimerRef.current = setTimeout(() => setHovering(false), 2800);
@@ -264,14 +313,14 @@ export default function DeskPet({ signals }) {
     if (!pos) return;
     e.currentTarget.setPointerCapture?.(e.pointerId);
     dragRef.current = { sx: e.clientX, sy: e.clientY, ox: pos.x, oy: pos.y, moved: false };
-    wasPeekingRef.current = hoveringRef.current;  // 记住按下前是否已探头
+    wasPeekingRef.current = hoveringRef.current;
   }, [pos]);
 
   const onPointerMove = useCallback((e) => {
     const d = dragRef.current; if (!d) return;
     const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
-    if (!d.moved && Math.hypot(dx, dy) < 5) return;
-    if (!d.moved) { d.moved = true; setDragging(true); if (mini) setHovering(true); } // 拖动时探出来好抓
+    if (!d.moved && Math.hypot(dx, dy) < 9) return;
+    if (!d.moved) { d.moved = true; setDragging(true); if (mini) setHovering(true); }
     setPos(clampPos(d.ox + dx, d.oy + dy));
   }, [mini]);
 
@@ -279,55 +328,66 @@ export default function DeskPet({ signals }) {
     const d = dragRef.current; dragRef.current = null;
     e.currentTarget.releasePointerCapture?.(e.pointerId);
     if (!d) return;
-    if (!d.moved) { handleTap(e.clientX); setHovering(false); return; }
+    if (!d.moved) { handleTap(e.clientX); return; }
     setDragging(false);
-    const W = window.innerWidth || 360;
+    const W = window.innerWidth || 360, H = window.innerHeight || 640;
     const fin = clampPos(d.ox + (e.clientX - d.sx), d.oy + (e.clientY - d.sy));
+    // 离哪条边最近且够近 → 贴那条边（四边都可）
+    const dL = fin.x, dR = W - SIZE - fin.x, dT = fin.y, dB = H - SIZE - fin.y;
+    const md = Math.min(dL, dR, dT, dB);
     let m = "";
-    if (fin.x <= SNAP) { m = "left"; fin.x = 0; }
-    else if (fin.x >= W - SIZE - SNAP) { m = "right"; fin.x = W - SIZE; }
+    if (md <= SNAP) {
+      if (md === dL) { m = "left"; fin.x = 0; }
+      else if (md === dR) { m = "right"; fin.x = W - SIZE; }
+      else if (md === dT) { m = "top"; fin.y = 0; }
+      else { m = "bottom"; fin.y = H - SIZE; }
+    }
     setHovering(false);
-    // 进极简序列(在 setMiniPersist 里)：正面朝前原地左右晃(crabwalk·svg自带) → mini-enter → 贴边缩
-    setMiniPersist(m);
+    if (m !== mini) setMiniPersist(m);  // 只在进/出极简或换边时播进场
     setPosPersist(fin);
-  }, [handleTap, setMiniPersist, setPosPersist]);
+  }, [mini, handleTap, setMiniPersist, setPosPersist]);
 
   if (hidden || !pos) return null;
 
   const offline = state === "offline";
-  // 进场(螃蟹步/mini-enter) 与 hover/活动 时滑出可见
-  const out = !!mini && (hovering || peeking || crabwalking || entering);
-
-  let src;
-  if (mini) src = miniArt({ state, hovering, crabwalking, entering });
-  else if (dragging) src = REACT.drag;
-  else if (reaction) src = reaction;
-  else if (idleAnim && state === "idle") src = idleAnim;
-  else src = ART[state] || ART.idle;
+  const out = !!mini && (hovering || peeking || crabwalking || walking || entering);
+  const src = mini ? miniArt({ state, hovering, crabwalking, walking, entering }) : (dragging ? REACT.drag
+    : reaction ? reaction : (idleAnim && state === "idle") ? idleAnim : (ART[state] || ART.idle));
 
   const cls = ["deskpet", mini ? "mini" : "", out ? "out" : "", offline ? "offline" : ""]
     .filter(Boolean).join(" ");
+
+  // transform：极简贴边/探头/巡逻
   let transform = "";
   if (mini && crabwalking) {
-    // 进场：正面朝前、原地左右晃（svg 自带 body-hunch），不镜像不横移
-    transform = `scale(${MINI_SCALE})`;
+    transform = `scale(${MINI_SCALE})`;                          // 进场原地扭(居中)
   } else if (mini) {
-    // 贴边歇/探头：脸朝屏幕里（左边→镜像朝右）；out 时滑出、否则 translateX 缩到边外
-    const mir = mini === "left" ? " scaleX(-1)" : "";
-    const tuck = out ? "" : `translateX(${mini === "right" ? TUCK : -TUCK}%) `;
-    transform = `${tuck}scale(${MINI_SCALE})${mir}`;
+    const amt = out ? PEEK : TUCK;
+    let t = "";
+    if (mini === "left") t = `translateX(${-amt}%)`;
+    else if (mini === "right") t = `translateX(${amt}%)`;
+    else if (mini === "top") t = `translateY(${-amt}%)`;
+    else t = `translateY(${amt}%)`;                              // bottom
+    let flip = "";
+    if (walking) flip = walkFlipRef.current ? " scaleX(-1)" : "";
+    else if (mini === "left") flip = " scaleX(-1)";              // 贴左边脸朝右(朝屏内)
+    transform = `${t} scale(${MINI_SCALE})${flip}`;
   }
+  // 巡逻时给 left/top 加线性过渡，让它平滑走过去；非巡逻用默认(拖动即时)
+  const trans = walking
+    ? `left ${walkDurRef.current}ms linear, top ${walkDurRef.current}ms linear, transform .3s ease, opacity .25s`
+    : undefined;
 
   return (
     <div
       className={cls}
-      style={{ left: pos.x + "px", top: pos.y + "px", transform }}
+      style={{ left: pos.x + "px", top: pos.y + "px", transform, transition: trans }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerEnter={(e) => { if (mini && e.pointerType === "mouse") setHovering(true); }}
       onPointerLeave={(e) => { if (mini && e.pointerType === "mouse" && !dragRef.current) setHovering(false); }}
-      title={offline ? "澄断线了…" : "拖动移动 · 拖到屏幕边贴边藏 · 点一下探头招手/再点收回 · 戳两下有彩蛋"}
+      title={offline ? "澄断线了…" : "拖动移动 · 拖到屏幕边贴边藏(会沿边溜达) · 戳两下有彩蛋"}
       role="img"
       aria-label={`桌宠 状态:${state}`}
     >
