@@ -339,7 +339,7 @@ const STYLES = `
 .sp-root[data-theme="dark"] .sp-summary-box textarea { background: #1e1e1e; border-color: #e67e22; }
 .sp-preview-status { text-align: center; font-size: 11px; color: var(--text-tertiary, #999); padding: 8px 0; }
 .sp-import-btn {
-  background: none; border: 1px solid var(--border-primary, #E0D8CE);
+  background: none; border: none;
   color: var(--text-secondary, #6b6358);
   font-size: 12px; padding: 4px 10px; border-radius: 4px;
   cursor: pointer; font-family: inherit;

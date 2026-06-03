@@ -700,9 +700,11 @@ const CSS = `
   z-index: 601; display: flex; flex-direction: column;
   animation: cp-slideRight 0.25s cubic-bezier(.4,0,.2,1);
 }
+/* 文档管理：铺满全屏（其他侧屏仍是 290px 抽屉） */
+.cp-sidebar.cp-sidebar-full { width: 100%; max-width: 100%; border-right: none; }
 .cp-sidebar-header {
   padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 1px solid var(--border-primary); flex-shrink: 0;
+  flex-shrink: 0;
 }
 .cp-sidebar-title { font-size: 15px; font-weight: 500; color: var(--text-primary); }
 .cp-sidebar-close { background: none; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
@@ -720,6 +722,27 @@ const CSS = `
 .cp-ps-item:hover { background: var(--bg-sidebar-hover); }
 .cp-ps-item-title { font-size: 13px; color: var(--text-primary); }
 .cp-ps-item-arrow { font-size: 15px; color: var(--text-tertiary); }
+
+/* 主菜单：图标 + 加粗标题 + 灰色副标题（参考极简侧栏） */
+.cp-nav-list { display: flex; flex-direction: column; }
+.cp-nav-item {
+  display: flex; align-items: center; gap: 16px;
+  padding: 15px 8px; cursor: pointer; border-radius: 10px;
+  transition: background 0.15s;
+}
+.cp-nav-item:hover { background: var(--bg-sidebar-hover); }
+.cp-nav-item:active { background: var(--bg-sidebar-active); }
+.cp-nav-icon {
+  flex-shrink: 0; width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center; color: var(--text-primary);
+}
+.cp-nav-icon svg {
+  width: 24px; height: 24px; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.cp-nav-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cp-nav-title { font-size: 13px; font-weight: 600; color: var(--text-primary); line-height: 1.2; }
+.cp-nav-sub { font-size: 11px; color: var(--text-tertiary); line-height: 1.2; }
 .cp-ps-sub-title { font-size: 13px; color: var(--text-primary); font-weight: 500; padding: 8px 0 12px; display: flex; align-items: center; gap: 8px; }
 .cp-ps-back {
   background: none; border: none; color: var(--text-secondary);
@@ -743,12 +766,21 @@ const CSS = `
 }
 .cp-ps-btn:hover { background: var(--bg-button-hover); }
 
-.cp-ps-tabs { display: flex; gap: 14px; margin-bottom: 12px; overflow-x: auto; }
+.cp-ps-tabs { display: inline-flex; gap: 4px; margin: 0 0 22px; padding: 4px; background: var(--bg-card); border-radius: 12px; }
 .cp-ps-tab {
-  background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-secondary);
-  padding: 6px 2px; font-size: 11px; border-radius: 0; cursor: pointer; white-space: nowrap;
+  background: transparent; border: none; color: var(--text-secondary);
+  padding: 7px 20px; font-size: 13px; border-radius: 9px; cursor: pointer; white-space: nowrap;
+  transition: background .15s, color .15s;
 }
-.cp-ps-tab.active { background: transparent; color: var(--text-primary); border-bottom-color: var(--border-input-focus); }
+.cp-ps-tab.active { background: var(--bg-panel); color: var(--text-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+
+/* ── 文档管理：配色对齐「风格·思考」面板（单色墨 + 极淡边线 + 衬线，仅作用 .cp-docs，不影响其他设置屏） ── */
+.cp-docs { max-width: 600px; margin: 0 auto; padding: 12px 6px 48px; }
+.cp-docs-tabsrow { display: flex; justify-content: center; margin-bottom: 6px; }
+.cp-docs .cp-ps-section-title { font-size: 12px; font-weight: 400; color: var(--text-secondary); text-transform: none; letter-spacing: 0; margin: 0 0 8px; }
+.cp-docs-hint { font-size: 11px; color: var(--text-tertiary); line-height: 1.6; margin: -4px 0 22px; }
+.cp-docs .cp-ps-btn { background: var(--text-primary); color: var(--bg-page); border: 1px solid var(--text-primary); border-radius: 4px; padding: 11px; }
+.cp-docs .cp-ps-btn:hover { background: var(--text-primary); opacity: 0.85; }
 .cp-ps-mem-list { max-height: 320px; overflow-y: auto; }
 .cp-ps-mem-item {
   background: transparent; border: none; border-bottom: 1px solid var(--border-card); border-radius: 0;
@@ -2068,13 +2100,6 @@ export default function ChatPanel({ onBack }) {
       {/* TOP BAR */}
       <div className="cp-top">
         <div className="left">
-          {onBack && (
-            <button className="cp-hamburger" onClick={onBack} aria-label="返回" title="返回">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 18 9 12 15 6"/>
-              </svg>
-            </button>
-          )}
           <button className="cp-hamburger" onClick={() => setSidebarOpen(true)} aria-label="菜单">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="3" y1="6" x2="21" y2="6"/>
@@ -2388,11 +2413,13 @@ export default function ChatPanel({ onBack }) {
       {sidebarOpen && (
         <>
           <div className="cp-sidebar-overlay" onClick={() => setSidebarOpen(false)} />
-          <div className="cp-sidebar">
+          <div className={"cp-sidebar" + (psScreen === "documents" ? " cp-sidebar-full" : "")}>
             <div className="cp-sidebar-header">
-              <div className="cp-sidebar-title">设置</div>
+              {psScreen === "documents"
+                ? <button className="cp-ps-back" onClick={() => setPsScreen("main")}>← 返回</button>
+                : <div className="cp-sidebar-title">设置</div>}
               <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                {onBack && <button onClick={() => { setSidebarOpen(false); onBack(); }} style={{ background:"none", border:"none", color:"var(--text-secondary)", cursor:"pointer", fontSize:13, padding:"2px 8px" }}>← 返回</button>}
+                {psScreen !== "documents" && onBack && <button onClick={() => { setSidebarOpen(false); onBack(); }} style={{ background:"none", border:"none", color:"var(--text-secondary)", cursor:"pointer", fontSize:13, padding:"2px 8px" }}>← 返回</button>}
                 <button className="cp-sidebar-close" onClick={() => setSidebarOpen(false)}>✕</button>
               </div>
             </div>
@@ -3408,22 +3435,27 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
   if (screen === "main") {
     return (
       <>
-        <div className="cp-ps-section-title">通用</div>
-        <div className="cp-ps-list">
-          <SidebarItem onClick={() => setScreen("window")}>CC窗口</SidebarItem>
-          <SidebarItem onClick={onOpenSession}>Session</SidebarItem>
-          <SidebarItem onClick={() => setScreen("voice")}>语音服务</SidebarItem>
-          <SidebarItem onClick={onOpenWake}>唤醒</SidebarItem>
+        <div className="cp-nav-list">
+          <SidebarNavItem onClick={() => setScreen("window")} title="CC窗口" sub="进程 · 重启"
+            icon={<svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>} />
+          <SidebarNavItem onClick={onOpenSession} title="Session" sub="会话连接"
+            icon={<svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>} />
+          <SidebarNavItem onClick={() => setScreen("voice")} title="语音服务" sub="开发中"
+            icon={<svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>} />
+          <SidebarNavItem onClick={onOpenWake} title="唤醒" sub="定时唤醒澄"
+            icon={<svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>} />
         </div>
-        <div className="cp-ps-section-title">管理</div>
-        <div className="cp-ps-list">
-          <SidebarItem onClick={() => setScreen("documents")}>文档管理</SidebarItem>
-          <SidebarItem onClick={() => setScreen("params")}>参数设置</SidebarItem>
-          <SidebarItem onClick={() => setScreen("api")}>API 设置</SidebarItem>
+        <div className="cp-nav-list">
+          <SidebarNavItem onClick={() => setScreen("documents")} title="文档管理" sub="系统提示 · 文件"
+            icon={<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>} />
+          <SidebarNavItem onClick={() => setScreen("params")} title="参数设置" sub="短消息 · forge"
+            icon={<svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>} />
+          <SidebarNavItem onClick={() => setScreen("api")} title="API 设置" sub="认证 · 模型 · 缓存"
+            icon={<svg viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>} />
         </div>
-        <div className="cp-ps-section-title">统计</div>
-        <div className="cp-ps-list">
-          <SidebarItem onClick={() => setScreen("stats-menu")}>统计</SidebarItem>
+        <div className="cp-nav-list">
+          <SidebarNavItem onClick={() => setScreen("stats-menu")} title="统计" sub="用量 · 字数"
+            icon={<svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>} />
         </div>
       </>
     );
@@ -3472,6 +3504,18 @@ function SidebarItem({ onClick, children }) {
     <div className="cp-ps-item" onClick={onClick}>
       <div className="cp-ps-item-title">{children}</div>
       <div className="cp-ps-item-arrow">›</div>
+    </div>
+  );
+}
+
+function SidebarNavItem({ onClick, icon, title, sub }) {
+  return (
+    <div className="cp-nav-item" onClick={onClick}>
+      <div className="cp-nav-icon">{icon}</div>
+      <div className="cp-nav-text">
+        <div className="cp-nav-title">{title}</div>
+        {sub && <div className="cp-nav-sub">{sub}</div>}
+      </div>
     </div>
   );
 }
@@ -3954,9 +3998,6 @@ function FileListPanel({ tableName, filterEq, hint, showToast, onChange }) {
         onClick={() => fileRef.current && fileRef.current.click()}>
         {uploading ? "上传中…" : "+ 上传文件"}
       </button>
-      {hint && (
-        <div style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 14px" }}>{hint}</div>
-      )}
       {error && (
         <div style={{ fontSize: 12, color: "#c0392b", padding: "10px 0", background: "transparent", border: "none", borderBottom: "1px solid var(--border-card)", borderRadius: 0, marginBottom: 12 }}>
           加载失败：{error}
@@ -4048,15 +4089,10 @@ function DocSingleton({ mode, docType, label, placeholder, needsRestart, onResta
   return (
     <div style={{ marginBottom: 18 }}>
       <div className="cp-ps-section-title">{label}</div>
-      <textarea value={content} onChange={e => setContent(e.target.value)}
+      <DocEditor value={content} onChange={e => setContent(e.target.value)}
         placeholder={loading ? "加载中…" : placeholder}
         disabled={loading}
-        style={{
-          width: "100%", minHeight, background: "transparent",
-          border: "none", borderBottom: "1px solid var(--border-input)", borderRadius: 0,
-          padding: "8px 0", color: "var(--text-primary)", fontSize: 13,
-          outline: "none", fontFamily: "inherit", resize: "vertical", lineHeight: 1.5,
-        }}/>
+        minHeight={minHeight}/>
       <button className="cp-ps-btn" disabled={saving || loading} onClick={save}>
         {saving ? "保存中…" : "保存"}
       </button>
@@ -4089,16 +4125,65 @@ const TEXTAREA_STYLE = {
   width: "100%",
   background: "transparent",
   border: "none",
-  borderBottom: "1px solid var(--border-input)",
+  borderBottom: "1px solid var(--border)",
   borderRadius: 0,
   padding: "8px 0",
   color: "var(--text-primary)",
-  fontSize: 13,
+  fontSize: 14,
   outline: "none",
   fontFamily: "inherit",
-  resize: "vertical",
-  lineHeight: 1.5,
+  resize: "none",
+  overflowY: "auto",
+  lineHeight: 1.7,
 };
+
+// 文档文本框：收起=固定高度内部滚动；右上角图标点开=全屏铺满编辑（高度用 --app-height，自动避开输入法），
+// 缩放图标固定右上角，点击恢复原高度。修「auto-grow 时光标在最后一行被键盘挡 + 一直跳 + 全文太长」。
+function DocEditor({ value, onChange, placeholder, disabled, minHeight = 150 }) {
+  const [expanded, setExpanded] = useState(false);
+  const iconBtn = {
+    background: "var(--bg-page)", border: "none", color: "var(--text-tertiary)",
+    cursor: "pointer", padding: 4, borderRadius: 6, display: "flex", alignItems: "center", lineHeight: 0,
+  };
+  const expandIcon = (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+    </svg>
+  );
+  const collapseIcon = (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>
+    </svg>
+  );
+  if (expanded) {
+    return createPortal(
+      <div style={{
+        position: "fixed", left: 0, top: 0, right: 0, height: "var(--app-height, 100dvh)",
+        zIndex: 980, background: "var(--bg-page)", display: "flex", flexDirection: "column",
+        padding: "calc(10px + env(safe-area-inset-top,0px)) 16px calc(10px + env(safe-area-inset-bottom,0px))",
+        animation: "cp-slideUp 0.2s ease",
+      }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", flexShrink: 0, marginBottom: 4 }}>
+          <button onClick={() => setExpanded(false)} title="缩放" style={{ ...iconBtn, color: "var(--text-secondary)" }}>{collapseIcon}</button>
+        </div>
+        <textarea autoFocus value={value} onChange={onChange} placeholder={placeholder} disabled={disabled}
+          style={{
+            flex: 1, width: "100%", minHeight: 0, background: "transparent", border: "none",
+            outline: "none", resize: "none", color: "var(--text-primary)", fontFamily: "inherit",
+            fontSize: 15, lineHeight: 1.8, overflowY: "auto",
+          }} />
+      </div>,
+      document.body
+    );
+  }
+  return (
+    <div style={{ position: "relative" }}>
+      <button onClick={() => setExpanded(true)} title="展开" style={{ ...iconBtn, position: "absolute", top: 0, right: 0, zIndex: 2 }}>{expandIcon}</button>
+      <textarea value={value} onChange={onChange} placeholder={placeholder} disabled={disabled}
+        style={{ ...TEXTAREA_STYLE, minHeight, height: minHeight, paddingRight: 26 }} />
+    </div>
+  );
+}
 
 // CC 文档：CLAUDE.md + system_prompt + 文件 共用一个底部保存按钮
 function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, currentEffort, showToast }) {
@@ -4155,41 +4240,32 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, c
 
   return (
     <>
-      <div style={{
-        fontSize: 11, color: "var(--text-tertiary)", marginBottom: 14,
-        padding: "8px 0", background: "transparent",
-        border: "none", borderBottom: "1px solid var(--border-card)", borderRadius: 0,
-      }}>
-        CC 文档：修改后需重启 CC 才生效，整段内容只在启动时读取一次
-      </div>
-
-      <div style={{ marginBottom: 18 }}>
-        <div className="cp-ps-section-title">系统提示（System Prompt）</div>
-        <textarea
+      <div style={{ marginBottom: 36 }}>
+        <div className="cp-ps-section-title">系统提示</div>
+        <DocEditor
           value={systemPrompt}
           onChange={e => setSystemPrompt(e.target.value)}
           placeholder={loading ? "加载中…" : "输入项目人设 / 系统提示…"}
           disabled={loading}
-          style={{ ...TEXTAREA_STYLE, minHeight: 150 }}
+          minHeight={150}
         />
       </div>
 
       <div style={{ marginBottom: 18 }}>
         <div className="cp-ps-section-title">CLAUDE.md</div>
-        <textarea
+        <DocEditor
           value={claudeMd}
           onChange={e => setClaudeMd(e.target.value)}
           placeholder={loading ? "加载中…" : "编辑 CLAUDE.md…"}
           disabled={loading}
-          style={{ ...TEXTAREA_STYLE, minHeight: 200 }}
+          minHeight={200}
         />
       </div>
 
-      <div className="cp-ps-section-title">文件</div>
+      <div className="cp-ps-section-title">文件<span style={{ fontSize: 9, color: "var(--text-tertiary)", marginLeft: 8, fontWeight: 400 }}>单文件 ≤ 5MB</span></div>
       <FileListPanel
         tableName="documents_cheng"
         filterEq={filterEq}
-        hint="单文件 ≤ 5MB · 重启 CC 后随 CLAUDE.md 一起读取一次"
         showToast={showToast}
       />
 
@@ -4213,9 +4289,9 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, c
                   className="cp-ps-btn"
                   style={{
                     flex: 1, padding: "6px 0", fontSize: 12,
-                    background: selectedEffort === e.value ? "var(--bg-button)" : "transparent",
-                    color: selectedEffort === e.value ? "var(--text-button)" : "var(--text-tertiary)",
-                    borderColor: selectedEffort === e.value ? "var(--bg-button)" : "var(--border-card)",
+                    background: selectedEffort === e.value ? "var(--text-primary)" : "transparent",
+                    color: selectedEffort === e.value ? "var(--bg-page)" : "var(--text-tertiary)",
+                    borderColor: selectedEffort === e.value ? "var(--text-primary)" : "var(--border)",
                   }}
                   onClick={() => setSelectedEffort(e.value)}>
                   {e.name}
@@ -4224,30 +4300,30 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, c
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="cp-ps-btn" style={{ flex: 1 }}
+            <button className="cp-ps-btn" style={{ flex: 1, background: "transparent", color: "var(--text-primary)", borderColor: "var(--border)" }}
               onClick={() => { setSaved(false); onAmnesia && onAmnesia(selectedEffort); }}>
               失忆重启
             </button>
             <div style={{ flex: 1, position: "relative" }}>
-              <button className="cp-ps-btn" style={{ width: "100%" }}
+              <button className="cp-ps-btn" style={{ width: "100%", background: "transparent", color: "var(--text-primary)", borderColor: "var(--border)" }}
                 onClick={() => setShowModelPicker(p => !p)}>
                 选择模型重启 ▾
               </button>
               {showModelPicker && (
                 <div style={{
                   position: "absolute", bottom: "100%", left: 0, right: 0,
-                  marginBottom: 4, background: "var(--bg-secondary, #1a1a1a)",
-                  border: "1px solid var(--border-input)", borderRadius: 8,
-                  overflow: "hidden", zIndex: 10,
+                  marginBottom: 4, background: "var(--bg-page)",
+                  border: "1px solid var(--border)", borderRadius: 8,
+                  overflow: "hidden", zIndex: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
                 }}>
                   {MODEL_OPTIONS.map(m => (
                     <div key={m.value || "default"}
                       style={{
                         padding: "8px 12px", cursor: "pointer", fontSize: 13,
-                        color: currentModel === m.value ? "var(--accent, #a89fd8)" : "var(--text-primary)",
-                        background: currentModel === m.value ? "var(--bg-tertiary, #252525)" : "transparent",
+                        color: currentModel === m.value ? "var(--accent)" : "var(--text-primary)",
+                        background: currentModel === m.value ? "var(--border)" : "transparent",
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-tertiary, #252525)"; }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "var(--border)"; }}
                       onMouseLeave={e => { if (currentModel !== m.value) e.currentTarget.style.background = "transparent"; }}
                       onClick={() => {
                         setShowModelPicker(false);
@@ -4285,11 +4361,7 @@ function APIDocumentsTab({ showToast }) {
   );
   return (
     <>
-      <div style={{
-        fontSize: 11, color: "var(--text-tertiary)", marginBottom: 14,
-        padding: "8px 0", background: "transparent",
-        border: "none", borderBottom: "1px solid var(--border-card)", borderRadius: 0,
-      }}>
+      <div className="cp-docs-hint">
         API 文档：每轮对话都会自动注入
       </div>
 
@@ -4299,11 +4371,10 @@ function APIDocumentsTab({ showToast }) {
         needsRestart={false} showToast={showToast}
       />
 
-      <div className="cp-ps-section-title">文件</div>
+      <div className="cp-ps-section-title">文件<span style={{ fontSize: 9, color: "var(--text-tertiary)", marginLeft: 8, fontWeight: 400 }}>单文件 ≤ 5MB · 每轮注入到上下文</span></div>
       <FileListPanel
         tableName="documents_cheng"
         filterEq={filterEq}
-        hint="单文件 ≤ 5MB · 每轮注入到上下文"
         showToast={showToast}
       />
     </>
@@ -4318,14 +4389,15 @@ function DocumentsTab({ mode, onRestartCC, onAmnesia, onSelectModel, currentMode
 function DocumentsScreen({ onBack, onRestartCC, onAmnesia, onSelectModel, currentModel, currentEffort, showToast }) {
   const [tab, setTab] = useState("cc");
   return (
-    <>
-      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>文档管理</div>
-      <div className="cp-ps-tabs">
-        <div className={"cp-ps-tab" + (tab === "cc" ? " active" : "")} onClick={() => setTab("cc")}>CC 文档</div>
-        <div className={"cp-ps-tab" + (tab === "api" ? " active" : "")} onClick={() => setTab("api")}>API 文档</div>
+    <div className="cp-docs">
+      <div className="cp-docs-tabsrow">
+        <div className="cp-ps-tabs">
+          <div className={"cp-ps-tab" + (tab === "cc" ? " active" : "")} onClick={() => setTab("cc")}>CC 文档</div>
+          <div className={"cp-ps-tab" + (tab === "api" ? " active" : "")} onClick={() => setTab("api")}>API 文档</div>
+        </div>
       </div>
       <DocumentsTab mode={tab} onRestartCC={onRestartCC} onAmnesia={onAmnesia} onSelectModel={onSelectModel} currentModel={currentModel} currentEffort={currentEffort} showToast={showToast} />
-    </>
+    </div>
   );
 }
 
