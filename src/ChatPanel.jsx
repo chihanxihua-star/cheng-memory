@@ -707,6 +707,21 @@ const CSS = `
   flex-shrink: 0;
 }
 .cp-sidebar-title { font-size: 15px; font-weight: 500; color: var(--text-primary); }
+/* 涟漪式三段导航：CANCEL / 居中标题 / 深色 SAVE✓ */
+.cp-nav-cancel {
+  background: none; border: none; color: var(--text-secondary);
+  font-size: 12px; letter-spacing: 0.18em; cursor: pointer;
+  font-family: inherit; padding: 0;
+}
+.cp-nav-title { font-size: 13px; color: var(--text-primary); letter-spacing: 0.22em; }
+.cp-nav-send {
+  background: var(--text-primary); color: var(--bg-page);
+  border: 1px solid var(--text-primary);
+  padding: 8px 18px; border-radius: 4px;
+  font-size: 12px; letter-spacing: 0.18em;
+  cursor: pointer; font-family: inherit;
+}
+.cp-nav-send:active { opacity: 0.85; }
 .cp-sidebar-close { background: none; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
 .cp-sidebar-close:hover { color: var(--text-primary); background: var(--bg-sidebar-hover); }
 .cp-sidebar-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 8px 12px 24px; }
@@ -1047,6 +1062,8 @@ export default function ChatPanel({ onBack }) {
   // Session 可视化面板开关（点 Claude 头像打开）
   const [sessionOpen, setSessionOpen] = useState(false);
   const [wakeOpen, setWakeOpen] = useState(false);
+  // 参数/API 设置：子屏把 save 注册到此 ref，供涟漪式顶栏右上角 SAVE 调用
+  const psSaveRef = useRef(null);
 
   // JSONL 全 session 搜索
   const [searchOpen, setSearchOpen] = useState(false);
@@ -2413,15 +2430,25 @@ export default function ChatPanel({ onBack }) {
       {sidebarOpen && (
         <>
           <div className="cp-sidebar-overlay" onClick={() => setSidebarOpen(false)} />
-          <div className={"cp-sidebar" + (psScreen === "documents" ? " cp-sidebar-full" : "")}>
+          <div className={"cp-sidebar" + ((psScreen === "documents" || psScreen === "params" || psScreen === "api") ? " cp-sidebar-full" : "")}>
             <div className="cp-sidebar-header">
-              {psScreen === "documents"
-                ? <button className="cp-ps-back" onClick={() => setPsScreen("main")}>← 返回</button>
-                : <div className="cp-sidebar-title">设置</div>}
-              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                {psScreen !== "documents" && onBack && <button onClick={() => { setSidebarOpen(false); onBack(); }} style={{ background:"none", border:"none", color:"var(--text-secondary)", cursor:"pointer", fontSize:13, padding:"2px 8px" }}>← 返回</button>}
-                <button className="cp-sidebar-close" onClick={() => setSidebarOpen(false)}>✕</button>
-              </div>
+              {(psScreen === "params" || psScreen === "api") ? (
+                <>
+                  <button className="cp-nav-cancel" onClick={() => setPsScreen("main")}>CANCEL</button>
+                  <span className="cp-nav-title">{psScreen === "params" ? "参数设置" : "API 设置"}</span>
+                  <button className="cp-nav-send" onClick={() => psSaveRef.current?.()}>SAVE ✓</button>
+                </>
+              ) : (
+                <>
+                  {psScreen === "documents"
+                    ? <button className="cp-ps-back" onClick={() => setPsScreen("main")}>← 返回</button>
+                    : <div className="cp-sidebar-title">设置</div>}
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    {psScreen !== "documents" && onBack && <button onClick={() => { setSidebarOpen(false); onBack(); }} style={{ background:"none", border:"none", color:"var(--text-secondary)", cursor:"pointer", fontSize:13, padding:"2px 8px" }}>← 返回</button>}
+                    <button className="cp-sidebar-close" onClick={() => setSidebarOpen(false)}>✕</button>
+                  </div>
+                </>
+              )}
             </div>
             <div className="cp-sidebar-scroll">
               <SidebarScreens
@@ -2439,6 +2466,7 @@ export default function ChatPanel({ onBack }) {
                 onOpenWake={() => { setWakeOpen(true); setSidebarOpen(false); }}
                 showToast={showToast}
                 convId={convId}
+                psSaveRef={psSaveRef}
               />
             </div>
           </div>
@@ -3431,7 +3459,7 @@ function StreamingBubble({ snap, profile, showTyping }) {
 }
 
 /* ─────── Sidebar 多屏 ─────── */
-function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, onAmnesia, onSelectModel, currentModel, currentEffort, onOpenSession, onOpenWake, showToast, convId }) {
+function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onRestartCC, onAmnesia, onSelectModel, currentModel, currentEffort, onOpenSession, onOpenWake, showToast, convId, psSaveRef }) {
   if (screen === "main") {
     return (
       <>
@@ -3492,8 +3520,8 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
     );
   }
   if (screen === "documents") return <DocumentsScreen onBack={() => setScreen("main")} onRestartCC={onRestartCC} onAmnesia={onAmnesia} onSelectModel={onSelectModel} currentModel={currentModel} currentEffort={currentEffort} showToast={showToast} />;
-  if (screen === "params") return <ParamsScreen onBack={() => setScreen("main")} showToast={showToast} />;
-  if (screen === "api") return <APISettingsScreen onBack={() => setScreen("main")} showToast={showToast} />;
+  if (screen === "params") return <ParamsScreen showToast={showToast} psSaveRef={psSaveRef} />;
+  if (screen === "api") return <APISettingsScreen showToast={showToast} psSaveRef={psSaveRef} />;
   if (screen === "stats") return <StatsScreen onBack={() => setScreen("stats-menu")} />;
   if (screen === "stats-chars") return <CharStatsScreen onBack={() => setScreen("stats-menu")} convId={convId} />;
   return null;
@@ -3520,7 +3548,7 @@ function SidebarNavItem({ onClick, icon, title, sub }) {
   );
 }
 
-function ParamsScreen({ onBack, showToast }) {
+function ParamsScreen({ showToast, psSaveRef }) {
   const [s, setS] = useState(() => getSettings(PROJECT_ID));
   const update = (k, v) => setS(prev => ({ ...prev, [k]: v }));
 
@@ -3606,9 +3634,9 @@ function ParamsScreen({ onBack, showToast }) {
     }
     showToast("参数已保存");
   };
+  if (psSaveRef) psSaveRef.current = save;
   return (
-    <>
-      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>参数设置</div>
+    <div className="cp-docs">
       <div className="cp-ps-section-title">短消息模式</div>
       <div className="cp-ps-form">
         <label>缓冲时间（秒）</label>
@@ -3675,8 +3703,7 @@ function ParamsScreen({ onBack, showToast }) {
         <small>forge 时让 CC 总结被截掉部分的目标字数</small>
       </div>
       {forgeMsg && <div className="cp-ps-form"><small style={{ color: "#d87878" }}>{forgeMsg}</small></div>}
-      <button className="cp-ps-btn" onClick={save}>保存设置</button>
-    </>
+    </div>
   );
 }
 
@@ -3691,7 +3718,7 @@ const API_MODEL_OPTIONS = [
   { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
 ];
 
-function APISettingsScreen({ onBack, showToast }) {
+function APISettingsScreen({ showToast, psSaveRef }) {
   const [s, setS] = useState(() => getAPISettings(PROJECT_ID));
   const [showKey, setShowKey] = useState(false);
   const update = (k, v) => setS(prev => ({ ...prev, [k]: v }));
@@ -3707,6 +3734,7 @@ function APISettingsScreen({ onBack, showToast }) {
     });
     showToast("API 设置已保存");
   };
+  if (psSaveRef) psSaveRef.current = save;
 
   const inputStyle = {
     width: "100%", background: "transparent", border: "none", borderBottom: "1px solid var(--border-input)",
@@ -3715,9 +3743,7 @@ function APISettingsScreen({ onBack, showToast }) {
   };
 
   return (
-    <>
-      <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={onBack}>← 返回</button>API 设置</div>
-
+    <div className="cp-docs">
       <div className="cp-ps-section-title">认证</div>
       <div className="cp-ps-form">
         <label>API Key</label>
@@ -3790,12 +3816,11 @@ function APISettingsScreen({ onBack, showToast }) {
         </select>
       </div>
 
-      <button className="cp-ps-btn" onClick={save}>保存</button>
       <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>
         仅在 API 模式（每轮直接调用 Anthropic API）下生效。CC 模式由 CC 进程自己管理 key 与模型；
         切换模式见「文档管理 → CC / API 文档」。
       </div>
-    </>
+    </div>
   );
 }
 

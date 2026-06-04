@@ -85,11 +85,6 @@ const STYLES = `
   /* 跟随聊天界面字体（ChatPanel.jsx .cp-root） */
   font-family: 'Noto Serif SC', Georgia, serif;
   color: var(--text-primary, #2B2925);
-  /* active 卡图标的粉：低饱和、保留亮度（HSL 344° 36% 74%）*/
-  --sp-pink: #D9A0AE;
-}
-.sp-root[data-theme="dark"] {
-  --sp-pink: #DDA8B5;
 }
 .sp-root[data-theme="dark"] {
   background: #1c1c1e;
@@ -99,45 +94,22 @@ const STYLES = `
   flex-shrink: 0;
   padding: 14px 16px;
   display: flex; align-items: center; justify-content: space-between;
-  background: var(--bg-secondary, #fff);
-  border-bottom: 1px solid var(--border-primary, #E0D8CE);
+  background: transparent;
+  border-bottom: none;
 }
-.sp-root[data-theme="dark"] .sp-header {
-  background: #252527; border-bottom-color: #3a3a3c;
+.sp-cancel {
+  background: none; border: none; color: var(--text-secondary, #6b6358);
+  font-size: 12px; letter-spacing: 0.18em; cursor: pointer;
+  font-family: inherit; padding: 0;
+  transition: color .15s;
 }
-.sp-title {
-  font-size: 13px; letter-spacing: 0.2em;
-  color: var(--text-secondary, #6b6358);
-  display: flex; align-items: center; gap: 8px;
-}
-.sp-close {
-  background: none; border: none;
-  color: var(--text-secondary, #6b6358);
-  font-size: 22px; line-height: 1; cursor: pointer; padding: 4px 8px;
-}
-.sp-amnesia {
-  background: none; border: 1px solid var(--border-primary, #E0D8CE);
-  color: var(--text-secondary, #6b6358);
-  font-size: 12px; padding: 4px 10px; border-radius: 4px;
-  cursor: pointer; font-family: inherit;
-  transition: color .15s, border-color .15s, background .15s;
-  margin-left: auto; margin-right: 8px;
-}
-.sp-amnesia:hover {
-  color: #c0392b; border-color: #c0392b;
-  background: rgba(192, 57, 43, 0.06);
-}
-.sp-root[data-theme="dark"] .sp-amnesia {
-  border-color: #3a3a3c;
-}
-.sp-root[data-theme="dark"] .sp-amnesia:hover {
-  color: #ff8d80; border-color: #ff8d80;
-  background: rgba(255, 141, 128, 0.08);
-}
+.sp-cancel:hover { color: var(--text-primary, #2B2925); }
+.sp-header-actions { display: flex; align-items: center; gap: 8px; }
 .sp-body {
   flex: 1; min-height: 0; overflow-y: auto;
   -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   padding: 14px 14px 24px;
+  width: 100%; max-width: 600px; margin: 0 auto;
 }
 .sp-loading, .sp-empty {
   text-align: center;
@@ -171,7 +143,7 @@ const STYLES = `
   font-size: 14px; line-height: 1;
   flex-shrink: 0;
 }
-.sp-card.active .sp-dot { color: var(--sp-pink); }
+.sp-card.active .sp-dot { color: var(--text-primary, #2B2925); }
 .sp-card.ended .sp-dot { color: var(--text-tertiary, #999); }
 
 /* 名字 + 创建时间堆叠在图标右边 */
@@ -191,12 +163,12 @@ const STYLES = `
 .sp-name:hover {
   background: var(--bg-sidebar-hover, rgba(0,0,0,0.04));
 }
-.sp-name-empty { color: var(--text-tertiary, #999); font-style: italic; font-weight: 400; }
+.sp-name-empty { color: var(--text-tertiary, #999); font-weight: 400; }
 .sp-name-input {
   font-size: 14px; font-weight: 500; font-family: inherit;
   color: var(--text-primary, #2B2925);
   background: transparent;
-  border: none; border-bottom: 1px solid var(--sp-pink);
+  border: none; border-bottom: 1px solid var(--border, #E0D8CE);
   outline: none; padding: 1px 2px; margin: 0;
   width: 100%; min-width: 0;
 }
@@ -209,7 +181,7 @@ const STYLES = `
   font-size: 12px;
 }
 .sp-status-active {
-  color: var(--sp-pink);
+  color: var(--text-primary, #2B2925);
   font-weight: 500;
 }
 /* 头部右侧：X turn / 删除 纵向叠（删除只在 ended 卡片显示） */
@@ -232,21 +204,6 @@ const STYLES = `
   flex-shrink: 0;
 }
 .sp-card-head:hover .sp-toggle { color: var(--text-secondary, #6b6358); }
-
-.sp-delete {
-  background: none; border: none;
-  color: var(--text-tertiary, #999);
-  font-size: 11px; cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
-  transition: color 0.15s ease, background 0.15s ease;
-  font-family: inherit;
-}
-.sp-delete:hover {
-  color: #d87878;
-  background: rgba(216, 120, 120, 0.08);
-}
-
 
 /* 展开后的详情：第一行 时间范围 + turn 数；下一行 summary */
 .sp-detail {
@@ -339,22 +296,14 @@ const STYLES = `
 .sp-root[data-theme="dark"] .sp-summary-box textarea { background: #1e1e1e; border-color: #e67e22; }
 .sp-preview-status { text-align: center; font-size: 11px; color: var(--text-tertiary, #999); padding: 8px 0; }
 .sp-import-btn {
-  background: none; border: none;
-  color: var(--text-secondary, #6b6358);
-  font-size: 12px; padding: 4px 10px; border-radius: 4px;
+  background: var(--text-primary, #2B2925);
+  color: var(--bg-page, #FAF6F0);
+  border: 1px solid var(--text-primary, #2B2925);
+  padding: 8px 18px; border-radius: 4px;
+  font-size: 12px; letter-spacing: 0.18em;
   cursor: pointer; font-family: inherit;
-  transition: color .15s, border-color .15s, background .15s;
-  margin-right: 8px;
 }
-.sp-import-btn:hover {
-  color: #2980b9; border-color: #2980b9;
-  background: rgba(41, 128, 185, 0.06);
-}
-.sp-root[data-theme="dark"] .sp-import-btn { border-color: #3a3a3c; }
-.sp-root[data-theme="dark"] .sp-import-btn:hover {
-  color: #7ec8e3; border-color: #7ec8e3;
-  background: rgba(126, 200, 227, 0.08);
-}
+.sp-import-btn:active { opacity: 0.85; }
 .sp-import-card {
   border: 1px solid #2980b9;
   border-radius: 0;
@@ -376,6 +325,49 @@ const STYLES = `
   color: var(--text-tertiary, #999); font-size: 16px; padding: 2px 6px;
 }
 `;
+
+// 左滑划出操作（抄涟漪 MemoryCard 的左滑）
+const SWIPE_ACTION_BTN = {
+  background: "none", border: "none", color: "var(--text-secondary)",
+  fontSize: 12, padding: "0 8px", cursor: "pointer", fontFamily: "inherit",
+  letterSpacing: "0.05em", height: "100%",
+};
+function SwipeRow({ children, actions }) {
+  const [tx, setTx] = useState(0);
+  const startX = useRef(null);
+  const baseTx = useRef(0);
+  const REVEAL = 130;
+  const onTouchStart = (e) => { startX.current = e.touches[0].clientX; baseTx.current = tx; };
+  const onTouchMove = (e) => {
+    if (startX.current === null) return;
+    const dx = e.touches[0].clientX - startX.current;
+    setTx(Math.min(0, Math.max(-REVEAL, baseTx.current + dx)));
+  };
+  const onTouchEnd = () => { setTx(tx < -REVEAL / 2 ? -REVEAL : 0); startX.current = null; };
+  return (
+    <div style={{ position: "relative", overflow: "hidden", marginBottom: 12 }}>
+      <div style={{
+        position: "absolute", right: 0, top: 0, bottom: 0, width: REVEAL,
+        display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, paddingRight: 12,
+      }}>
+        {actions(() => setTx(0))}
+      </div>
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+        style={{
+          transform: `translateX(${tx}px)`,
+          transition: startX.current === null ? "transform 0.22s ease" : "none",
+          position: "relative",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default function SessionPanel({ onClose, theme = "light", currentTokens = 0, onAmnesia, convId }) {
   const [sessions, setSessions] = useState([]);
@@ -629,27 +621,21 @@ export default function SessionPanel({ onClose, theme = "light", currentTokens =
     <div className="sp-root" data-theme={theme}>
       <style>{STYLES}</style>
       <div className="sp-header">
-        <span className="sp-title">SESSIONS</span>
-        <input
-          ref={importFileRef}
-          type="file"
-          accept=".json"
-          style={{ display: "none" }}
-          onChange={handleImportFile}
-        />
-        <button
-          className="sp-import-btn"
-          onClick={() => importFileRef.current?.click()}
-          title="上传 Claude.ai 导出的 JSON，浮想到当前 session"
-        >浮想 Claude.ai</button>
-        {onAmnesia && (
+        <button className="sp-cancel" onClick={onClose} aria-label="关闭">CANCEL</button>
+        <div className="sp-header-actions">
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".json"
+            style={{ display: "none" }}
+            onChange={handleImportFile}
+          />
           <button
-            className="sp-amnesia"
-            onClick={onAmnesia}
-            title="清掉 forge marker，启动干净的新 session（不保留上文）"
-          >失忆</button>
-        )}
-        <button className="sp-close" onClick={onClose} aria-label="close">×</button>
+            className="sp-import-btn"
+            onClick={() => importFileRef.current?.click()}
+            title="上传 Claude.ai 导出的 JSON，浮想到当前 session"
+          >CHENG</button>
+        </div>
       </div>
 
       <div className="sp-body">
@@ -817,7 +803,19 @@ export default function SessionPanel({ onClose, theme = "light", currentTokens =
           const isOpen = expanded.has(s.session_id);
           const isEditing = editingSid === s.session_id;
           return (
-            <div key={s.session_id} className="sp-card ended">
+            <SwipeRow key={s.session_id} actions={(close) => (
+              <>
+                <button
+                  style={SWIPE_ACTION_BTN}
+                  onClick={(e) => { e.stopPropagation(); openPreview(s.session_id); close(); }}
+                >浮想</button>
+                <button
+                  style={{ ...SWIPE_ACTION_BTN, color: "#c0392b" }}
+                  onClick={(e) => { e.stopPropagation(); close(); deleteSession(s.session_id); }}
+                >删除</button>
+              </>
+            )}>
+            <div className="sp-card ended" style={{ marginBottom: 0 }}>
               <div
                 className="sp-card-head"
                 onClick={() => { if (!isEditing) toggle(s.session_id); }}
@@ -836,16 +834,6 @@ export default function SessionPanel({ onClose, theme = "light", currentTokens =
                   <span className="sp-head-turn" title="结束时累计 input tokens">
                     {s.tokens_total != null ? `${formatK(s.tokens_total)} tokens` : `${s.turn_count || 0} turn`}
                   </span>
-                  <button
-                    className="sp-fuxiang-btn"
-                    onClick={(e) => { e.stopPropagation(); openPreview(s.session_id); }}
-                    title="查看并注入这段对话"
-                  >浮想</button>
-                  <button
-                    className="sp-delete"
-                    onClick={(e) => { e.stopPropagation(); deleteSession(s.session_id); }}
-                    title="删除这条 session"
-                  >删除</button>
                 </div>
                 <span className="sp-toggle">{isOpen ? "v" : ">"}</span>
               </div>
@@ -900,6 +888,7 @@ export default function SessionPanel({ onClose, theme = "light", currentTokens =
                 </div>
               )}
             </div>
+            </SwipeRow>
           );
         })}
 

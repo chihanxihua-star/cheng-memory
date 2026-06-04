@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 const API = "https://chat.jessaminee.top/api";
 function wpFetch(url, opts = {}) {
@@ -43,52 +43,62 @@ const STYLES = `
 .wp-header {
   flex-shrink: 0;
   padding: 14px 16px;
-  display: flex; align-items: center; justify-content: space-between;
-  background: var(--bg-secondary, #fff);
-  border-bottom: 1px solid var(--border-primary, #E0D8CE);
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  background: transparent;
+  border-bottom: none;
 }
-.wp-root[data-theme="dark"] .wp-header {
-  background: #252527; border-bottom-color: #3a3a3c;
+/* 涟漪式三段导航：CANCEL / 居中标题 / 深色 SAVE✓ */
+.wp-cancel {
+  background: none; border: none; color: var(--text-secondary, #6b6358);
+  font-size: 12px; letter-spacing: 0.18em; cursor: pointer;
+  font-family: inherit; padding: 0; justify-self: start;
+  transition: color .15s;
 }
-.wp-title {
-  font-size: 13px; letter-spacing: 0.2em;
-  color: var(--text-secondary, #6b6358);
+.wp-cancel:hover { color: var(--text-primary, #2B2925); }
+.wp-navtitle {
+  font-size: 13px; color: var(--text-primary, #2B2925);
+  letter-spacing: 0.22em; white-space: nowrap; justify-self: center;
 }
-.wp-close {
-  background: none; border: none;
-  color: var(--text-secondary, #6b6358);
-  font-size: 22px; line-height: 1; cursor: pointer; padding: 4px 8px;
+.wp-send {
+  justify-self: end;
+  background: var(--text-primary, #2B2925); color: var(--bg-page, #FAF6F0);
+  border: 1px solid var(--text-primary, #2B2925);
+  padding: 8px 18px; border-radius: 4px;
+  font-size: 12px; letter-spacing: 0.18em;
+  cursor: pointer; font-family: inherit;
+}
+.wp-send:active { opacity: 0.85; }
+.wp-send-placeholder { justify-self: end; }
+.wp-tabsrow {
+  display: flex; justify-content: center;
+  padding: 6px 0 10px; flex-shrink: 0;
+  background: transparent;
 }
 .wp-tabs {
-  display: flex; gap: 0;
-  border-bottom: 1px solid var(--border-primary, #E0D8CE);
-  background: var(--bg-secondary, #fff);
-  flex-shrink: 0;
-}
-.wp-root[data-theme="dark"] .wp-tabs {
-  background: #252527; border-bottom-color: #3a3a3c;
+  display: inline-flex; gap: 4px;
+  padding: 4px; border: none;
+  background: var(--bg-card, #fff);
+  border-radius: 12px;
 }
 .wp-tab {
-  flex: 1; text-align: center;
-  padding: 10px 0; font-size: 13px;
-  cursor: pointer; border: none; background: none;
-  color: var(--text-tertiary, #999);
-  font-family: inherit; letter-spacing: 0.1em;
-  border-bottom: 2px solid transparent;
-  transition: color .15s, border-color .15s;
+  flex: none; text-align: center;
+  padding: 7px 22px; font-size: 13px;
+  cursor: pointer; border: none; background: transparent;
+  color: var(--text-secondary, #6b6358);
+  font-family: inherit; letter-spacing: 0.08em;
+  border-radius: 9px; white-space: nowrap;
+  transition: color .15s, background .15s;
 }
 .wp-tab.active {
   color: var(--text-primary, #2B2925);
-  border-bottom-color: var(--text-primary, #2B2925);
-}
-.wp-root[data-theme="dark"] .wp-tab.active {
-  color: #f0ece6;
-  border-bottom-color: #f0ece6;
+  background: var(--bg-card-solid, #fff);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 .wp-body {
   flex: 1; min-height: 0; overflow-y: auto;
   -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   padding: 14px 14px 24px;
+  width: 100%; max-width: 600px; margin: 0 auto;
 }
 .wp-loading, .wp-empty {
   text-align: center;
@@ -200,43 +210,39 @@ const STYLES = `
 .wp-slider-wrap {
   margin: 24px 0 30px;
 }
+.wp-field-label {
+  display: block; font-size: 11px;
+  color: var(--text-secondary, #6b6358);
+  letter-spacing: 0.06em;
+}
 .wp-slider-labels {
   display: flex; justify-content: space-between;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-tertiary, #999);
-  margin-bottom: 6px;
+  margin-top: 6px;
 }
+/* 极简发丝 slider —— 对齐涟漪「新涟漪」的 .cm-slider */
 .wp-slider {
-  width: 100%;
   -webkit-appearance: none; appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border-primary, #E0D8CE);
-  outline: none;
+  width: 100%; height: 1px; padding: 0; margin: 10px 0 0;
+  background: var(--border, #E0D8CE); border: none; outline: none; cursor: pointer;
 }
-.wp-root[data-theme="dark"] .wp-slider {
-  background: #3a3a3c;
-}
+.wp-slider::-webkit-slider-runnable-track { height: 1px; background: var(--border, #E0D8CE); }
+.wp-slider::-moz-range-track { height: 1px; background: var(--border, #E0D8CE); }
 .wp-slider::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
-  width: 20px; height: 20px;
-  border-radius: 50%;
-  background: var(--text-primary, #2B2925);
-  cursor: pointer;
-  border: 2px solid var(--bg-primary, #FAF6F0);
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--text-primary, #2B2925); border: none; cursor: pointer;
+  margin-top: -7px;
 }
-.wp-root[data-theme="dark"] .wp-slider::-webkit-slider-thumb {
-  background: #f0ece6;
-  border-color: #1c1c1e;
+.wp-slider::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--text-primary, #2B2925); border: none; cursor: pointer;
 }
 .wp-stat-row {
   display: flex; justify-content: space-between;
   padding: 12px 0;
-  border-bottom: 1px solid var(--border-primary, #E0D8CE);
   font-size: 13px;
-}
-.wp-root[data-theme="dark"] .wp-stat-row {
-  border-bottom-color: #3a3a3c;
 }
 .wp-stat-key {
   color: var(--text-secondary, #6b6358);
@@ -247,29 +253,6 @@ const STYLES = `
 }
 .wp-root[data-theme="dark"] .wp-stat-val {
   color: #f0ece6;
-}
-.wp-save-btn {
-  margin-top: 20px;
-  width: 100%;
-  padding: 10px 0;
-  font-size: 13px;
-  font-family: inherit;
-  border: 1px solid var(--border-primary, #E0D8CE);
-  border-radius: 4px;
-  background: none;
-  color: var(--text-primary, #2B2925);
-  cursor: pointer;
-  transition: background .15s, border-color .15s;
-}
-.wp-save-btn:hover {
-  background: rgba(0,0,0,0.03);
-}
-.wp-root[data-theme="dark"] .wp-save-btn {
-  border-color: #3a3a3c;
-  color: #f0ece6;
-}
-.wp-root[data-theme="dark"] .wp-save-btn:hover {
-  background: rgba(255,255,255,0.06);
 }
 .wp-load-more {
   text-align: center; padding: 12px 0;
@@ -383,7 +366,7 @@ function SighLogTab() {
   );
 }
 
-function DesireTab({ showToast }) {
+function DesireTab({ showToast, saveRef }) {
   const [status, setStatus] = useState(null);
   const [lambda, setLambda] = useState(0.15);
   const [intMin, setIntMin] = useState(30);
@@ -435,14 +418,12 @@ function DesireTab({ showToast }) {
       setSaving(false);
     }
   };
+  if (saveRef) saveRef.current = save;
 
   return (
     <div className="wp-desire">
       <div className="wp-slider-wrap">
-        <div className="wp-slider-labels">
-          <span>佛系</span>
-          <span>主动</span>
-        </div>
+        <label className="wp-field-label">渴望度</label>
         <input
           type="range"
           className="wp-slider"
@@ -450,6 +431,10 @@ function DesireTab({ showToast }) {
           value={lambda}
           onChange={e => setLambda(parseFloat(e.target.value))}
         />
+        <div className="wp-slider-labels">
+          <span>佛系</span>
+          <span>主动</span>
+        </div>
       </div>
 
       <div className="wp-stat-row">
@@ -465,51 +450,47 @@ function DesireTab({ showToast }) {
         <span className="wp-stat-val">{currentP != null ? (currentP * 100).toFixed(1) + '%' : '—'}</span>
       </div>
 
-      <div style={{ marginTop: 24 }}>
-        <div className="wp-slider-labels">
-          <span>轮询间隔</span>
-          <span>{intMin}~{intMax} 分钟</span>
-        </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--text-tertiary, #999)', flexShrink: 0 }}>min</span>
-          <input type="range" className="wp-slider" min={5} max={120} step={5}
-            value={intMin} onChange={e => setIntMin(parseInt(e.target.value))} />
-        </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-tertiary, #999)', flexShrink: 0 }}>max</span>
-          <input type="range" className="wp-slider" min={5} max={120} step={5}
-            value={intMax} onChange={e => setIntMax(parseInt(e.target.value))} />
-        </div>
+      <div className="wp-slider-wrap" style={{ marginTop: 24 }}>
+        <label className="wp-field-label">轮询下限 — {intMin} 分钟</label>
+        <input type="range" className="wp-slider" min={5} max={120} step={5}
+          value={intMin} onChange={e => setIntMin(parseInt(e.target.value))} />
       </div>
-
-      <button className="wp-save-btn" onClick={save} disabled={saving}>
-        {saving ? "保存中…" : "保存"}
-      </button>
+      <div className="wp-slider-wrap">
+        <label className="wp-field-label">轮询上限 — {intMax} 分钟</label>
+        <input type="range" className="wp-slider" min={5} max={120} step={5}
+          value={intMax} onChange={e => setIntMax(parseInt(e.target.value))} />
+      </div>
     </div>
   );
 }
 
 export default function WakePanel({ onClose, theme, showToast }) {
   const [tab, setTab] = useState("log");
+  const saveRef = useRef(null);
 
   return (
     <>
       <style>{STYLES}</style>
       <div className="wp-root" data-theme={theme}>
         <div className="wp-header">
-          <div className="wp-title">唤醒</div>
-          <button className="wp-close" onClick={onClose}>✕</button>
+          <button className="wp-cancel" onClick={onClose}>CANCEL</button>
+          <span className="wp-navtitle">唤醒</span>
+          {tab === "desire"
+            ? <button className="wp-send" onClick={() => saveRef.current?.()}>SAVE ✓</button>
+            : <span className="wp-send-placeholder" />}
         </div>
-        <div className="wp-tabs">
-          <button className={"wp-tab" + (tab === "log" ? " active" : "")} onClick={() => setTab("log")}>
-            叹息日志
-          </button>
-          <button className={"wp-tab" + (tab === "desire" ? " active" : "")} onClick={() => setTab("desire")}>
-            渴望度
-          </button>
+        <div className="wp-tabsrow">
+          <div className="wp-tabs">
+            <button className={"wp-tab" + (tab === "log" ? " active" : "")} onClick={() => setTab("log")}>
+              叹息日志
+            </button>
+            <button className={"wp-tab" + (tab === "desire" ? " active" : "")} onClick={() => setTab("desire")}>
+              渴望度
+            </button>
+          </div>
         </div>
         <div className="wp-body">
-          {tab === "log" ? <SighLogTab /> : <DesireTab showToast={showToast} />}
+          {tab === "log" ? <SighLogTab /> : <DesireTab showToast={showToast} saveRef={saveRef} />}
         </div>
       </div>
     </>
