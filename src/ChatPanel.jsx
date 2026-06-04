@@ -2898,29 +2898,21 @@ function StyleThinkPanel({
   const saveDisabled = false;
 
   const toggleRow = (val, set, kp) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <div style={{ display: "inline-flex", flexShrink: 0, padding: 2, gap: 2, borderRadius: 999, border: "1px solid var(--border, #333)" }}>
       {["开启", "关闭"].map(label => {
         const active = label === "开启" ? val : !val;
         return (
           <button key={kp + label} onClick={() => set(label === "开启")} style={{
             background: active ? "var(--text-primary)" : "transparent",
             color: active ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
-            border: active ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
-            padding: "6px 18px", borderRadius: 4,
-            fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
+            border: "none", padding: "5px 16px", borderRadius: 999,
+            fontSize: 11, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit",
+            transition: "all 0.15s ease",
           }}>{label}</button>
         );
       })}
     </div>
   );
-  const taStyle = {
-    width: "100%", resize: "none", overflowY: "auto",
-    background: "transparent", color: "var(--text-primary)",
-    border: "none", borderBottom: "1px solid var(--border, #333)", borderRadius: 0,
-    padding: "8px 0", fontSize: 14, lineHeight: 1.7,
-    fontFamily: "Georgia, 'Noto Serif SC', serif",
-    outline: "none", boxSizing: "border-box", minHeight: 90,
-  };
   const secLabel = { fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 };
 
   return createPortal(
@@ -2952,42 +2944,58 @@ function StyleThinkPanel({
         <div style={{ maxWidth: 600, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: 22 }}>
 
           <div>
-            <div style={secLabel}>Use Style 风格指令 — 写入 CLAUDE.md，下一轮生效</div>
-            {toggleRow(styleOn, setStyleOn, 's')}
-            <textarea value={styleText} onChange={e => setStyleText(e.target.value)}
-              placeholder="例：用简洁口语化的中文回复，不要用 emoji…"
-              style={{ ...taStyle, marginTop: 12 }} />
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.04em" }}>Use Style 风格指令</div>
+                <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>写入 CLAUDE.md · 下一轮生效</div>
+              </div>
+              {toggleRow(styleOn, setStyleOn, 's')}
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <DocEditor value={styleText} onChange={e => setStyleText(e.target.value)}
+                placeholder="例：用简洁口语化的中文回复，不要用 emoji…" minHeight={150} />
+            </div>
             <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>{styleText.length} 字</div>
           </div>
 
           <div>
-            <div style={secLabel}>Thinking — 下面两个开关都读这一段指令，可一开一关</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 6 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 11, color: "var(--text-tertiary)", minWidth: 64 }}>包裹指令</span>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.04em" }}>Thinking 思考</div>
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>两个开关共用下方指令，可一开一关</div>
+            </div>
+            <div style={{ border: "1px solid var(--border, #333)", borderRadius: 10, overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "13px 14px" }}>
+                <div>
+                  <div style={{ fontSize: 13, color: "var(--text-primary)" }}>包裹指令</div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 3 }}>正文用 &lt;think&gt; 写中文思绪</div>
+                </div>
                 {toggleRow(thinkOn, setThinkOn, 't')}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 11, color: "var(--text-tertiary)", minWidth: 64 }}>原生思绪</span>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "13px 14px", borderTop: "1px solid var(--border, #333)" }}>
+                <div>
+                  <div style={{ fontSize: 13, color: "var(--text-primary)" }}>原生思绪</div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 3 }}>Claude 原生摘要 · 英文 · 随重启生效</div>
+                </div>
                 {toggleRow(native, setNative, 'n')}
               </div>
             </div>
-            <div style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.6 }}>包裹 = CC 正文用 &lt;think&gt; 写中文思绪 · 原生 = Claude 原生摘要思考（英文 · 激活时随重启生效）</div>
-            <textarea value={thinkText} onChange={e => setThinkText(e.target.value)}
-              placeholder="引导 CC 怎么想…（包裹 / 原生共用这段）"
-              style={{ ...taStyle, marginTop: 8 }} />
+            <div style={{ marginTop: 14 }}>
+              <DocEditor value={thinkText} onChange={e => setThinkText(e.target.value)}
+                placeholder="引导 CC 怎么想…（包裹 / 原生共用这段）" minHeight={150} />
+            </div>
             <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>{thinkText.length} 字</div>
           </div>
 
           {saved && (
-            <div style={{ borderTop: "1px solid var(--border, #333)", paddingTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ paddingTop: 4, display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>已保存到 CLAUDE.md（未重启）。选激活方式让 CC 读到新配置：</div>
               <div>
                 <div style={secLabel}>思考深度 effort</div>
-                <div style={{ display: "flex", gap: 4 }}>
+                <div style={{ display: "flex", gap: 6 }}>
                   {EFFORT_OPTIONS.map(e => (
                     <button key={e.value} onClick={() => setSelectedEffort(e.value)} style={{
-                      flex: 1, padding: "6px 0", fontSize: 12, borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
+                      flex: 1, padding: "8px 0", fontSize: 12, borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
+                      letterSpacing: "0.05em", transition: "all 0.15s ease",
                       background: selectedEffort === e.value ? "var(--text-primary)" : "transparent",
                       color: selectedEffort === e.value ? "var(--bg-page, #1a1a1a)" : "var(--text-tertiary)",
                       border: selectedEffort === e.value ? "1px solid var(--text-primary)" : "1px solid var(--border, #333)",
@@ -2997,12 +3005,14 @@ function StyleThinkPanel({
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => { onAmnesia && onAmnesia(selectedEffort, native); onClose(); }} style={{
-                  flex: 1, padding: "10px 0", fontSize: 12, borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
+                  flex: 1, padding: "11px 0", fontSize: 12, borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
+                  letterSpacing: "0.16em", fontWeight: 500, transition: "all 0.15s ease",
                   background: "transparent", color: "var(--text-primary)", border: "1px solid var(--border, #333)",
                 }}>失忆重启</button>
                 <div style={{ flex: 1, position: "relative" }}>
                   <button onClick={() => setShowModelPicker(p => !p)} style={{
-                    width: "100%", padding: "10px 0", fontSize: 12, borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
+                    width: "100%", padding: "11px 0", fontSize: 12, borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
+                    letterSpacing: "0.16em", fontWeight: 500, transition: "all 0.15s ease",
                     background: "transparent", color: "var(--text-primary)", border: "1px solid var(--border, #333)",
                   }}>选择模型重启 ▾</button>
                   {showModelPicker && (
