@@ -4224,6 +4224,7 @@ function DocEditor({ value, onChange, placeholder, disabled, minHeight = 150 }) 
 function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, currentEffort, showToast }) {
   const [claudeMd, setClaudeMd] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
+  const [outputStyle, setOutputStyle] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -4249,12 +4250,18 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, c
         .select("content")
         .eq("project_id", PROJECT_ID).eq("mode", "cc").eq("doc_type", "system_prompt")
         .maybeSingle(),
-    ]).then(([a, b]) => {
+      supabase.from("documents_cheng")
+        .select("content")
+        .eq("project_id", PROJECT_ID).eq("mode", "cc").eq("doc_type", "output_style")
+        .maybeSingle(),
+    ]).then(([a, b, c]) => {
       if (!alive) return;
       if (a.error && a.error.code !== "PGRST116") showToast("加载 CLAUDE.md 失败：" + a.error.message);
       if (b.error && b.error.code !== "PGRST116") showToast("加载 system prompt 失败：" + b.error.message);
+      if (c.error && c.error.code !== "PGRST116") showToast("加载 output style 失败：" + c.error.message);
       setClaudeMd((a.data && a.data.content) || "");
       setSystemPrompt((b.data && b.data.content) || "");
+      setOutputStyle((c.data && c.data.content) || "");
     }).catch(e => {
       if (alive) showToast("加载失败：" + (e.message || e));
     }).finally(() => { if (alive) setLoading(false); });
@@ -4264,6 +4271,7 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, c
   const saveAll = async () => {
     setSaving(true);
     try {
+      await upsertDocSingleton("cc", "output_style", outputStyle);
       await upsertDocSingleton("cc", "system_prompt", systemPrompt);
       await upsertDocSingleton("cc", "claude_md", claudeMd);
       setSaved(true);
@@ -4275,6 +4283,17 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, c
 
   return (
     <>
+      <div style={{ marginBottom: 36 }}>
+        <div className="cp-ps-section-title">Output Style<span style={{ fontSize: 9, color: "var(--text-tertiary)", marginLeft: 8, fontWeight: 400 }}>替换出厂人格 · 留空走默认</span></div>
+        <DocEditor
+          value={outputStyle}
+          onChange={e => setOutputStyle(e.target.value)}
+          placeholder={loading ? "加载中…" : "输入澄人设（直接写正文，会替换出厂的「软件工程 agent」人格）…"}
+          disabled={loading}
+          minHeight={150}
+        />
+      </div>
+
       <div style={{ marginBottom: 36 }}>
         <div className="cp-ps-section-title">系统提示</div>
         <DocEditor
@@ -4381,7 +4400,7 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, c
 
       {!saved && (
         <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 8, lineHeight: 1.6 }}>
-          一次保存系统提示与 CLAUDE.md；文件区域的增删立即生效。
+          一次保存 Output Style、系统提示与 CLAUDE.md（重启后生效）；文件区域的增删立即生效。
         </div>
       )}
     </>
