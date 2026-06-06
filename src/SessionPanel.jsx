@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { supabase } from "./lib/supabase";
 
 const API = "https://chat.jessaminee.top/api";
+const MIN_ENDED_SESSION_TOKENS = 20000;
 function spFetch(url, opts = {}) {
   const t = localStorage.getItem("memhome-auth-token") || "";
   const headers = { ...(opts.headers || {}) };
@@ -420,7 +421,10 @@ export default function SessionPanel({ onClose, theme = "light", currentTokens =
     [sessions]
   );
   const endedSessions = useMemo(
-    () => sessions.filter(s => s.status === "ended"),
+    () => sessions.filter(s =>
+      s.status === "ended" &&
+      (s.tokens_total == null || s.tokens_total >= MIN_ENDED_SESSION_TOKENS)
+    ),
     [sessions]
   );
 
