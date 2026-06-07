@@ -16,6 +16,13 @@ const PROJECT_ID = "b5e5d83a-0c17-4421-a0e2-217519ed62fb";
 const CONV_KEY = "memhome-conv-id";
 const BASE_TOKENS_KEY = "memhome-base-tokens";
 const CONTEXT_TOKENS_KEY = "memhome-context-tokens";
+const LAST_USAGE_KEY = "memhome-last-token-usage";
+const LAST_USAGE_CALLS_KEY = "memhome-last-token-usage-calls";
+const BASE_USAGE_KEY = "memhome-base-token-usage";
+const BASE_USAGE_CALLS_KEY = "memhome-base-token-usage-calls";
+const BASE_SESSION_KEY = "memhome-base-token-session";
+const FORGE_TOKEN_LIMIT_KEY = "memhome-forge-token-limit";
+const DOC_TOKEN_BREAKDOWN_KEY = "memhome-doc-token-breakdown";
 
 /* 鉴权：所有 /api/* 请求自动带 Bearer，401/4001 抛 auth-expired */
 const AUTH_TOKEN_KEY = "memhome-auth-token";
@@ -151,6 +158,37 @@ function estimateTokens(v) {
 // 这一轮的 API 消耗 = 本轮 input（含 cache_*）+ 本轮 output。
 function turnIncrement(msg) {
   return (msg?.token_input || 0) + (msg?.token_output || 0);
+}
+function readStoredJSON(key, fallback = null) {
+  try {
+    const v = localStorage.getItem(key);
+    return v ? JSON.parse(v) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function normalizeUsage(raw) {
+  const u = raw || {};
+  const input = u.input_tokens || 0;
+  const cacheRead = u.cache_read_input_tokens || 0;
+  const cacheCreate = u.cache_creation_input_tokens || 0;
+  const output = u.output_tokens || u.output || 0;
+  const context = input + cacheRead + cacheCreate;
+  const equivInput = Math.round(input + cacheRead * 0.1 + cacheCreate * 2);
+  return { input, cacheRead, cacheCreate, output, context, equivInput, equivTotal: equivInput + output };
+}
+function normalizeUsageCalls(calls, fallbackUsage) {
+  const src = Array.isArray(calls) && calls.length ? calls : (fallbackUsage ? [{ usage: fallbackUsage }] : []);
+  return src.map((c, idx) => ({
+    idx: idx + 1,
+    requestId: c.requestId || null,
+    timestamp: c.timestamp || null,
+    ...normalizeUsage(c.usage || c),
+  }));
+}
+function messageTimeMs(msg) {
+  const t = msg?.created_at ? Date.parse(msg.created_at) : NaN;
+  return Number.isFinite(t) ? t : 0;
 }
 function toolCallTokens(call) {
   if (!call) return 0;
@@ -322,8 +360,9 @@ const CSS = `
 .cp-model-dropdown {
   position: absolute; top: 100%; right: 0; margin-top: 4px;
   background: var(--bg-panel); border: 1px solid var(--border-card);
-  border-radius: 8px; padding: 4px; min-width: 180px; z-index: 80;
+  border-radius: 8px; padding: 4px; min-width: 220px; max-width: min(360px, calc(100vw - 18px)); z-index: 80;
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  max-height: min(78vh, 720px); overflow-y: auto;
 }
 .cp-model-opt {
   padding: 7px 11px; border-radius: 6px; cursor: pointer;
@@ -333,6 +372,36 @@ const CSS = `
 .cp-model-opt.active { background: var(--bg-sidebar-active); }
 .cp-model-opt .nm { font-size: 12px; font-weight: 500; color: var(--text-primary); }
 .cp-model-opt .ds { font-size: 9px; color: var(--text-tertiary); }
+.cp-token-panel {
+  margin-top: 6px; padding: 8px; border-top: 1px solid var(--border-card);
+  min-width: 280px; color: var(--text-secondary);
+}
+.cp-token-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;
+}
+.cp-token-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px;
+}
+.cp-token-grid div {
+  border: 1px solid var(--border-card); border-radius: 6px; padding: 6px;
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.cp-token-grid span, .cp-token-line span { font-size: 10px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-token-grid b, .cp-token-line b { font-size: 11px; color: var(--text-primary); font-weight: 600; }
+.cp-token-section {
+  margin: 10px 0 5px; font-size: 10px; color: var(--text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.cp-token-call {
+  border: 1px solid var(--border-card); border-radius: 6px; padding: 6px; margin-bottom: 6px;
+}
+.cp-token-call.compact { padding-bottom: 4px; }
+.cp-token-call-title { font-size: 11px; color: var(--text-primary); font-weight: 600; margin-bottom: 4px; }
+.cp-token-line { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; min-width: 0; }
+.cp-token-line.strong { border-top: 1px solid var(--border-card); margin-top: 3px; padding-top: 5px; }
+.cp-token-empty { font-size: 11px; color: var(--text-tertiary); padding: 5px 0; }
+.cp-token-note { font-size: 10px; color: var(--text-tertiary); line-height: 1.45; margin-top: 8px; }
 .cp-conn-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .cp-conn-dot.ok { background: #C9A8AD; }
 .cp-conn-dot.err { background: #ccc; }
@@ -390,6 +459,12 @@ const CSS = `
 }
 .cp-root[data-theme="dark"] .cp-msg-bubble.user { background: rgba(248, 245, 240, 0.82); }
 .cp-root[data-theme="dark"] .cp-msg-bubble.assistant { background: rgba(58, 58, 60, 0.72); }
+/* world_message 手机消息气泡：很淡的蓝底（区别于面对面普通白气泡）。
+   蓝调 RGB(190,213,240) / 暗色 RGB(72,92,122) 保持不变，只调透明度。
+   透明度历史：0.5 → 0.26 → 0.15（越来越淡）。 */
+.cp-msg-bubble.world-msg { background: rgba(190, 213, 240, 0.15); position: relative; }
+.cp-root[data-theme="dark"] .cp-msg-bubble.world-msg { background: rgba(72, 92, 122, 0.2); }
+.cp-phone-text { white-space: pre-wrap; }
 
 .cp-msg-check-pad { display: inline-block; width: 20px; }
 .cp-msg-check {
@@ -398,7 +473,9 @@ const CSS = `
   display: flex; align-items: center;
 }
 .cp-msg-check.sent { color: #D0C8C0; }
+.cp-msg-check.seen { color: #8F7E84; }
 .cp-root[data-theme="dark"] .cp-msg-check.sent { color: #6A6460; }
+.cp-root[data-theme="dark"] .cp-msg-check.seen { color: #AFA39E; }
 
 .cp-msg-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin-bottom: 8px; }
 .cp-msg-images img { width: 100%; border-radius: 8px; cursor: pointer; object-fit: cover; aspect-ratio: 1; }
@@ -1008,7 +1085,7 @@ export default function ChatPanel({ onBack }) {
   const [images, setImages] = useState([]); // dataURL 数组
   const [streamSnap, setStreamSnap] = useState(null); // 流式快照（null/对象）
   const [isGenerating, setIsGenerating] = useState(false);
-  const [bufferCount, setBufferCount] = useState(0);
+  const [, setBufferCount] = useState(0);
   const [showTyping, setShowTyping] = useState(false);
   const [ccStatus, setCcStatus] = useState("unknown"); // ready / down / unknown
   const [sweepAt, setSweepAt] = useState(0); // 失忆/清屏 时戳一下，桌宠播"扫地"
@@ -1043,8 +1120,14 @@ export default function ChatPanel({ onBack }) {
     const v = localStorage.getItem(BASE_TOKENS_KEY);
     return v ? (parseInt(v, 10) || 0) : 0;
   });
+  const [lastTokenUsage, setLastTokenUsage] = useState(() => readStoredJSON(LAST_USAGE_KEY));
+  const [lastTokenUsageCalls, setLastTokenUsageCalls] = useState(() => readStoredJSON(LAST_USAGE_CALLS_KEY, []));
+  const [baseTokenUsage, setBaseTokenUsage] = useState(() => readStoredJSON(BASE_USAGE_KEY));
+  const [baseTokenUsageCalls, setBaseTokenUsageCalls] = useState(() => readStoredJSON(BASE_USAGE_CALLS_KEY, []));
+  const [baseSessionId, setBaseSessionId] = useState(() => localStorage.getItem(BASE_SESSION_KEY) || "");
+  const [docTokenBreakdown, setDocTokenBreakdown] = useState(() => readStoredJSON(DOC_TOKEN_BREAKDOWN_KEY, null));
   const baseCaptureNeededRef = useRef(!localStorage.getItem(BASE_TOKENS_KEY));
-  const TOKEN_LIMIT = 200000;
+  const [forgeTokenLimit, setForgeTokenLimit] = useState(() => readStoredJSON(FORGE_TOKEN_LIMIT_KEY, { enabled: false, threshold: null }));
   // 截断触发值：右上角字数 ≥ 此值时变红。来自 localStorage settings.compressThreshold
   // sidebar 关闭时刷新一次，保证从「参数设置」改完保存就立刻生效
   const [alertThreshold, setAlertThreshold] = useState(() => getSettings(PROJECT_ID).compressThreshold);
@@ -1058,6 +1141,7 @@ export default function ChatPanel({ onBack }) {
   const [imageViewer, setImageViewer] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [flushedIds, setFlushedIds] = useState(new Set());
+  const [seenIds, setSeenIds] = useState(new Set());
 
   // Session 可视化面板开关（点 Claude 头像打开）
   const [sessionOpen, setSessionOpen] = useState(false);
@@ -1087,6 +1171,8 @@ export default function ChatPanel({ onBack }) {
   const bubbleTimersRef = useRef([]); // 多气泡节拍 setTimeout 句柄：重拉历史/卸载时清掉，防陈旧局部写入回退完整消息
   const pendingStopRef = useRef(0); // 断线时按下的"停止"时间戳：重连后 5s 内补发，过期丢弃(防误伤下一轮)
   const messagesScrollRef = useRef(null);
+  const stickToBottomRef = useRef(true);
+  const savedLocalIdsRef = useRef(new Map());
   const fileInputRef = useRef(null);
   const filePickerRef = useRef(null);
   const inputRef = useRef(null);
@@ -1104,8 +1190,95 @@ export default function ChatPanel({ onBack }) {
   }, []);
   const closeToast = useCallback(id => setToasts(t => t.filter(x => x.id !== id)), []);
 
+  const clearBaseTokenState = useCallback(() => {
+    setBaseTokens(0);
+    setBaseTokenUsage(null);
+    setBaseTokenUsageCalls([]);
+    localStorage.removeItem(BASE_TOKENS_KEY);
+    localStorage.removeItem(BASE_USAGE_KEY);
+    localStorage.removeItem(BASE_USAGE_CALLS_KEY);
+    baseCaptureNeededRef.current = true;
+  }, []);
+
+  const applyBaseTokenState = useCallback((sessionId, contextTokens, usage, usageCalls) => {
+    const ctx = parseInt(contextTokens, 10) || 0;
+    if (!sessionId || ctx <= 0) return;
+    const normalizedUsage = usage ? normalizeUsage(usage) : null;
+    const normalizedCalls = normalizeUsageCalls(usageCalls, usage);
+    setBaseSessionId(sessionId);
+    setBaseTokens(ctx);
+    setBaseTokenUsage(normalizedUsage);
+    setBaseTokenUsageCalls(normalizedCalls);
+    localStorage.setItem(BASE_SESSION_KEY, sessionId);
+    localStorage.setItem(BASE_TOKENS_KEY, String(ctx));
+    if (normalizedUsage) localStorage.setItem(BASE_USAGE_KEY, JSON.stringify(normalizedUsage));
+    else localStorage.removeItem(BASE_USAGE_KEY);
+    localStorage.setItem(BASE_USAGE_CALLS_KEY, JSON.stringify(normalizedCalls));
+    baseCaptureNeededRef.current = false;
+  }, []);
+
+  const refreshForgeTokenLimit = useCallback(async () => {
+    try {
+      const [rc, rd] = await Promise.all([
+        authedFetch(API + "/forge/config"),
+        authedFetch(API + "/forge/daemon"),
+      ]);
+      if (!rc.ok) throw new Error("config HTTP " + rc.status);
+      const cfg = await rc.json();
+      const daemon = rd.ok ? await rd.json() : {};
+      const next = {
+        enabled: !!daemon.enabled,
+        threshold: parseInt(cfg.trigger_threshold, 10) || null,
+      };
+      setForgeTokenLimit(next);
+      localStorage.setItem(FORGE_TOKEN_LIMIT_KEY, JSON.stringify(next));
+    } catch {
+      // 保留上一次成功读取的值。
+    }
+  }, []);
+
+  useEffect(() => { refreshForgeTokenLimit(); }, [refreshForgeTokenLimit]);
+  useEffect(() => { if (!sidebarOpen) refreshForgeTokenLimit(); }, [sidebarOpen, refreshForgeTokenLimit]);
+
+  useEffect(() => {
+    if (!currentSessionId) return;
+    let cancelled = false;
+    if (baseSessionId !== currentSessionId) {
+      setBaseSessionId(currentSessionId);
+      localStorage.setItem(BASE_SESSION_KEY, currentSessionId);
+      clearBaseTokenState();
+    }
+    authedFetch(API + "/cc/session-baseline?session=" + encodeURIComponent(currentSessionId))
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !data || data.session !== currentSessionId || !data.contextTokens) return;
+        applyBaseTokenState(currentSessionId, data.contextTokens, data.usage, data.usageCalls);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [currentSessionId, baseSessionId, clearBaseTokenState, applyBaseTokenState]);
+
+  useEffect(() => {
+    let cancelled = false;
+    authedFetch(API + "/cc/token-breakdown")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !data || !Array.isArray(data.items)) return;
+        const next = {
+          items: data.items,
+          total: data.total || data.items.reduce((s, x) => s + (x.tokens || 0), 0),
+          updatedAt: data.updatedAt || new Date().toISOString(),
+        };
+        setDocTokenBreakdown(next);
+        try { localStorage.setItem(DOC_TOKEN_BREAKDOWN_KEY, JSON.stringify(next)); } catch {}
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   /* ─────── 滚动 ─────── */
   const scrollToBottom = useCallback(() => {
+    stickToBottomRef.current = true;
     // double rAF：长内容 markdown 渲染要两帧才把 scrollHeight 算稳
     requestAnimationFrame(() => {
       const el = messagesScrollRef.current;
@@ -1121,6 +1294,14 @@ export default function ChatPanel({ onBack }) {
     if (!el) return true;
     return el.scrollHeight - el.scrollTop - el.clientHeight < 100;
   }, []);
+  const scrollToBottomIfSticky = useCallback(() => {
+    const near = isNearBottom();
+    if (near) stickToBottomRef.current = true;
+    if (stickToBottomRef.current) scrollToBottom();
+  }, [isNearBottom, scrollToBottom]);
+  const handleMessagesScroll = useCallback(() => {
+    stickToBottomRef.current = isNearBottom();
+  }, [isNearBottom]);
 
   /* ─────── Health ─────── */
   const checkHealth = useCallback(async () => {
@@ -1150,6 +1331,7 @@ export default function ChatPanel({ onBack }) {
 
   /* ─────── 加载历史 ─────── */
   const loadCurrentConversation = useCallback(async () => {
+    const requestStartedAt = Date.now();
     // 清掉未触发的多气泡节拍定时器：下面要用服务端权威历史整表替换，
     // 若不清，切 app 期间被冻住的旧定时器解冻后会把完整消息内容回退成局部快照（3→2→3 抖动）。
     bubbleTimersRef.current.forEach(clearTimeout);
@@ -1183,7 +1365,7 @@ export default function ChatPanel({ onBack }) {
       // 不抑制的话 cp-msgIn 会重播（切回前台"跳一下"）。挂载完(下一帧)再摘掉，不影响后续实时消息进场动画。
       const scroller = messagesScrollRef.current;
       if (scroller) scroller.classList.add("cp-no-anim");
-      setMessages(ms.map(m => {
+      const loadedMessages = ms.map(m => {
         const msg = {
           id: m.id,
           role: m.role,
@@ -1209,9 +1391,26 @@ export default function ChatPanel({ onBack }) {
           }
         }
         return msg;
-      }));
+      });
+      setMessages(prev => {
+        const loadedIds = new Set(loadedMessages.map(m => m.id));
+        const freshMissing = prev.filter(m => {
+          if (!m?.id || loadedIds.has(m.id)) return false;
+          if (String(m.id).startsWith("local-u-")) {
+            const sameSaved = loadedMessages.some(x =>
+              x.role === m.role
+              && (x.content || "") === (m.content || "")
+              && JSON.stringify(x.images || []) === JSON.stringify(m.images || [])
+            );
+            return !sameSaved;
+          }
+          if (String(m.id).startsWith("local-")) return true;
+          return messageTimeMs(m) >= requestStartedAt - 1000;
+        });
+        return freshMissing.length ? [...loadedMessages, ...freshMissing] : loadedMessages;
+      });
       pushLog(true, "加载历史", `${ms.length} 条`);
-      setTimeout(scrollToBottom, 50);
+      setTimeout(scrollToBottomIfSticky, 50);
       // 替换已提交、新气泡已挂载，摘掉抑制标记，恢复后续实时消息的进场动画
       if (scroller) setTimeout(() => scroller.classList.remove("cp-no-anim"), 80);
     } catch (e) {
@@ -1219,7 +1418,7 @@ export default function ChatPanel({ onBack }) {
       pushLog(false, "加载历史", e.message || "网络错误");
       messagesScrollRef.current?.classList.remove("cp-no-anim"); // 兜底：异常时别把动画永久抑制
     }
-  }, [scrollToBottom, pushLog]);
+  }, [scrollToBottomIfSticky, pushLog]);
 
   useEffect(() => { messagesLenRef.current = messages.length; }, [messages.length]);
   useEffect(() => { loadConvRef.current = loadCurrentConversation; }, [loadCurrentConversation]);
@@ -1249,19 +1448,17 @@ export default function ChatPanel({ onBack }) {
         setShowTyping(false);
         const s = streamRef.current; if (!s) break;
         s.thinking += (msg.text || "");
-        const wasNear = isNearBottom();
         setStreamSnap(snap => snap ? { ...snap, thinking: s.thinking } : snap);
-        if (wasNear) scrollToBottom();
+        scrollToBottomIfSticky();
         break;
       }
       case "tool_use": {
         if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
         setShowTyping(false);
         const s = streamRef.current; if (!s) break;
-        const wasNear = isNearBottom();
         s.tools.push({ id: msg.id, name: msg.name, input: msg.input, result: undefined, isError: false });
         setStreamSnap(snap => snap ? { ...snap, tools: [...s.tools] } : snap);
-        if (wasNear) scrollToBottom();
+        scrollToBottomIfSticky();
         break;
       }
       case "tool_result": {
@@ -1278,8 +1475,8 @@ export default function ChatPanel({ onBack }) {
         const s = streamRef.current; if (!s) break;
         s.delta += (msg.text || "");
         // 流式过程中不渲染主气泡（避免 ---bubble--- 切分闪烁）
-        // 但仍然滚到底部 —— thinking / tool 输出可能正在生长，长消息要跟着滚
-        scrollToBottom();
+        // 但仍然在用户贴底时跟随 —— thinking / tool 输出可能正在生长，长消息要跟着滚
+        scrollToBottomIfSticky();
         break;
       }
       case "clear": {
@@ -1293,7 +1490,7 @@ export default function ChatPanel({ onBack }) {
         if (!Array.isArray(s.bubbles)) s.bubbles = [];
         s.bubbles.push(msg.text || "");
         setStreamSnap(snap => snap ? { ...snap, bubbles: [...s.bubbles] } : snap);
-        scrollToBottom();
+        scrollToBottomIfSticky();
         break;
       }
       case "clean": {
@@ -1308,6 +1505,14 @@ export default function ChatPanel({ onBack }) {
         if (!s) { setIsGenerating(false); setStreamSnap(null); break; }
         const finalText = s.clean ?? s.delta ?? "";
         const outTokens = (msg.usage && (msg.usage.output_tokens || msg.usage.output)) || 0;
+        const usageDetail = msg.usage ? normalizeUsage(msg.usage) : null;
+        const usageCalls = normalizeUsageCalls(msg.usageCalls, msg.usage);
+        if (usageDetail) {
+          setLastTokenUsage(usageDetail);
+          setLastTokenUsageCalls(usageCalls);
+          localStorage.setItem(LAST_USAGE_KEY, JSON.stringify(usageDetail));
+          localStorage.setItem(LAST_USAGE_CALLS_KEY, JSON.stringify(usageCalls));
+        }
         // contextTokens = 最后一次 API 调用的实际上下文大小（非累加值）
         const ctxSize = msg.contextTokens || (msg.usage
           ? (msg.usage.input_tokens || 0) + (msg.usage.cache_read_input_tokens || 0) + (msg.usage.cache_creation_input_tokens || 0)
@@ -1316,9 +1521,7 @@ export default function ChatPanel({ onBack }) {
           setContextInTokens(ctxSize);
           localStorage.setItem(CONTEXT_TOKENS_KEY, String(ctxSize));
           if (baseCaptureNeededRef.current) {
-            setBaseTokens(ctxSize);
-            localStorage.setItem(BASE_TOKENS_KEY, String(ctxSize));
-            baseCaptureNeededRef.current = false;
+            applyBaseTokenState(currentSessionId || baseSessionId || "current", ctxSize, msg.usage, msg.usageCalls);
           }
         }
         const useBubbles = Array.isArray(s.bubbles) && s.bubbles.length > 0
@@ -1355,6 +1558,7 @@ export default function ChatPanel({ onBack }) {
               cache_read: msg.usage.cache_read_input_tokens || 0,
               cache_creation: msg.usage.cache_creation_input_tokens || 0,
             } : null,
+            event: msg.channel === "phone" ? "phone_chat" : null, // 异地普通回复 live 也走手机气泡
           };
           // 先提交首气泡——但按 id 去重升级：切 app 回来时 loadConv 重拉可能已把整条(完整内容)
           // 补进来了，这里若盲目 [...prev, baseMsg] 会追出重复条；改为"已存在则保留更完整的那条"。
@@ -1376,7 +1580,7 @@ export default function ChatPanel({ onBack }) {
                 if ((m.content || "").length >= newContent.length) return m;
                 return { ...m, content: newContent };
               }));
-              scrollToBottom();
+              scrollToBottomIfSticky();
             }, i * 1500);
             bubbleTimersRef.current.push(h);
           }
@@ -1384,7 +1588,7 @@ export default function ChatPanel({ onBack }) {
         setStreamSnap(null);
         setIsGenerating(false);
         streamRef.current = null;
-        scrollToBottom();
+        scrollToBottomIfSticky();
         // thinking 日志
         const hasNativeThinking = !!(s.thinking);
         const simThink = extractThink(finalText);
@@ -1453,6 +1657,14 @@ export default function ChatPanel({ onBack }) {
           localStorage.removeItem(BASE_TOKENS_KEY);
           setContextInTokens(null);
           localStorage.removeItem(CONTEXT_TOKENS_KEY);
+          setLastTokenUsage(null);
+          setLastTokenUsageCalls([]);
+          setBaseTokenUsage(null);
+          setBaseTokenUsageCalls([]);
+          localStorage.removeItem(LAST_USAGE_KEY);
+          localStorage.removeItem(LAST_USAGE_CALLS_KEY);
+          localStorage.removeItem(BASE_USAGE_KEY);
+          localStorage.removeItem(BASE_USAGE_CALLS_KEY);
           baseCaptureNeededRef.current = true;
         }
         // forge_done / watchdog 带 id：替换之前那条同 id 的消息，原地切换
@@ -1470,7 +1682,7 @@ export default function ChatPanel({ onBack }) {
         } else {
           setMessages(prev => [...prev, sys]);
         }
-        scrollToBottom();
+        scrollToBottomIfSticky();
         const isErr = kind === "forge_done" && detail?.error;
         pushLog(!isErr, content || kind || "系统消息", isErr ? detail.error : null);
         break;
@@ -1479,7 +1691,40 @@ export default function ChatPanel({ onBack }) {
         if (msg.ids && msg.ids.length) {
           setFlushedIds(prev => {
             const next = new Set(prev);
-            msg.ids.forEach(id => next.add(id));
+            msg.ids.forEach(id => next.add(savedLocalIdsRef.current.get(id) || id));
+            return next;
+          });
+        }
+        break;
+      case "user_saved":
+        if (msg.local_id && msg.message?.id) {
+          savedLocalIdsRef.current.set(msg.local_id, msg.message.id);
+          setMessages(prev => prev.map(m =>
+            m.id === msg.local_id
+              ? { ...m, id: msg.message.id, created_at: msg.message.created_at || m.created_at }
+              : m
+          ));
+          setFlushedIds(prev => {
+            if (!prev.has(msg.local_id)) return prev;
+            const next = new Set(prev);
+            next.delete(msg.local_id);
+            next.add(msg.message.id);
+            return next;
+          });
+          setSeenIds(prev => {
+            if (!prev.has(msg.local_id)) return prev;
+            const next = new Set(prev);
+            next.delete(msg.local_id);
+            next.add(msg.message.id);
+            return next;
+          });
+        }
+        break;
+      case "seen":
+        if (msg.ids && msg.ids.length) {
+          setSeenIds(prev => {
+            const next = new Set(prev);
+            msg.ids.forEach(id => next.add(savedLocalIdsRef.current.get(id) || id));
             return next;
           });
         }
@@ -1506,27 +1751,29 @@ export default function ChatPanel({ onBack }) {
       }
       case "bark_msg": {
         if (convId && msg.conversation_id === convId && msg.message) {
+          // world_message 用自己的 event + 保留 thinking；dice/bark 维持原行为(event=bark)
+          const _isWM = msg.message.event === "world_message";
           setMessages(prev => [...prev, {
             id: msg.message.id,
             role: "assistant",
             content: msg.message.content || "",
-            thinking: null,
+            thinking: _isWM ? (msg.message.thinking || null) : null,
             tool_calls: null,
             images: [],
             created_at: msg.message.created_at,
             token_input: 0,
             token_output: 0,
             cache_detail: null,
-            event: "bark",
+            event: _isWM ? "world_message" : "bark",
           }]);
-          setTimeout(scrollToBottom, 50);
+          setTimeout(scrollToBottomIfSticky, 50);
         }
         break;
       }
       default:
         break;
     }
-  }, [convId, isNearBottom, scrollToBottom, showToast, loadCurrentConversation]);
+  }, [convId, scrollToBottomIfSticky, showToast, loadCurrentConversation]);
 
   const connectWSRef = useRef(null);
   const connectWS = useCallback(() => {
@@ -1674,11 +1921,6 @@ export default function ChatPanel({ onBack }) {
     connectWS();
   }, [connectWS, showToast]);
 
-  const flush = useCallback(() => {
-    const ws = wsRef.current;
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "flush" }));
-  }, []);
-
   /* ─────── CC restart / new chat ─────── */
   const restartCCRef = useRef(null);
   const newChat = useCallback(async () => {
@@ -1724,11 +1966,12 @@ export default function ChatPanel({ onBack }) {
       setStreamSnap(null);
       streamRef.current = null;
       // CC 重启 → 基础 tokens 需要重新捕获；上下文 tokens 也作废
-      setBaseTokens(0);
-      localStorage.removeItem(BASE_TOKENS_KEY);
+      clearBaseTokenState();
+      setBaseSessionId(d?.session || "");
+      if (d?.session) localStorage.setItem(BASE_SESSION_KEY, d.session);
+      else localStorage.removeItem(BASE_SESSION_KEY);
       setContextInTokens(null);
       localStorage.removeItem(CONTEXT_TOKENS_KEY);
-      baseCaptureNeededRef.current = true;
       if (opts.toastMessage) {
         // 模型切换等场景仍然走 toast，避免每次都在聊天里塞一条
         showToast(opts.toastMessage);
@@ -1812,13 +2055,6 @@ export default function ChatPanel({ onBack }) {
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
   };
-  const handleInputKey = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
-  };
-
   /* ─────── 图片上传 ─────── */
   const onPickImages = (e) => {
     const files = Array.from(e.target.files || []);
@@ -1901,6 +2137,14 @@ export default function ChatPanel({ onBack }) {
       localStorage.removeItem(CONTEXT_TOKENS_KEY);
       setBaseTokens(0);
       localStorage.removeItem(BASE_TOKENS_KEY);
+      setLastTokenUsage(null);
+      setLastTokenUsageCalls([]);
+      setBaseTokenUsage(null);
+      setBaseTokenUsageCalls([]);
+      localStorage.removeItem(LAST_USAGE_KEY);
+      localStorage.removeItem(LAST_USAGE_CALLS_KEY);
+      localStorage.removeItem(BASE_USAGE_KEY);
+      localStorage.removeItem(BASE_USAGE_CALLS_KEY);
       baseCaptureNeededRef.current = true;
       setSessionOpen(false);
       setSweepAt(Date.now()); // 失忆 → 桌宠扫地
@@ -2083,8 +2327,8 @@ export default function ChatPanel({ onBack }) {
 
   /* ─────── 自动滚动 ─────── */
   useEffect(() => {
-    if (isNearBottom()) scrollToBottom();
-  }, [messages, streamSnap, showTyping, scrollToBottom, isNearBottom]);
+    scrollToBottomIfSticky();
+  }, [messages, streamSnap, showTyping, scrollToBottomIfSticky]);
 
   /* ─────── 键盘弹起时滚到底部 + 清除 iOS 滚动偏移 ─────── */
   useEffect(() => {
@@ -2093,7 +2337,7 @@ export default function ChatPanel({ onBack }) {
     const onResize = () => {
       if (window.scrollY !== 0) window.scrollTo(0, 0);
       if (vv.offsetTop !== 0) window.scrollTo(0, 0);
-      if (isNearBottom()) scrollToBottom();
+      scrollToBottomIfSticky();
     };
     vv.addEventListener("resize", onResize);
     vv.addEventListener("scroll", onResize);
@@ -2101,11 +2345,23 @@ export default function ChatPanel({ onBack }) {
       vv.removeEventListener("resize", onResize);
       vv.removeEventListener("scroll", onResize);
     };
-  }, [scrollToBottom, isNearBottom]);
+  }, [scrollToBottomIfSticky]);
 
   /* ─────── 渲染 ─────── */
   const statusColor = ccStatus === "ready" ? "ok" : ccStatus === "down" ? "err" : "err";
   const currentModelInfo = MODEL_OPTIONS.find(m => m.value === currentModel) || MODEL_OPTIONS[0];
+  const tokenKnown = typeof contextInTokens === "number" && contextInTokens > 0;
+  const activeBaseTokens = currentSessionId && baseSessionId && baseSessionId !== currentSessionId ? 0 : baseTokens;
+  const tokenDialog = tokenKnown ? Math.max(0, contextInTokens - activeBaseTokens) : null;
+  const tokenLimitEnabled = !!forgeTokenLimit?.enabled && !!forgeTokenLimit?.threshold;
+  const tokenLimitText = tokenLimitEnabled ? formatK(forgeTokenLimit.threshold) : "关闭";
+  const tokenCalls = lastTokenUsageCalls && lastTokenUsageCalls.length
+    ? lastTokenUsageCalls
+    : (lastTokenUsage ? [{ idx: 1, ...lastTokenUsage }] : []);
+  const baseCalls = baseTokenUsageCalls && baseTokenUsageCalls.length
+    ? baseTokenUsageCalls
+    : (baseTokenUsage ? [{ idx: 1, ...baseTokenUsage }] : []);
+  const docRows = docTokenBreakdown?.items || [];
 
   return (
     <div className="cp-root" data-theme={resolved}>
@@ -2135,14 +2391,14 @@ export default function ChatPanel({ onBack }) {
             <button className="cp-model-btn" onClick={(e) => { e.stopPropagation(); setShowModelDropdown(s => !s); }}>
               <span className="cp-model-name">{currentModelInfo.name}</span>
               {(() => {
-                const known = typeof contextInTokens === "number" && contextInTokens > 0;
-                const over = known && contextInTokens >= TOKEN_LIMIT * 0.8;
-                const dialog = known ? formatK(Math.max(0, contextInTokens - baseTokens)) : "—";
+                const known = tokenKnown;
+                const over = known && tokenLimitEnabled && contextInTokens >= forgeTokenLimit.threshold;
+                const dialog = known ? formatK(tokenDialog) : "—";
                 const total = known ? formatK(contextInTokens) : "—";
                 return (
                   <span className={"cp-model-status" + (over ? " over" : "")}
                     title={known
-                      ? `对话 ${dialog} / 总 ${total}（基础 ${formatK(baseTokens)}，上限 ${formatK(TOKEN_LIMIT)}）`
+                      ? `对话 ${dialog} / 总 ${total}（基础 ${formatK(activeBaseTokens)}，forge 触发 ${tokenLimitText}）`
                       : "还没收到 usage 事件"}>
                     对话 {dialog} / 总 {total}
                   </span>
@@ -2159,6 +2415,70 @@ export default function ChatPanel({ onBack }) {
                     <span className="ds">{m.desc}</span>
                   </div>
                 ))}
+                <div className="cp-token-panel">
+                  <div className="cp-token-head">
+                    <span>Token 明细</span>
+                    <span>{tokenKnown ? `总 ${formatK(contextInTokens)}` : "等待 usage"}</span>
+                  </div>
+                  <div className="cp-token-grid">
+                    <div>
+                      <span>对话</span>
+                      <b>{tokenKnown ? formatK(tokenDialog) : "—"}</b>
+                    </div>
+                    <div>
+                      <span>基础</span>
+                      <b>{formatK(activeBaseTokens)}</b>
+                    </div>
+                    <div>
+                      <span>forge 触发</span>
+                      <b>{tokenLimitText}</b>
+                    </div>
+                  </div>
+
+                  <div className="cp-token-section">最近完成轮</div>
+                  {tokenCalls.length ? tokenCalls.map(call => (
+                    <div className="cp-token-call" key={(call.requestId || "call") + "-" + call.idx}>
+                      <div className="cp-token-call-title">API call {call.idx}</div>
+                      <div className="cp-token-line"><span>input</span><b>{call.input.toLocaleString()}</b></div>
+                      <div className="cp-token-line"><span>cache_read</span><b>{call.cacheRead.toLocaleString()}</b></div>
+                      <div className="cp-token-line"><span>cache_create</span><b>{call.cacheCreate.toLocaleString()}</b></div>
+                      <div className="cp-token-line strong"><span>ctx</span><b>{call.context.toLocaleString()}</b></div>
+                      <div className="cp-token-line"><span>output</span><b>{call.output.toLocaleString()}</b></div>
+                      <div className="cp-token-line"><span>等效含输出</span><b>{call.equivTotal.toLocaleString()}</b></div>
+                    </div>
+                  )) : (
+                    <div className="cp-token-empty">还没收到 done usage</div>
+                  )}
+
+                  <div className="cp-token-section">基线捕获</div>
+                  {baseCalls.length ? baseCalls.map(call => (
+                    <div className="cp-token-call compact" key={"base-" + (call.requestId || "call") + "-" + call.idx}>
+                      <div className="cp-token-call-title">API call {call.idx}</div>
+                      <div className="cp-token-line"><span>input</span><b>{call.input.toLocaleString()}</b></div>
+                      <div className="cp-token-line"><span>cache_read</span><b>{call.cacheRead.toLocaleString()}</b></div>
+                      <div className="cp-token-line"><span>cache_create</span><b>{call.cacheCreate.toLocaleString()}</b></div>
+                      <div className="cp-token-line strong"><span>ctx</span><b>{call.context.toLocaleString()}</b></div>
+                    </div>
+                  )) : (
+                    <div className="cp-token-empty">新 session 第一轮完成后捕获</div>
+                  )}
+
+                  <div className="cp-token-section">CC 文档估算</div>
+                  {docRows.length ? (
+                    <>
+                      {docRows.map((row, i) => (
+                        <div className="cp-token-line" key={row.type + "-" + row.name + "-" + i}>
+                          <span>{row.name || row.type}</span>
+                          <b>{formatK(row.tokens)}</b>
+                        </div>
+                      ))}
+                      <div className="cp-token-line strong"><span>文档合计</span><b>{formatK(docTokenBreakdown.total)}</b></div>
+                    </>
+                  ) : (
+                    <div className="cp-token-empty">文档估算加载中</div>
+                  )}
+                  <div className="cp-token-note">总 = input + cache_read + cache_create。文档估算为近似值，真实数以 usage 为准。</div>
+                </div>
               </div>
             )}
           </div>
@@ -2166,7 +2486,7 @@ export default function ChatPanel({ onBack }) {
       </div>
 
       {/* MESSAGES */}
-      <div className="cp-messages" ref={messagesScrollRef} onClick={(e) => {
+      <div className="cp-messages" ref={messagesScrollRef} onScroll={handleMessagesScroll} onClick={(e) => {
         if (e.target.closest(".cp-avatar.b")) setSessionOpen(true);
       }}>
         {renderItems.length === 0 && !streamSnap && !showTyping && (
@@ -2202,6 +2522,7 @@ export default function ChatPanel({ onBack }) {
           return (
             <MessageBubble key={it.id} item={it} profile={profile}
               flushedIds={flushedIds}
+              seenIds={seenIds}
               onCopy={copyText}
               onOpenImage={(src) => setImageViewer(src)}
               onEdit={editMessage}
@@ -2252,7 +2573,7 @@ export default function ChatPanel({ onBack }) {
           <input ref={filePickerRef} type="file" multiple style={{ display: "none" }} onChange={onPickImages}/>
           <div className="cp-input-wrapper">
             <textarea ref={inputRef} className="cp-input" rows={1}
-              value={input} onChange={handleInputChange} onKeyDown={handleInputKey}
+              value={input} onChange={handleInputChange}
               placeholder="说点什么..." />
           </div>
           <div className="cp-input-controls">
@@ -2272,10 +2593,8 @@ export default function ChatPanel({ onBack }) {
             <SendStopButton
               isGenerating={isGenerating}
               hasContent={!!input.trim() || images.length > 0}
-              bufferCount={bufferCount}
-              onSend={() => { send().then(() => flush()); }}
+              onSend={send}
               onStop={stop}
-              onFlush={flush}
               onVoice={() => showToast("语音功能开发中")}
             />
           </div>
@@ -3045,7 +3364,7 @@ function StyleThinkPanel({
   );
 }
 
-function SendStopButton({ isGenerating, hasContent, bufferCount, onSend, onStop, onFlush, onVoice }) {
+function SendStopButton({ isGenerating, hasContent, onSend, onStop, onVoice }) {
   if (isGenerating) {
     return (
       <button className="cp-send-btn" onClick={onStop} title="停止">
@@ -3056,13 +3375,6 @@ function SendStopButton({ isGenerating, hasContent, bufferCount, onSend, onStop,
   if (hasContent) {
     return (
       <button className="cp-send-btn" onClick={onSend} title="发送">
-        <svg viewBox="0 0 24 24"><path d="M3.4 20.4 20.85 12.9c.81-.35.81-1.45 0-1.8L3.4 3.6c-.66-.29-1.39.2-1.39.92L2 9.12c0 .5.37.93.87 1l10.13 1.38-10.13 1.38c-.5.07-.87.5-.87 1l.01 4.6c0 .72.73 1.21 1.39.92z"/></svg>
-      </button>
-    );
-  }
-  if (bufferCount > 0) {
-    return (
-      <button className="cp-send-btn" onClick={onFlush} title={`发送 ${bufferCount} 条给澄`}>
         <svg viewBox="0 0 24 24"><path d="M3.4 20.4 20.85 12.9c.81-.35.81-1.45 0-1.8L3.4 3.6c-.66-.29-1.39.2-1.39.92L2 9.12c0 .5.37.93.87 1l10.13 1.38-10.13 1.38c-.5.07-.87.5-.87 1l.01 4.6c0 .72.73 1.21 1.39.92z"/></svg>
       </button>
     );
@@ -3155,7 +3467,17 @@ function CollectionPicker({ pending, convId, showToast, onClose, onDone }) {
   );
 }
 
-function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit, onRegen, onDelete, onFav, onStartSelect, selectMode, selected, onToggleSelect, faved }) {
+// 手机消息判定（world_message）：event/channel + content 前缀三重兜底。
+// 前缀 "-  " 已持久化进 messages.content，是最稳的信号——event 万一丢了，靠它仍能认出。
+// 所有渲染路径（实时/初次历史/回复后/刷新）都过这个，保证刷新后格式不丢。
+function isPhoneMessage(msg) {
+  return msg?.event === "world_message"     // 主动推送（带 "-  "）
+    || msg?.event === "phone_chat"          // 异地普通回复（不带 "-  "）
+    || msg?.channel === "phone"
+    || (typeof msg?.content === "string" && msg.content.startsWith("-  "));
+}
+
+function MessageBubble({ item, profile, flushedIds, seenIds, onCopy, onOpenImage, onEdit, onRegen, onDelete, onFav, onStartSelect, selectMode, selected, onToggleSelect, faved }) {
   const { msg, partText, isHead, isTail, continuation, turnTotal, turnDelta } = item;
   const role = msg.role;
   const [showActions, setShowActions] = useState(false);
@@ -3164,7 +3486,11 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
   const [showCacheDetail, setShowCacheDetail] = useState(false);
 
   const isUser = role === "user";
+  const isPhone = !isUser && isPhoneMessage(msg);   // 淡蓝手机气泡（含主动推送 + 异地普通回复，不加心）
+  const hasDash = typeof msg.content === "string" && msg.content.startsWith("-  "); // 只有带 "-  " 的（主动推送）才纯文本渲染
   const realId = msg.id && !String(msg.id).startsWith("local-");
+  const sent = isUser && (!msg.id.startsWith("local-u-") || flushedIds?.has(msg.id) || seenIds?.has(msg.id));
+  const seen = isUser && seenIds?.has(msg.id);
   // 收藏用的可见正文：澄的去掉 <think> 块，你的原样
   const favText = isUser ? (partText || "") : (extractThink(partText).content || "");
   const wrap = "cp-msg-wrap " + role + (continuation ? " continuation" : "")
@@ -3206,7 +3532,7 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
         {isHead && msg.tool_calls && msg.tool_calls.length > 0 && (
           <ToolCallsBlock calls={msg.tool_calls} />
         )}
-        <div className={"cp-msg-bubble " + role} onClick={(e) => {
+        <div className={"cp-msg-bubble " + role + (isPhone ? " world-msg" : "")} onClick={(e) => {
           if (e.target.tagName === "IMG" || e.target.tagName === "A") return;
           if (selectMode) { if (realId) onToggleSelect?.(item.id); return; }
           setShowActions(s => !s);
@@ -3220,7 +3546,7 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
             </div>
           )}
           {isUser ? (
-            !editing ? (<>{partText || ""}{isTail && <><span className="cp-msg-check-pad">{" "}</span><span className={"cp-msg-check" + ((!msg.id.startsWith("local-u-") || flushedIds?.has(msg.id)) ? " sent" : "")}>{(!msg.id.startsWith("local-u-") || flushedIds?.has(msg.id)) ? <svg width="18" height="12" viewBox="0 0 18 12" fill="none"><path d="M1.5 6.5L5 10L11 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M6.5 6.5L10 10L16 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> : ""}</span></>}</>)
+            !editing ? (<>{partText || ""}{isTail && <><span className="cp-msg-check-pad">{" "}</span><span className={"cp-msg-check" + (sent ? " sent" : "") + (seen ? " seen" : "")}>{sent ? <svg width="18" height="12" viewBox="0 0 18 12" fill="none"><path d="M1.5 6.5L5 10L11 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M6.5 6.5L10 10L16 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> : ""}</span></>}</>)
             : (
               <>
                 <textarea className="cp-edit-area" value={editText}
@@ -3237,6 +3563,8 @@ function MessageBubble({ item, profile, flushedIds, onCopy, onOpenImage, onEdit,
                 </div>
               </>
             )
+          ) : hasDash ? (
+            <div className="cp-phone-text">{extractThink(partText).content || ""}</div>
           ) : (
             <div className="cp-md" dangerouslySetInnerHTML={{ __html: md(extractThink(partText).content || "") }} />
           )}
