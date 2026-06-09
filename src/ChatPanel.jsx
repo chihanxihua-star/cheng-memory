@@ -47,6 +47,7 @@ const EMOJI_OPTIONS = ["🦊","🐙","🐱","🐰","🐻","🐼","🦝","🐨","
 const DEFAULT_PROFILE = { userNick: "宝", userEmoji: "🦊", userImg: null, botNick: "Claude", botEmoji: "🐙", botImg: null };
 const MODEL_OPTIONS = [
   { value: "", name: "默认", desc: "跟随 CC 配置" },
+  { value: "claude-fable-5", name: "Fable 5", desc: "Latest · 思考不可见" },
   { value: "claude-opus-4-8", name: "Opus 4.8", desc: "Latest · 思考不可见" },
   { value: "claude-opus-4-7", name: "Opus 4.7", desc: "Extended · 思考不可见" },
   { value: "claude-opus-4-6", name: "Opus 4.6", desc: "Extended" },
@@ -1528,7 +1529,7 @@ export default function ChatPanel({ onBack }) {
           ? s.bubbles
           : (finalText.indexOf("---bubble---") !== -1
               ? finalText.split("---bubble---").map(x => x.trim()).filter(Boolean)
-              : (finalText ? [finalText] : []));
+              : (finalText ? [finalText] : (s.thinking ? [""] : [])));
         if (useBubbles.length > 0) {
           const created = new Date().toISOString();
           const baseId = msg.message_id || ("local-" + Date.now());
@@ -1558,7 +1559,7 @@ export default function ChatPanel({ onBack }) {
               cache_read: msg.usage.cache_read_input_tokens || 0,
               cache_creation: msg.usage.cache_creation_input_tokens || 0,
             } : null,
-            event: msg.channel === "phone" ? "phone_chat" : null, // 异地普通回复 live 也走手机气泡
+            event: finalText ? (msg.channel === "phone" ? "phone_chat" : null) : "empty_reply", // 空回复也挂一条消息壳，保留 thinking
           };
           // 先提交首气泡——但按 id 去重升级：切 app 回来时 loadConv 重拉可能已把整条(完整内容)
           // 补进来了，这里若盲目 [...prev, baseMsg] 会追出重复条；改为"已存在则保留更完整的那条"。
@@ -1589,6 +1590,7 @@ export default function ChatPanel({ onBack }) {
         setIsGenerating(false);
         streamRef.current = null;
         scrollToBottomIfSticky();
+        pushLog(true, "前端已收到 done", msg.message_id ? `message ${msg.message_id}` : null);
         // thinking 日志
         const hasNativeThinking = !!(s.thinking);
         const simThink = extractThink(finalText);
@@ -1729,6 +1731,14 @@ export default function ChatPanel({ onBack }) {
           });
         }
         break;
+      case "chat_status": {
+        const sameConv = !msg.conversation_id || !convId || msg.conversation_id === convId;
+        if (sameConv) {
+          pushLog(msg.ok !== false, msg.label || "聊天状态", msg.detail || null);
+          if (msg.reload) loadCurrentConversation();
+        }
+        break;
+      }
       case "char_count":
         if (!convId || msg.conversation_id === convId) {
           setCharCount(msg.total || 0);
@@ -2612,9 +2622,9 @@ export default function ChatPanel({ onBack }) {
               <span>聊天日志</span>
               {opLogUnread.current && <span className="cp-plus-right"><span style={{ width: 8, height: 8, borderRadius: "50%", background: "rgba(255,120,120,0.7)", display: "inline-block" }} /></span>}
             </button>
-            <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); setStyleThinkPanelOpen(true); }}>
+            <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); setPsScreen("documents"); setSidebarOpen(true); }}>
               <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              <span>风格 · 思考</span>
+              <span>文档管理</span>
               {(styleEnabled || thinkingEnabled) && <span className="cp-plus-right"><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#7cd47c", display: "inline-block" }} /></span>}
             </button>
             <button className="cp-plus-item" onClick={() => { setPlusMenuOpen(false); newChat(); }}>
@@ -3565,6 +3575,8 @@ function MessageBubble({ item, profile, flushedIds, seenIds, onCopy, onOpenImage
             )
           ) : hasDash ? (
             <div className="cp-phone-text">{extractThink(partText).content || ""}</div>
+          ) : msg.event === "empty_reply" && !partText ? (
+            <div className="cp-md" style={{ color: "var(--text-tertiary)", fontStyle: "italic" }}>（空回复）</div>
           ) : (
             <div className="cp-md" dangerouslySetInnerHTML={{ __html: md(extractThink(partText).content || "") }} />
           )}
@@ -4047,6 +4059,7 @@ function ParamsScreen({ showToast, psSaveRef }) {
 
 /* ─────── API 设置：API key / 模型 / 缓存 ─────── */
 const API_MODEL_OPTIONS = [
+  { value: "claude-fable-5", label: "Fable 5" },
   { value: "claude-opus-4-8", label: "Opus 4.8" },
   { value: "claude-opus-4-7", label: "Opus 4.7" },
   { value: "claude-opus-4-6", label: "Opus 4.6" },
@@ -4484,6 +4497,46 @@ async function upsertDocSingleton(mode, docType, content) {
   }
 }
 
+const OUTPUT_THINK_MARK = "〈think指令〉";
+const OUTPUT_BODY_MARK = "〈正文回复〉";
+const THINK_WRAP_INSTRUCTION = "在每次回复的最开头，用 <think>...</think> 标签包裹你的思考过程，然后再写正式回复。";
+
+function parseOutputThinkingBlock(content) {
+  const text = content || "";
+  const start = text.indexOf(OUTPUT_THINK_MARK);
+  if (start < 0) return { guidance: "", wrap: false };
+  const bodyStart = text.indexOf(OUTPUT_BODY_MARK, start + OUTPUT_THINK_MARK.length);
+  const raw = text.slice(
+    start + OUTPUT_THINK_MARK.length,
+    bodyStart >= 0 ? bodyStart : text.length
+  ).trim();
+  return {
+    guidance: raw.replace(THINK_WRAP_INSTRUCTION, "").trim(),
+    wrap: raw.includes(THINK_WRAP_INSTRUCTION),
+  };
+}
+
+function setOutputThinkingBlock(content, guidance, wrap) {
+  const text = content || "";
+  const cleanGuidance = (guidance || "").trim();
+  const inner = [wrap ? THINK_WRAP_INSTRUCTION : "", cleanGuidance].filter(Boolean).join("\n\n");
+  const block = inner ? `${OUTPUT_THINK_MARK}\n${inner}\n\n` : "";
+  const start = text.indexOf(OUTPUT_THINK_MARK);
+  const bodyStart = text.indexOf(OUTPUT_BODY_MARK, start >= 0 ? start + OUTPUT_THINK_MARK.length : 0);
+  if (start >= 0) {
+    const end = bodyStart >= 0 ? bodyStart : text.length;
+    const before = text.slice(0, start).trimEnd();
+    const after = text.slice(end).trimStart();
+    return [before, block.trimEnd(), after].filter(Boolean).join("\n\n");
+  }
+  if (bodyStart >= 0) {
+    const before = text.slice(0, bodyStart).trimEnd();
+    const after = text.slice(bodyStart).trimStart();
+    return [before, block.trimEnd(), after].filter(Boolean).join("\n\n");
+  }
+  return [block.trimEnd(), text.trim()].filter(Boolean).join("\n\n");
+}
+
 const TEXTAREA_STYLE = {
   width: "100%",
   background: "transparent",
@@ -4504,6 +4557,7 @@ const TEXTAREA_STYLE = {
 // 缩放图标固定右上角，点击恢复原高度。修「auto-grow 时光标在最后一行被键盘挡 + 一直跳 + 全文太长」。
 function DocEditor({ value, onChange, placeholder, disabled, minHeight = 150 }) {
   const [expanded, setExpanded] = useState(false);
+  const charCount = (value || "").length;
   const iconBtn = {
     background: "var(--bg-page)", border: "none", color: "var(--text-tertiary)",
     cursor: "pointer", padding: 4, borderRadius: 6, display: "flex", alignItems: "center", lineHeight: 0,
@@ -4535,24 +4589,56 @@ function DocEditor({ value, onChange, placeholder, disabled, minHeight = 150 }) 
             outline: "none", resize: "none", color: "var(--text-primary)", fontFamily: "inherit",
             fontSize: 15, lineHeight: 1.8, overflowY: "auto",
           }} />
+        <div style={{ flexShrink: 0, textAlign: "right", color: "var(--text-tertiary)", fontSize: 11, paddingTop: 6 }}>
+          {charCount} 字
+        </div>
       </div>,
       document.body
     );
   }
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", paddingBottom: 18 }}>
       <button onClick={() => setExpanded(true)} title="展开" style={{ ...iconBtn, position: "absolute", top: 0, right: 0, zIndex: 2 }}>{expandIcon}</button>
       <textarea value={value} onChange={onChange} placeholder={placeholder} disabled={disabled}
         style={{ ...TEXTAREA_STYLE, minHeight, height: minHeight, paddingRight: 26 }} />
+      <div style={{ position: "absolute", right: 0, bottom: 0, color: "var(--text-tertiary)", fontSize: 11 }}>
+        {charCount} 字
+      </div>
     </div>
   );
 }
 
 // CC 文档：CLAUDE.md + system_prompt + 文件 共用一个底部保存按钮
+function SegmentToggle({ value, onChange }) {
+  return (
+    <div style={{ display: "inline-flex", flexShrink: 0, padding: 2, gap: 2, borderRadius: 999, border: "1px solid var(--border)" }}>
+      {["开启", "关闭"].map(label => {
+        const active = label === "开启" ? value : !value;
+        return (
+          <button key={label} onClick={() => onChange(label === "开启")} style={{
+            background: active ? "var(--text-primary)" : "transparent",
+            color: active ? "var(--bg-page)" : "var(--text-tertiary)",
+            border: "none",
+            padding: "5px 14px",
+            borderRadius: 999,
+            fontSize: 11,
+            letterSpacing: "0.16em",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}>{label}</button>
+        );
+      })}
+    </div>
+  );
+}
+
 function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, currentEffort, showToast }) {
   const [claudeMd, setClaudeMd] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [outputStyle, setOutputStyle] = useState("");
+  const [outputThinkText, setOutputThinkText] = useState("");
+  const [wrapThinking, setWrapThinking] = useState(false);
+  const [nativeThinking, setNativeThinking] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -4582,19 +4668,38 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, c
         .select("content")
         .eq("project_id", PROJECT_ID).eq("mode", "cc").eq("doc_type", "output_style")
         .maybeSingle(),
-    ]).then(([a, b, c]) => {
+      authedFetch(API + "/thinking-toggle").then(r => r.json()).catch(() => null),
+    ]).then(([a, b, c, thinking]) => {
       if (!alive) return;
       if (a.error && a.error.code !== "PGRST116") showToast("加载 CLAUDE.md 失败：" + a.error.message);
       if (b.error && b.error.code !== "PGRST116") showToast("加载 system prompt 失败：" + b.error.message);
       if (c.error && c.error.code !== "PGRST116") showToast("加载 output style 失败：" + c.error.message);
+      const nextOutputStyle = (c.data && c.data.content) || "";
+      const outputThinking = parseOutputThinkingBlock(nextOutputStyle);
       setClaudeMd((a.data && a.data.content) || "");
       setSystemPrompt((b.data && b.data.content) || "");
-      setOutputStyle((c.data && c.data.content) || "");
+      setOutputStyle(nextOutputStyle);
+      setOutputThinkText(outputThinking.guidance);
+      setWrapThinking(outputThinking.wrap);
+      setNativeThinking(!!thinking?.nativeThinking);
     }).catch(e => {
       if (alive) showToast("加载失败：" + (e.message || e));
     }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [showToast]);
+
+  const setOutputStyleAndParseThinking = (next) => {
+    setOutputStyle(next);
+    const parsed = parseOutputThinkingBlock(next);
+    setOutputThinkText(parsed.guidance);
+    setWrapThinking(parsed.wrap);
+  };
+
+  const updateOutputThinking = (nextText, nextWrap) => {
+    setOutputThinkText(nextText);
+    setWrapThinking(nextWrap);
+    setOutputStyle(prev => setOutputThinkingBlock(prev, nextText, nextWrap));
+  };
 
   const saveAll = async () => {
     setSaving(true);
@@ -4615,8 +4720,35 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, c
         <div className="cp-ps-section-title">Output Style<span style={{ fontSize: 9, color: "var(--text-tertiary)", marginLeft: 8, fontWeight: 400 }}>替换出厂人格 · 留空走默认</span></div>
         <DocEditor
           value={outputStyle}
-          onChange={e => setOutputStyle(e.target.value)}
+          onChange={e => setOutputStyleAndParseThinking(e.target.value)}
           placeholder={loading ? "加载中…" : "输入澄人设（直接写正文，会替换出厂的「软件工程 agent」人格）…"}
+          disabled={loading}
+          minHeight={150}
+        />
+      </div>
+
+      <div style={{ marginBottom: 36 }}>
+        <div className="cp-ps-section-title">Thinking 思考<span style={{ fontSize: 9, color: "var(--text-tertiary)", marginLeft: 8, fontWeight: 400 }}>写入 Output Style 的 〈think指令〉 区</span></div>
+        <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 14px" }}>
+            <div>
+              <div style={{ fontSize: 13, color: "var(--text-primary)" }}>包裹指令</div>
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 3 }}>开启后在 think 区加入正文 &lt;think&gt; 输出要求</div>
+            </div>
+            <SegmentToggle value={wrapThinking} onChange={v => updateOutputThinking(outputThinkText, v)} />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 14px", borderTop: "1px solid var(--border)" }}>
+            <div>
+              <div style={{ fontSize: 13, color: "var(--text-primary)" }}>原生思绪</div>
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 3 }}>开启后重启时传 nativeThinking，启动 CC 原生 Thought</div>
+            </div>
+            <SegmentToggle value={nativeThinking} onChange={setNativeThinking} />
+          </div>
+        </div>
+        <DocEditor
+          value={outputThinkText}
+          onChange={e => updateOutputThinking(e.target.value, wrapThinking)}
+          placeholder={loading ? "加载中…" : "引导 CC 怎么想；这段会保存进 Output Style 的 〈think指令〉 区…"}
           disabled={loading}
           minHeight={150}
         />
@@ -4683,7 +4815,7 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, c
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="cp-ps-btn" style={{ flex: 1, background: "transparent", color: "var(--text-primary)", borderColor: "var(--border)" }}
-              onClick={() => { setSaved(false); onAmnesia && onAmnesia(selectedEffort); }}>
+              onClick={() => { setSaved(false); onAmnesia && onAmnesia(selectedEffort, currentModel, nativeThinking); }}>
               失忆重启
             </button>
             <div style={{ flex: 1, position: "relative" }}>
@@ -4710,7 +4842,7 @@ function CCDocumentsTab({ onRestartCC, onAmnesia, onSelectModel, currentModel, c
                       onClick={() => {
                         setShowModelPicker(false);
                         setSaved(false);
-                        onSelectModel && onSelectModel(m.value, m.name, selectedEffort);
+                        onSelectModel && onSelectModel(m.value, m.name, selectedEffort, nativeThinking);
                       }}>
                       <div style={{ fontWeight: 500 }}>{m.name}</div>
                       <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>{m.desc}</div>
