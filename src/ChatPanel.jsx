@@ -1096,6 +1096,7 @@ export default function ChatPanel({ onBack }) {
   const [opLogOpen, setOpLogOpen] = useState(false);
   const opLogUnread = useRef(false);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const [statusSheetOpen, setStatusSheetOpen] = useState(false);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [nativeThinkingEnabled, setNativeThinkingEnabled] = useState(false);
   const [thinkingPanelOpen, setThinkingPanelOpen] = useState(false);
@@ -2593,6 +2594,9 @@ export default function ChatPanel({ onBack }) {
             <button className="cp-inline-btn" onClick={() => setSearchOpen(true)} title="搜索聊天">
               <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </button>
+            <button className="cp-inline-btn" onClick={() => setStatusSheetOpen(true)} title="我的状态">
+              <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </button>
             <button
               className={"cp-inline-btn " + (ccStatus === "ready" ? "connected" : ccStatus === "down" ? "error" : "")}
               onClick={() => setPlusMenuOpen(true)}
@@ -2639,6 +2643,7 @@ export default function ChatPanel({ onBack }) {
         </>
       )}
       {opLogOpen && <OpLogPanel log={opLog} onClose={() => setOpLogOpen(false)} />}
+      {statusSheetOpen && <UserStatusSheet onClose={() => setStatusSheetOpen(false)} showToast={showToast} />}
 
       {/* 低语：故事多选浮条（合集面板打开时隐藏，避免盖在弹层上） */}
       {selectMode && !favPending && (
@@ -2979,6 +2984,208 @@ function InjectDoneRow({ content, detail }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ─────── 我的状态：顶部卡片弹窗，直接读写 user_status_cheng（同 world-home 的 UserStatusPanel）。
+   保存即生效——<此刻> 每条消息现读这张表，澄下一条就能看到。
+   位置/正在 = 点选 chips（不弹键盘所以不跳），候选存 user_status_options_cheng，跟小世界共用一张表。 ─────── */
+const US_DEFAULT_LOC = { 在家: "家 · 客厅", 不在家: "公司 · 工位" };
+
+function UserStatusSheet({ onClose, showToast }) {
+  const [row, setRow] = useState(null);
+  const [form, setForm] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [opts, setOpts] = useState(null);        // {location:[{id,label}], activity:[...]}
+  const [adding, setAdding] = useState(null);    // 'location' | 'activity' | null
+  const [newLabel, setNewLabel] = useState("");
+  const [editTags, setEditTags] = useState(false);
+
+  const loadOpts = async () => {
+    const { data } = await supabase.from("user_status_options_cheng")
+      .select("*").order("pinned", { ascending: false }).order("sort").order("created_at");
+    if (data) setOpts({
+      location: data.filter((o) => o.kind === "location"),
+      activity: data.filter((o) => o.kind === "activity"),
+    });
+  };
+  useEffect(() => { loadOpts(); }, []);
+
+  const addTag = async (kind) => {
+    const label = newLabel.trim();
+    if (!label) return;
+    const { error } = await supabase.from("user_status_options_cheng")
+      .upsert({ kind, label }, { onConflict: "kind,label", ignoreDuplicates: true });
+    if (error) { showToast("存标签失败：" + error.message); return; }
+    setNewLabel(""); setAdding(null);
+    setForm((f) => ({ ...f, [kind]: label }));
+    loadOpts();
+  };
+  const delTag = async (opt) => {
+    await supabase.from("user_status_options_cheng").delete().eq("id", opt.id);
+    loadOpts();
+  };
+  const togglePin = async (opt) => {
+    await supabase.from("user_status_options_cheng").update({ pinned: !opt.pinned }).eq("id", opt.id);
+    loadOpts();
+  };
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("user_status_cheng").select("*").eq("name", "user").limit(1);
+      if (data && data[0]) {
+        setRow(data[0]);
+        setForm({ location: data[0].location || "", activity: data[0].activity || "", custom_note: data[0].custom_note || "" });
+      }
+    })();
+  }, []);
+
+  const togglePresence = async () => {
+    if (!row || busy) return;
+    setBusy(true);
+    const next = row.presence === "在家" ? "不在家" : "在家";
+    const defLoc = US_DEFAULT_LOC[next];
+    const { data } = await supabase
+      .from("user_status_cheng")
+      .update({ presence: next, location: defLoc, updated_at: new Date().toISOString() })
+      .eq("name", "user").select().single();
+    if (data) { setRow(data); setForm((f) => ({ ...f, location: defLoc })); }
+    setBusy(false);
+  };
+
+  const save = async () => {
+    if (!form || busy) return;
+    setBusy(true);
+    const { data, error } = await supabase
+      .from("user_status_cheng")
+      .update({
+        location: form.location, activity: form.activity,
+        custom_note: form.custom_note ? form.custom_note : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("name", "user").select().single();
+    setBusy(false);
+    if (error) { showToast("保存失败：" + error.message); return; }
+    if (data) { showToast("状态已更新，她下一条消息就能看到"); onClose(); }
+  };
+
+  const home = row && row.presence === "在家";
+  const usLbl = { fontSize: 11, color: "var(--text-secondary)", letterSpacing: "0.06em", marginBottom: 4, display: "block" };
+  const usInput = {
+    background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+    borderRadius: 0, color: "var(--text-primary)", padding: "8px 0", fontSize: 14,
+    width: "100%", fontFamily: "Georgia, 'Noto Serif SC', serif",
+    outline: "none", boxSizing: "border-box", lineHeight: 1.55,
+  };
+  const canSave = !busy && !!form;
+
+  const chip = (active) => ({
+    background: active ? "var(--text-primary)" : "transparent",
+    color: active ? "var(--bg-page)" : "var(--text-tertiary)",
+    border: active ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+    padding: "5px 12px", borderRadius: 4, fontSize: 12,
+    letterSpacing: "0.05em", cursor: "pointer", fontFamily: "inherit",
+  });
+
+  const tagGroup = (kind, title) => (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+        <label style={{ ...usLbl, marginBottom: 0 }}>{title}</label>
+        <button onClick={() => setEditTags((v) => !v)} style={{
+          marginLeft: "auto", background: "none", border: "none", padding: 0,
+          color: editTags ? "var(--text-primary)" : "var(--text-tertiary)",
+          fontSize: 11, letterSpacing: "0.1em", cursor: "pointer", fontFamily: "inherit",
+        }}>{editTags ? "完成" : "编辑"}</button>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {(opts?.[kind] || []).map((o) => {
+          const active = form[kind] === o.label;
+          if (editTags) return (
+            <button key={o.id} onClick={() => togglePin(o)} style={chip(o.pinned)} title="点击收藏/取消收藏">
+              {o.pinned ? "★ " : "☆ "}{o.label}
+              <span onClick={(e) => { e.stopPropagation(); delTag(o); }} style={{ marginLeft: 8, opacity: 0.75, padding: "0 2px" }}>×</span>
+            </button>
+          );
+          return (
+            <button key={o.id} onClick={() => setForm({ ...form, [kind]: o.label })}
+              style={chip(active)}>{o.label}</button>
+          );
+        })}
+        {adding === kind ? (
+          <span style={{ display: "flex", gap: 6, alignItems: "center", flex: "1 0 100%" }}>
+            <input autoFocus value={newLabel} onChange={(e) => setNewLabel(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addTag(kind); }}
+              placeholder="新标签" style={{ ...usInput, width: "auto", flex: 1 }} />
+            <button onClick={() => addTag(kind)} style={chip(true)}>存</button>
+            <button onClick={() => { setAdding(null); setNewLabel(""); }} style={chip(false)}>取消</button>
+          </span>
+        ) : (
+          <button onClick={() => { setAdding(kind); setNewLabel(""); }} style={chip(false)}>＋</button>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <div className="cp-plus-overlay" onClick={onClose} />
+      {/* 顶部悬浮卡片：放屏幕上半部，键盘弹起碰不到它，不用跟着键盘动 */}
+      <div style={{
+        position: "fixed", zIndex: 701,
+        top: "calc(env(safe-area-inset-top, 0px) + 16px)",
+        left: 16, right: 16, maxWidth: 420, margin: "0 auto",
+        background: "var(--bg-primary)", borderRadius: 14,
+        border: "1px solid var(--border)",
+        padding: "14px 0 4px",
+        animation: "cp-msgIn 0.2s ease",
+        maxHeight: "calc(100dvh - 32px)", overflowY: "auto",
+      }}>
+        {/* 涟漪式三段顶栏：CANCEL / 居中标题 / 深色 SAVE✓ */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "4px 16px 14px", borderBottom: "1px solid var(--border)",
+        }}>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>CANCEL</button>
+          <span style={{ fontSize: 13, color: "var(--text-primary)", letterSpacing: "0.22em" }}>我的状态</span>
+          <button onClick={save} disabled={!canSave} style={{
+            background: canSave ? "var(--text-primary)" : "transparent",
+            color: canSave ? "var(--bg-page)" : "var(--text-tertiary)",
+            border: canSave ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+            padding: "8px 18px", borderRadius: 4,
+            fontSize: 12, letterSpacing: "0.18em",
+            cursor: canSave ? "pointer" : "not-allowed", fontFamily: "inherit",
+          }}>SAVE ✓</button>
+        </div>
+        {!row || !form ? (
+          <div style={{ padding: "18px 16px", fontSize: 13, color: "var(--text-secondary)" }}>读取中…</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 18, padding: "20px 16px 16px" }}>
+            {/* 在家/不在家 chips */}
+            <div style={{ display: "flex", gap: 10 }}>
+              {["在家", "不在家"].map((p) => {
+                const active = row.presence === p;
+                return (
+                  <button key={p} onClick={() => { if (!active) togglePresence(); }} disabled={busy} style={{
+                    background: active ? "var(--text-primary)" : "transparent",
+                    color: active ? "var(--bg-page)" : "var(--text-tertiary)",
+                    border: active ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+                    padding: "6px 18px", borderRadius: 4,
+                    fontSize: 11, letterSpacing: "0.22em", cursor: "pointer", fontFamily: "inherit",
+                  }}>{p}</button>
+                );
+              })}
+            </div>
+            {tagGroup("location", "位置")}
+            {tagGroup("activity", "正在")}
+            <div>
+              <label style={usLbl}>备注</label>
+              <input value={form.custom_note} style={usInput} placeholder="可选，比如：不太想被打扰"
+                onChange={(e) => setForm({ ...form, custom_note: e.target.value })} />
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
