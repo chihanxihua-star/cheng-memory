@@ -42,6 +42,15 @@ function authedFetch(url, opts = {}) {
 const TOOL_RESULT_MAX_CHARS = 2000;
 const TYPING_DELAY_MS = 1000;
 const TIME_SEP_GAP_MS = 10 * 60 * 1000;
+// 小心思的 ---bubble--- 气泡分隔符换成单换行（紧凑分段，不显标记）
+const stripBubble = (s) => (typeof s === "string" ? s.replace(/\s*---bubble---\s*/g, "\n").trim() : s);
+// 小心思触发时间：UTC+8 显示「MM/DD HH:MM」
+function fmtPlus8(iso) {
+  if (!iso) return "";
+  const d = new Date(new Date(iso).getTime() + 8 * 3600000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
 
 const EMOJI_OPTIONS = ["🦊","🐙","🐱","🐰","🐻","🐼","🦝","🐨","🐯","🦁","🐸","🐧","🦉","🐝","🌸","🌙","⭐","🔥","💎","🎭","🎵","👻","🤖","🧸"];
 const DEFAULT_PROFILE = { userNick: "宝", userEmoji: "🦊", userImg: null, botNick: "Claude", botEmoji: "🐙", botImg: null };
@@ -154,6 +163,20 @@ function estimateTokens(v) {
     }
   }
   return Math.round(cjk + other / 4);
+}
+
+// Word 式字数：中文按字（每个 CJK 1）、英文/数字按单词（连续字母数字算 1 个词），更贴近 token。
+// 不计标点/空格/换行（它们其实也吃些 token，所以这数偏保守、略小于真实 token）。
+function countWordStyle(v) {
+  const s = v == null ? "" : String(v);
+  let cjk = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if ((c >= 0x3040 && c <= 0x30ff) || (c >= 0x3400 && c <= 0x9fff) ||
+        (c >= 0xac00 && c <= 0xd7af) || (c >= 0xf900 && c <= 0xfaff)) cjk++;
+  }
+  const words = (s.match(/[a-zA-Z0-9]+/g) || []).length;
+  return cjk + words;
 }
 
 // 这一轮的 API 消耗 = 本轮 input（含 cache_*）+ 本轮 output。
@@ -419,6 +442,13 @@ const CSS = `
   color: var(--text-tertiary); font-size: 14px;
 }
 .cp-date-sep { text-align: center; color: var(--text-tertiary); font-size: 11px; margin: 14px 0 8px; }
+/* 小心思念头条：居中、灰调、折叠。刻意不做成气泡，跟"她对你说的话"物理区分。美化待改。 */
+.cp-innerthought { display: flex; flex-direction: column; align-items: center; margin: 14px 0 10px; }
+.cp-it-bar { display: inline-flex; align-items: center; gap: 6px; max-width: 80%; cursor: pointer; color: var(--text-tertiary); font-size: 12px; padding: 4px 12px; border-radius: 11px; background: var(--bg-page); }
+.cp-it-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-it-toggle { flex-shrink: 0; font-size: 10px; opacity: 0.7; }
+.cp-it-body { margin-top: 7px; max-width: 80%; color: var(--text-tertiary); font-size: 12.5px; font-style: italic; line-height: 1.6; white-space: pre-wrap; text-align: left; }
+.cp-it-time { margin-top: 5px; text-align: right; font-size: 10.5px; font-style: normal; opacity: 0.65; }
 
 .cp-msg-wrap { display: flex; gap: 9px; margin-bottom: 8px; max-width: 92%; align-items: flex-start; animation: cp-msgIn 0.22s ease-out; }
 /* 重拉历史(整表替换)时容器临时挂 .cp-no-anim：抑制这次重挂载的进场动画，避免乐观消息切回前台"跳一下" */
@@ -458,6 +488,16 @@ const CSS = `
   background: rgba(255, 255, 255, 0.68); color: var(--text-bubble-bot);
   padding: 9px 13px; border-radius: 12px 12px 12px 4px; border: 1px solid var(--border-bubble);
 }
+/* 撤回标签：贴在用户气泡左外侧，缓冲期可点撤回；撤回成功变「已撤回」灰字 */
+.cp-cancel-tag {
+  position: absolute; right: 100%; top: 50%; transform: translateY(-50%);
+  margin-right: 8px; white-space: nowrap; font-size: 11px; line-height: 1;
+  background: none; border: none; padding: 4px 2px; cursor: pointer;
+  color: #C08A92; user-select: none;
+}
+.cp-cancel-tag:active { opacity: 0.6; }
+.cp-cancel-tag.done { color: var(--text-tertiary); cursor: default; font-style: italic; }
+.cp-root[data-theme="dark"] .cp-cancel-tag { color: #C99AA0; }
 .cp-root[data-theme="dark"] .cp-msg-bubble.user { background: rgba(248, 245, 240, 0.82); }
 .cp-root[data-theme="dark"] .cp-msg-bubble.assistant { background: rgba(58, 58, 60, 0.72); }
 /* world_message 手机消息气泡：很淡的蓝底（区别于面对面普通白气泡）。
@@ -1144,6 +1184,8 @@ export default function ChatPanel({ onBack }) {
   const [toasts, setToasts] = useState([]);
   const [flushedIds, setFlushedIds] = useState(new Set());
   const [seenIds, setSeenIds] = useState(new Set());
+  const [cancelledIds, setCancelledIds] = useState(new Set()); // 撤回成功的 localId：左侧显示「已撤回」
+  const [innerThoughts, setInnerThoughts] = useState([]); // 澄的小心思（世界唤醒产物），按时间插进聊天时间线，居中念头条展示
 
   // Session 可视化面板开关（点 Claude 头像打开）
   const [sessionOpen, setSessionOpen] = useState(false);
@@ -1732,6 +1774,15 @@ export default function ChatPanel({ onBack }) {
           });
         }
         break;
+      case "cancelled":
+        // 撤回成功：库已删，本次会话左侧显示「已撤回」（刷新后该气泡随库消失）
+        if (msg.msgId) setCancelledIds(prev => { const n = new Set(prev); n.add(msg.msgId); return n; });
+        pushLog(true, "已撤回", "消息已从缓冲队列移除，CC 未收到");
+        break;
+      case "cancel_failed":
+        // 晚了，澄已看到：不弹窗，只在日志记一行；倒计时标签随 flushed/seen 自然消失，右下角对勾变深
+        pushLog(false, "撤回失败", "已发给 CC，来不及了");
+        break;
       case "chat_status": {
         const sameConv = !msg.conversation_id || !convId || msg.conversation_id === convId;
         if (sameConv) {
@@ -1886,8 +1937,12 @@ export default function ChatPanel({ onBack }) {
       }
     }
 
+    const sendSettings = getSettings(PROJECT_ID);
+    const sendBufferTime = Math.max(0, parseInt(sendSettings?.bufferTime) || 0);
+    const localId = "local-u-" + Date.now();
     const userMsg = {
-      id: "local-u-" + Date.now(),
+      id: localId,
+      localId,                              // 原始本地 id，撤回时定位用（id 会被 user_saved 换成真 DB id）
       role: "user",
       content: text,
       thinking: null,
@@ -1895,6 +1950,8 @@ export default function ChatPanel({ onBack }) {
       images: imgs,
       created_at: new Date().toISOString(),
       token_output: 0,
+      // 只有开了缓冲（bufferTime>0）才有撤回窗口；记下发送时刻给气泡算倒计时
+      ...(sendBufferTime > 0 ? { cancelSentAt: Date.now(), cancelBufferTime: sendBufferTime } : {}),
     };
     setMessages(prev => [...prev, userMsg]);
     setInput("");
@@ -1905,9 +1962,9 @@ export default function ChatPanel({ onBack }) {
       type: "chat",
       content: text,
       conversation_id: cid,
-      settings: getSettings(PROJECT_ID),
+      settings: sendSettings,
       api_settings: getAPISettings(PROJECT_ID),
-      msgId: userMsg.id,
+      msgId: localId,
     };
     if (imgs.length > 0) payload.images = imgs;
     if (currentModel) payload.model = currentModel;
@@ -2058,6 +2115,46 @@ export default function ChatPanel({ onBack }) {
       setMessages(prev => prev.filter(m => m.id !== messageId));
     } catch (e) { showToast("删除失败: " + e.message); }
   }, [showToast]);
+
+  // 撤回：把这条从后端缓冲队列里抠掉（还没 flush 给 CC 才行）。后端是裁判，成了回 cancelled。
+  // localId 用来在缓冲队列里定位；realId（若已落库）给后端兜底删库，后端优先用它自己存的 dbId。
+  const handleCancel = useCallback((localId, realId) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: "cancel", msgId: localId, dbId: realId || null }));
+    } else {
+      showToast("连接断开，撤回失败");
+    }
+  }, [showToast]);
+
+  // 小心思：直接读 Supabase（同 world-home PhonePanel 路子），连 daily_timeline_cheng 拿触发原因当标题。
+  const loadInnerThoughts = useCallback(async () => {
+    try {
+      const { data: rows } = await supabase.from("world_inner_thoughts_cheng")
+        .select("id, content, timeline_id, created_at")
+        .order("created_at", { ascending: false }).limit(100);
+      const list = rows || [];
+      const tlIds = [...new Set(list.map(r => r.timeline_id).filter(Boolean))];
+      const reasonMap = {};
+      if (tlIds.length) {
+        const { data: tls } = await supabase.from("daily_timeline_cheng").select("id, action").in("id", tlIds);
+        (tls || []).forEach(t => { reasonMap[t.id] = t.action; });
+      }
+      // action 是「原因 → 选择」，标题只取 → 前的原因
+      setInnerThoughts(list.map(r => ({
+        id: r.id, content: r.content, created_at: r.created_at,
+        reason: (reasonMap[r.timeline_id] || "").split(" → ")[0].trim(),
+      })));
+    } catch { /* 静默，不影响聊天 */ }
+  }, []);
+
+  useEffect(() => {
+    loadInnerThoughts();
+    const ch = supabase.channel("chat-inner-thoughts")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "world_inner_thoughts_cheng" }, () => loadInnerThoughts())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [loadInnerThoughts]);
 
   /* ─────── 输入框 ─────── */
   const handleInputChange = (e) => {
@@ -2227,6 +2324,21 @@ export default function ChatPanel({ onBack }) {
     // 增量 = 本轮 (input + output)，等同这轮 API 计费消耗，恒 ≥ 0。
     // 失忆 / forge_done 是 CC 进程级断点——之前的 token 是上个 session 的账，归零重新算。
     let sessionTotal = 0;
+    // 小心思按时间插入：只显示当前会话时间窗内的（≥ 第一条消息时间），早于会话的不堆在顶部。
+    const firstMsgTs = (() => {
+      const f = messages.find(m => m.created_at);
+      return f ? new Date(f.created_at).getTime() : null;
+    })();
+    const thoughts = (innerThoughts || [])
+      .filter(t => t.created_at && (firstMsgTs == null || new Date(t.created_at).getTime() >= firstMsgTs))
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    let ti = 0;
+    const flushThoughtsUpTo = (upToTs) => {
+      while (ti < thoughts.length && new Date(thoughts[ti].created_at).getTime() <= upToTs) {
+        const th = thoughts[ti++];
+        items.push({ kind: "innerthought", id: "it-" + th.id, thought: th });
+      }
+    };
     for (const m of messages) {
       if (m.role === "system") {
         if (m.kind === "amnesia" || m.kind === "forge_done") sessionTotal = 0;
@@ -2242,6 +2354,7 @@ export default function ChatPanel({ onBack }) {
           items.push({ kind: "date-sep", id: "ds-" + ts, label: formatDateTime(new Date(ts)) });
         }
         lastTs = ts;
+        flushThoughtsUpTo(ts); // 把这条消息之前产生的小心思插在它前面
       }
       // 每个 assistant 消息一轮：增量 = 本轮 (input + output)，总量 = session 累加值
       let turnTotal = 0;
@@ -2273,8 +2386,9 @@ export default function ChatPanel({ onBack }) {
         });
       }
     }
+    flushThoughtsUpTo(Infinity); // 末尾：比最后一条消息还晚的小心思（聊天进行中冒出来的）
     return items;
-  }, [messages]);
+  }, [messages, innerThoughts]);
 
   /* ─────── 低语收藏 ─────── */
   // 单条：MessageBubble 把算好的 payload 传上来 → 弹合集面板
@@ -2508,6 +2622,9 @@ export default function ChatPanel({ onBack }) {
           if (it.kind === "date-sep") {
             return <div key={it.id} className="cp-date-sep">{it.label}</div>;
           }
+          if (it.kind === "innerthought") {
+            return <InnerThoughtRow key={it.id} thought={it.thought} />;
+          }
           if (it.kind === "system") {
             if (it.sysKind === "forge_pending") {
               return <ForgePendingRow key={it.id} content={it.content} />;
@@ -2534,6 +2651,8 @@ export default function ChatPanel({ onBack }) {
             <MessageBubble key={it.id} item={it} profile={profile}
               flushedIds={flushedIds}
               seenIds={seenIds}
+              cancelledIds={cancelledIds}
+              onCancel={handleCancel}
               onCopy={copyText}
               onOpenImage={(src) => setImageViewer(src)}
               onEdit={editMessage}
@@ -2856,6 +2975,27 @@ export default function ChatPanel({ onBack }) {
    ════════════════════════════════════════════════════════════ */
 
 // 模型切换 / 失忆进行中：用 .cp-thinking-toggle.thinking 同款 shimmer 渐变动画
+// 小心思念头条：居中、可折叠，区别于聊天气泡（无头像、不分左右、灰调）。标题=触发原因。美化待改。
+function InnerThoughtRow({ thought }) {
+  const [open, setOpen] = useState(false);
+  const title = (thought.reason || "").trim() || "她飘过一段小心思";
+  const body = stripBubble(thought.content || "");
+  return (
+    <div className="cp-innerthought">
+      <div className="cp-it-bar" onClick={() => setOpen(o => !o)}>
+        <span className="cp-it-title">{title}</span>
+        <span className="cp-it-toggle">{open ? "▲" : "▾"}</span>
+      </div>
+      {open && (
+        <div className="cp-it-body">
+          {body}
+          <div className="cp-it-time">{fmtPlus8(thought.created_at)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ForgePendingRow({ content }) {
   return (
     <div className="cp-date-sep" style={{ display: "flex", justifyContent: "center" }}>
@@ -3694,13 +3834,14 @@ function isPhoneMessage(msg) {
     || (typeof msg?.content === "string" && msg.content.startsWith("-  "));
 }
 
-function MessageBubble({ item, profile, flushedIds, seenIds, onCopy, onOpenImage, onEdit, onRegen, onDelete, onFav, onStartSelect, selectMode, selected, onToggleSelect, faved }) {
+function MessageBubble({ item, profile, flushedIds, seenIds, cancelledIds, onCancel, onCopy, onOpenImage, onEdit, onRegen, onDelete, onFav, onStartSelect, selectMode, selected, onToggleSelect, faved }) {
   const { msg, partText, isHead, isTail, continuation, turnTotal, turnDelta } = item;
   const role = msg.role;
   const [showActions, setShowActions] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(partText);
   const [showCacheDetail, setShowCacheDetail] = useState(false);
+  const [, setCancelTick] = useState(0); // 每秒触发重渲染刷新撤回倒计时
 
   const isUser = role === "user";
   const isPhone = !isUser && isPhoneMessage(msg);   // 淡蓝手机气泡（含主动推送 + 异地普通回复，不加心）
@@ -3708,6 +3849,21 @@ function MessageBubble({ item, profile, flushedIds, seenIds, onCopy, onOpenImage
   const realId = msg.id && !String(msg.id).startsWith("local-");
   const sent = isUser && (!msg.id.startsWith("local-u-") || flushedIds?.has(msg.id) || seenIds?.has(msg.id));
   const seen = isUser && seenIds?.has(msg.id);
+
+  // ───── 撤回（仅缓冲期、未 flush 给 CC、未撤回过）。判定最终以后端为准，这里只控制标签显隐 ─────
+  const cancelLocalId = msg.localId || msg.id;
+  const isCancelled = isUser && cancelledIds?.has(cancelLocalId);
+  const canCancel = isUser && isTail && msg.cancelSentAt && msg.cancelBufferTime > 0
+    && !flushedIds?.has(msg.id) && !seenIds?.has(msg.id) && !isCancelled;
+  useEffect(() => {
+    if (!canCancel) return;
+    const t = setInterval(() => setCancelTick(n => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [canCancel]);
+  // 标签显隐跟「真实可撤状态」走（未 flush 就一直能撤，含 CC 忙时缓冲超时的延长窗口）；
+  // 倒计时数字只是估计，归零后 CC 若仍忙、仍在缓冲，标签保留为「撤回…」继续可点。
+  const cancelRemain = canCancel ? Math.ceil(msg.cancelBufferTime - (Date.now() - msg.cancelSentAt) / 1000) : 0;
+  const showCancel = canCancel;
   // 收藏用的可见正文：澄的去掉 <think> 块，你的原样
   const favText = isUser ? (partText || "") : (extractThink(partText).content || "");
   const wrap = "cp-msg-wrap " + role + (continuation ? " continuation" : "")
@@ -3755,6 +3911,13 @@ function MessageBubble({ item, profile, flushedIds, seenIds, onCopy, onOpenImage
           setShowActions(s => !s);
         }}>
           {selectMode && <span className="cp-sel-mark">{selected ? "✓" : ""}</span>}
+          {isUser && isCancelled && <span className="cp-cancel-tag done">已撤回</span>}
+          {isUser && !isCancelled && showCancel && (
+            <button className="cp-cancel-tag" onClick={(e) => {
+              e.stopPropagation();
+              onCancel?.(cancelLocalId, (msg.id && !String(msg.id).startsWith("local-")) ? msg.id : null);
+            }}>{cancelRemain > 0 ? `撤回 ${cancelRemain}s…` : "撤回…"}</button>
+          )}
           {isHead && msg.images && msg.images.length > 0 && (
             <div className="cp-msg-images">
               {msg.images.map((src, i) => (
@@ -4764,7 +4927,7 @@ const TEXTAREA_STYLE = {
 // 缩放图标固定右上角，点击恢复原高度。修「auto-grow 时光标在最后一行被键盘挡 + 一直跳 + 全文太长」。
 function DocEditor({ value, onChange, placeholder, disabled, minHeight = 150 }) {
   const [expanded, setExpanded] = useState(false);
-  const charCount = (value || "").length;
+  const charCount = countWordStyle(value);
   const iconBtn = {
     background: "var(--bg-page)", border: "none", color: "var(--text-tertiary)",
     cursor: "pointer", padding: 4, borderRadius: 6, display: "flex", alignItems: "center", lineHeight: 0,
