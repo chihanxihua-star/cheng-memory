@@ -1130,6 +1130,7 @@ export default function ChatPanel({ onBack }) {
   const [showTyping, setShowTyping] = useState(false);
   const [ccStatus, setCcStatus] = useState("unknown"); // ready / down / unknown
   const [sweepAt, setSweepAt] = useState(0); // 失忆/清屏 时戳一下，桌宠播"扫地"
+  const [convStartTs, setConvStartTs] = useState(0); // 清屏/新对话起点：小心思只显示此刻之后产生的，旧的不堆进空会话
   const [opLog, setOpLog] = useState(() => {
     try { return JSON.parse(localStorage.getItem("memhome-oplog") || "[]"); } catch { return []; }
   });
@@ -2013,6 +2014,7 @@ export default function ChatPanel({ onBack }) {
     lastDateRef.current = null;
     setSidebarOpen(false);
     setSweepAt(Date.now()); // 清屏 → 桌宠扫地
+    setConvStartTs(Date.now()); // 清屏 → 小心思只显示之后新冒的，旧的不再堆在空屏上
   }, [isGenerating, stop]);
 
   const restartCC = useCallback(async (opts = {}) => {
@@ -2329,8 +2331,11 @@ export default function ChatPanel({ onBack }) {
       const f = messages.find(m => m.created_at);
       return f ? new Date(f.created_at).getTime() : null;
     })();
+    // 截断点：有消息按"第一条消息时间"；没消息（空会话/刚清屏）按 convStartTs——避免把历史小心思全量 dump 到空屏。
+    // 都没有（首次加载一个本来就空的会话）→ Infinity，不显示旧小心思（清屏后新冒的会带 convStartTs 放行）。
+    const cutoffTs = firstMsgTs != null ? firstMsgTs : (convStartTs || Infinity);
     const thoughts = (innerThoughts || [])
-      .filter(t => t.created_at && (firstMsgTs == null || new Date(t.created_at).getTime() >= firstMsgTs))
+      .filter(t => t.created_at && new Date(t.created_at).getTime() >= cutoffTs)
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     let ti = 0;
     const flushThoughtsUpTo = (upToTs) => {
@@ -2388,7 +2393,7 @@ export default function ChatPanel({ onBack }) {
     }
     flushThoughtsUpTo(Infinity); // 末尾：比最后一条消息还晚的小心思（聊天进行中冒出来的）
     return items;
-  }, [messages, innerThoughts]);
+  }, [messages, innerThoughts, convStartTs]);
 
   /* ─────── 低语收藏 ─────── */
   // 单条：MessageBubble 把算好的 payload 传上来 → 弹合集面板
