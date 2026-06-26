@@ -5,6 +5,7 @@ import { supabase } from "./lib/supabase";
 import SessionPanel from "./SessionPanel";
 import WakePanel from "./WakePanel";
 import DeskPet from "./DeskPet";
+import IntimateToolbar from "./IntimateToolbar";
 
 /* ════════════════════════════════════════════════════════════
    配置
@@ -814,6 +815,7 @@ const CSS = `
 }
 .cp-sidebar {
   position: fixed; top: 0; left: 0; bottom: 0; width: 290px;
+  height: 100dvh; /* 键盘弹起时跟随动态视口收缩;不支持dvh的旧浏览器退回 top/bottom:0 */
   background: var(--bg-sidebar); border-right: 1px solid var(--border-primary);
   z-index: 601; display: flex; flex-direction: column;
   animation: cp-slideRight 0.25s cubic-bezier(.4,0,.2,1);
@@ -842,7 +844,7 @@ const CSS = `
 .cp-nav-send:active { opacity: 0.85; }
 .cp-sidebar-close { background: none; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
 .cp-sidebar-close:hover { color: var(--text-primary); background: var(--bg-sidebar-hover); }
-.cp-sidebar-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 8px 12px 24px; }
+.cp-sidebar-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding: 8px 12px 320px; }
 
 .cp-ps-section-title { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 1px; margin: 18px 0 9px; }
 .cp-ps-list { display: flex; flex-direction: column; }
@@ -1814,20 +1816,21 @@ export default function ChatPanel({ onBack }) {
       }
       case "bark_msg": {
         if (convId && msg.conversation_id === convId && msg.message) {
-          // world_message 用自己的 event + 保留 thinking；dice/bark 维持原行为(event=bark)
-          const _isWM = msg.message.event === "world_message";
+          // world_message/world_face 用自己的 event + 保留 thinking；dice/bark 维持原行为(event=bark)
+          const _event = msg.message.event;
+          const _isWorldMsg = _event === "world_message" || _event === "world_face";
           setMessages(prev => [...prev, {
             id: msg.message.id,
             role: "assistant",
             content: msg.message.content || "",
-            thinking: _isWM ? (msg.message.thinking || null) : null,
+            thinking: _isWorldMsg ? (msg.message.thinking || null) : null,
             tool_calls: null,
             images: [],
             created_at: msg.message.created_at,
             token_input: 0,
             token_output: 0,
             cache_detail: null,
-            event: _isWM ? "world_message" : "bark",
+            event: _isWorldMsg ? _event : "bark",
           }]);
           setTimeout(scrollToBottomIfSticky, 50);
         }
@@ -2703,6 +2706,9 @@ export default function ChatPanel({ onBack }) {
             ))}
           </div>
         )}
+        <div style={{ position: "relative" }}>
+          <IntimateToolbar />
+        </div>
         <div className="cp-input-area">
           <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onPickImages}/>
           <input ref={filePickerRef} type="file" multiple style={{ display: "none" }} onChange={onPickImages}/>
@@ -4209,6 +4215,8 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
         <div className="cp-nav-list">
           <SidebarNavItem onClick={() => setScreen("stats-menu")} title="统计" sub="用量 · 字数"
             icon={<svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>} />
+          <SidebarNavItem onClick={() => setScreen("theme")} title="外观" sub="浅色 · 深色"
+            icon={<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>} />
         </div>
       </>
     );
@@ -4220,6 +4228,35 @@ function SidebarScreens({ screen, setScreen, theme, setTheme, onNewChat, onResta
         <div className="cp-ps-list">
           <SidebarItem onClick={() => setScreen("stats")}>用量统计</SidebarItem>
           <SidebarItem onClick={() => setScreen("stats-chars")}>字数统计</SidebarItem>
+        </div>
+      </>
+    );
+  }
+  if (screen === "theme") {
+    const opts = [
+      { v: "light", label: "浅色" },
+      { v: "dark", label: "深色" },
+      { v: "system", label: "跟随系统" },
+    ];
+    return (
+      <>
+        <div className="cp-ps-sub-title"><button className="cp-ps-back" onClick={() => setScreen("main")}>← 返回</button>外观</div>
+        <div className="cp-ps-form" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <p style={{ margin: 0, fontSize: 12, color: "var(--text-tertiary)" }}>选择聊天界面的颜色模式</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            {opts.map(o => {
+              const active = theme === o.v;
+              return (
+                <button key={o.v} onClick={() => setTheme(o.v)} style={{
+                  background: active ? "var(--text-primary)" : "transparent",
+                  color: active ? "var(--bg-page)" : "var(--text-secondary)",
+                  border: active ? "1px solid var(--text-primary)" : "1px solid var(--border)",
+                  padding: "8px 18px", borderRadius: 4,
+                  fontSize: 12, letterSpacing: "0.18em", cursor: "pointer", fontFamily: "inherit",
+                }}>{o.label}</button>
+              );
+            })}
+          </div>
         </div>
       </>
     );
@@ -4297,6 +4334,8 @@ function ParamsScreen({ showToast, psSaveRef }) {
           retain_tokens: d.retain_tokens,
           trigger_threshold: d.trigger_threshold,
           thinking_keep_ratio: d.thinking_keep_ratio ?? 0.5,
+          summary_min: d.summary_min ?? 1000,
+          summary_max: d.summary_max ?? 1100,
         });
         if (rd.ok) {
           const dd = await rd.json();
@@ -4345,10 +4384,16 @@ function ParamsScreen({ showToast, psSaveRef }) {
         showToast("forge 配置无效：触发阈值必须大于保留量");
         return;
       }
+      const sMin = parseInt(forge.summary_min);
+      const sMax = parseInt(forge.summary_max);
+      if (!sMin || !sMax || sMin > sMax) {
+        showToast("摘要长度区间无效：下限不能大于上限");
+        return;
+      }
       try {
         const r = await authedFetch(API + "/forge/config", {
           method: "PUT", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ retain_tokens: retain, trigger_threshold: trigger, thinking_keep_ratio: parseFloat(forge.thinking_keep_ratio) }),
+          body: JSON.stringify({ retain_tokens: retain, trigger_threshold: trigger, thinking_keep_ratio: parseFloat(forge.thinking_keep_ratio), summary_min: sMin, summary_max: sMax }),
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d?.error || "HTTP " + r.status);
@@ -4423,9 +4468,15 @@ function ParamsScreen({ showToast, psSaveRef }) {
         <small>浮想时只注入后 X% 的思绪（0=不注入思绪，1=全部注入，默认 0.5）</small>
       </div>
       <div className="cp-ps-form">
-        <label>摘要长度（字）</label>
-        <input type="number" value={s.summaryLength} min={200} max={2000} step={100} onChange={e => update("summaryLength", e.target.value)} />
-        <small>forge 时让 CC 总结被截掉部分的目标字数</small>
+        <label>摘要长度区间（字）</label>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <input type="number" value={forge?.summary_min ?? ""} min={100} max={5000} step={50}
+            onChange={e => setForge(f => ({ ...(f || {}), summary_min: e.target.value }))} />
+          <span>–</span>
+          <input type="number" value={forge?.summary_max ?? ""} min={100} max={5000} step={50}
+            onChange={e => setForge(f => ({ ...(f || {}), summary_max: e.target.value }))} />
+        </div>
+        <small>手动 forge 让 CC 把被截掉部分总结成这个字数区间（存 config.json · 即时生效）</small>
       </div>
       {forgeMsg && <div className="cp-ps-form"><small style={{ color: "#d87878" }}>{forgeMsg}</small></div>}
     </div>

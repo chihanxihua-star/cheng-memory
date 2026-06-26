@@ -452,12 +452,12 @@ function DesireTab({ showToast, saveRef }) {
 
       <div className="wp-slider-wrap" style={{ marginTop: 24 }}>
         <label className="wp-field-label">轮询下限 — {intMin} 分钟</label>
-        <input type="range" className="wp-slider" min={5} max={120} step={5}
+        <input type="range" className="wp-slider" min={5} max={1440} step={5}
           value={intMin} onChange={e => setIntMin(parseInt(e.target.value))} />
       </div>
       <div className="wp-slider-wrap">
         <label className="wp-field-label">轮询上限 — {intMax} 分钟</label>
-        <input type="range" className="wp-slider" min={5} max={120} step={5}
+        <input type="range" className="wp-slider" min={5} max={1440} step={5}
           value={intMax} onChange={e => setIntMax(parseInt(e.target.value))} />
       </div>
     </div>
